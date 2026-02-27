@@ -1,0 +1,7 @@
+[project]
+name = "dtst"
+version = "0.1.0"
+description = "a python toolkit for image dataset creation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
