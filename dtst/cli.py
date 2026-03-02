@@ -2,7 +2,7 @@ import logging
 
 import click
 
-from dtst.commands import search
+from dtst.commands import fetch, search
 
 
 @click.group()
@@ -15,6 +15,7 @@ def cli(verbose: bool) -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
+cli.add_command(fetch.cmd, "fetch")
 cli.add_command(search.cmd, "search")
 
 
