@@ -50,7 +50,22 @@ def cmd(
     dry_run: bool,
     workers: int | None,
 ) -> None:
-    """Search image engines and collect URLs for a subject."""
+    """Search for images across multiple engines.
+
+    Reads a subject YAML config file and generates image URLs from
+    Flickr, Serper (Google Images), Bing, and Wikimedia Commons using
+    an expanded query matrix of name variations and contextual terms.
+    Results are deduplicated and appended to urls.txt in the output
+    directory so multiple runs accumulate new URLs.
+
+    \b
+    Examples:
+    
+        dtst search subjects/chanterelle.yaml
+        dtst search subjects/chanterelle.yaml --dry-run
+        dtst search subjects/chanterelle.yaml --max-pages 3 --engines flickr,wikimedia
+        dtst search subjects/chanterelle.yaml --workers 8
+    """
     from dotenv import load_dotenv
 
     load_dotenv()

@@ -244,3 +244,80 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 - Commands should not abort on individual item failures — log the error and continue
 - Collect error counts and report in the final summary
 - Use `click.ClickException` for fatal errors that should halt the command
+
+## Documentation
+
+Documentation lives in `/docs` as Markdown and is built with **Zensical** (the successor to MkDocs-Material). The project uses an `mkdocs.yml` configuration file, which Zensical reads natively.
+
+### CLI Reference (auto-generated)
+
+CLI command documentation is auto-generated from Click source code using the **`mkdocs-click`** Markdown extension. This means the Click decorators and docstrings are the single source of truth for the CLI reference — there is no separate documentation to keep in sync.
+
+In `mkdocs.yml`:
+
+```yaml
+markdown_extensions:
+  - attr_list
+  - mkdocs-click
+```
+
+In `docs/reference/cli.md`:
+
+```markdown
+# CLI Reference
+
+::: mkdocs-click
+    :module: dtst.cli
+    :command: cli
+    :prog_name: dtst
+    :depth: 1
+    :style: table
+```
+
+This introspects the `dtst` CLI group at build time and generates full documentation for every subcommand, option, and argument.
+
+### Writing Click commands for good documentation
+
+Since mkdocs-click pulls directly from your Click code, every command must be written with documentation quality in mind:
+
+**Command docstrings** become the command description. Write a clear one-liner as the first sentence, followed by a blank line and a longer explanation if needed. Include a usage example after a `\b` escape (which prevents Click from rewrapping the text):
+
+```python
+@click.command()
+@click.argument("config", type=click.Path(exists=True, path_type=Path))
+@click.option("--max-pages", "-m", type=int, default=None, help="Limit pages per engine per query")
+@click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches")
+def search(config, max_pages, dry_run):
+    """Search for images across multiple engines.
+
+    Reads a subject YAML config file and generates image URLs from
+    Flickr, Google, Bing, and Wikimedia Commons using an expanded
+    query matrix of name variations and contextual terms.
+
+    \b
+    Examples:
+        dtst search subjects/chanterelle.yaml
+        dtst search subjects/chanterelle.yaml --dry-run
+        dtst search subjects/chanterelle.yaml --max-pages 3
+    """
+```
+
+**Every option must have a `help=` parameter.** No exceptions. This is what appears in both `--help` output and the generated docs.
+
+**Use `show_default=True`** on options where the default value is meaningful to the user.
+
+### Hand-written documentation
+
+Conceptual docs (getting started guide, pipeline overview, tutorials, architecture explanation) are written by hand in `/docs`. These are standard Markdown files organized as:
+
+```
+docs/
+  index.md              # Project overview and quick start
+  getting-started.md    # Installation and first run
+  pipeline.md           # Pipeline stages explained
+  configuration.md      # Subject YAML config reference
+  reference/
+    cli.md              # Auto-generated CLI reference (mkdocs-click)
+```
+
+Keep hand-written docs focused on the *why* and *how* — the CLI reference handles the *what*.

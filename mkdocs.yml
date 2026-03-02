@@ -1,0 +1,10 @@
+site_name: dtst
+
+markdown_extensions:
+  - attr_list
+  - mkdocs-click
+
+nav:
+  - index.md
+  - Reference:
+    - reference/cli.md
