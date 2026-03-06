@@ -43,12 +43,18 @@ def _run_task(args: tuple[str, str, int]) -> tuple[str, list[str], str | None]:
 @click.option("--engines", "-e", type=str, default=None, help="Comma-separated engine list (override config).")
 @click.option("--dry-run", "-n", is_flag=True, help="Print query matrix and exit without searching.")
 @click.option("--workers", "-w", type=int, default=None, show_default=True, help="Parallel workers (default: CPU count).")
+@click.option(
+    "--context-only",
+    is_flag=True,
+    help="Run only queries that include a context suffix (e.g. 'name face'). Skip queries that are just the name or alias alone.",
+)
 def cmd(
     config: Path,
     max_pages: int | None,
     engines: str | None,
     dry_run: bool,
     workers: int | None,
+    context_only: bool,
 ) -> None:
     """Search for images across multiple engines.
 
@@ -58,13 +64,20 @@ def cmd(
     Results are deduplicated and appended to urls.txt in the output
     directory so multiple runs accumulate new URLs.
 
+    Query matrix: By default, the command runs two kinds of queries for
+    each subject term (name and aliases): (1) the term alone, e.g.
+    "chanterelle"; (2) the term with each context from query_contexts,
+    e.g. "chanterelle mushroom", "chanterelle forest". Use --context-only
+    to run only the second kind: every query will be "term + context", and
+    no query will be just the bare name or alias.
+
     \b
     Examples:
-    
+
         dtst search subjects/chanterelle.yaml
         dtst search subjects/chanterelle.yaml --dry-run
         dtst search subjects/chanterelle.yaml --max-pages 3 --engines flickr,wikimedia
-        dtst search subjects/chanterelle.yaml --workers 8
+        dtst search subjects/chanterelle.yaml --context-only
     """
     from dotenv import load_dotenv
 
@@ -72,7 +85,7 @@ def cmd(
 
     cfg = load_config(config)
     engine_list = [e.strip().lower() for e in engines.split(",")] if engines else cfg.engines
-    queries = cfg.query_matrix()
+    queries = cfg.query_matrix(context_only=context_only)
 
     if dry_run:
         click.echo("Query matrix:")

@@ -18,9 +18,13 @@ class SubjectConfig:
     def subject_terms(self) -> list[str]:
         return [self.name] + (self.aliases or [])
 
-    def query_matrix(self) -> list[str]:
+    def query_matrix(self, context_only: bool = False) -> list[str]:
         terms = self.subject_terms()
-        return [f"{term} {ctx}".strip() for term in terms for ctx in (self.query_contexts or [])]
+        queries = []
+        if not context_only:
+            queries.extend(terms)
+        queries.extend(f"{term} {ctx}".strip() for term in terms for ctx in self.query_contexts if ctx)
+        return queries
 
 
 def load_config(path: str | Path) -> SubjectConfig:
