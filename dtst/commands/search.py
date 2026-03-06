@@ -15,9 +15,9 @@ from dtst.engines import ENGINE_REGISTRY
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PAGES = {
+    "brave": 10,
     "flickr": 40,
     "serper": 10,
-    "bing": 50,
     "wikimedia": 20,
 }
 
@@ -60,7 +60,7 @@ def cmd(
     """Search for images across multiple engines.
 
     Reads a subject YAML config file and generates image URLs from
-    Flickr, Serper (Google Images), Bing, and Wikimedia Commons using
+    Flickr, Serper (Google Images), and Wikimedia Commons using
     an expanded query matrix of name variations and contextual terms.
     Results are deduplicated and appended to urls.txt in the output
     directory so multiple runs accumulate new URLs.

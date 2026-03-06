@@ -291,7 +291,7 @@ def search(config, max_pages, dry_run):
     """Search for images across multiple engines.
 
     Reads a subject YAML config file and generates image URLs from
-    Flickr, Google, Bing, and Wikimedia Commons using an expanded
+    Flickr, Google, Brave and Wikimedia Commons using an expanded
     query matrix of name variations and contextual terms.
 
     \b

@@ -4,7 +4,7 @@ from pathlib import Path
 import click
 import yaml
 
-VALID_ENGINES = frozenset({"flickr", "serper", "bing", "wikimedia"})
+VALID_ENGINES = frozenset({"brave", "flickr", "serper", "wikimedia"})
 
 
 @dataclass
