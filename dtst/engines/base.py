@@ -1,10 +1,30 @@
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 
+import requests
+from urllib3.util.retry import Retry
+
 
 class SearchEngine(ABC):
-    def __init__(self, min_size: int = 1024) -> None:
+    def __init__(
+        self,
+        min_size: int = 1024,
+        retries: int = 3,
+        timeout: int | float = 30,
+    ) -> None:
         self.min_size = min_size
+        self._timeout = timeout
+        retry = Retry(
+            total=retries,
+            backoff_factor=1.0,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"],
+            raise_on_status=False,
+        )
+        adapter = requests.adapters.HTTPAdapter(max_retries=retry)
+        self._session = requests.Session()
+        self._session.mount("https://", adapter)
+        self._session.mount("http://", adapter)
 
     @property
     @abstractmethod

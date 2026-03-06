@@ -23,13 +23,19 @@ DEFAULT_MAX_PAGES = {
 }
 
 
-def _run_task(args: tuple[str, str, int, int]) -> tuple[str, list[dict], str | None]:
-    query, engine_name, page, min_size = args
+def _run_task(
+    args: tuple[str, str, int, int, int, int | float],
+) -> tuple[str, list[dict], str | None]:
+    query, engine_name, page, min_size, retries, timeout = args
     try:
         engine_cls = ENGINE_REGISTRY.get(engine_name)
         if not engine_cls:
             return engine_name, [], None
-        engine = engine_cls(min_size=min_size)
+        engine = engine_cls(
+            min_size=min_size,
+            retries=retries,
+            timeout=timeout,
+        )
         results = engine.search(query, page)
         return engine_name, results, None
     except Exception as e:
@@ -64,6 +70,22 @@ def _dedup_results(results: list[dict]) -> list[dict]:
 @click.option("--workers", "-w", type=int, default=None, show_default=True, help="Parallel workers (default: CPU count).")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
 @click.option(
+    "--retries",
+    "-r",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Number of retries per request (with exponential backoff).",
+)
+@click.option(
+    "--timeout",
+    "-t",
+    type=float,
+    default=30,
+    show_default=True,
+    help="Request timeout in seconds.",
+)
+@click.option(
     "--context-only",
     is_flag=True,
     help="Run only queries that include a context suffix (e.g. 'name face'). Skip queries that are just the name or alias alone.",
@@ -75,6 +97,8 @@ def cmd(
     dry_run: bool,
     workers: int | None,
     min_size: int | None,
+    retries: int,
+    timeout: int | float,
     context_only: bool,
 ) -> None:
     """Search for images across multiple engines.
@@ -130,14 +154,14 @@ def cmd(
 
     num_workers = workers if workers is not None else cpu_count() or 4
 
-    tasks: list[tuple[str, str, int, int]] = []
+    tasks: list[tuple[str, str, int, int, int, int | float]] = []
     for query in queries:
         for en in engine_list:
             if en not in ENGINE_REGISTRY:
                 continue
             limit = max_pages if max_pages is not None else DEFAULT_MAX_PAGES.get(en, 10)
             for page in range(1, limit + 1):
-                tasks.append((query, en, page, effective_min_size))
+                tasks.append((query, en, page, effective_min_size, retries, timeout))
 
     logger.info(
         'Searching for "%s" across %d engines (%d queries, %d pages, %d workers)',

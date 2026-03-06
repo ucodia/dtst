@@ -3,8 +3,6 @@ import os
 import re
 import time
 
-import requests
-
 from dtst.engines.base import SearchEngine
 
 logger = logging.getLogger(__name__)
@@ -27,8 +25,10 @@ class WikimediaEngine(SearchEngine):
         delay: float = 0.2,
         *,
         min_size: int = 1024,
+        retries: int = 3,
+        timeout: int | float = 30,
     ) -> None:
-        super().__init__(min_size=min_size)
+        super().__init__(min_size=min_size, retries=retries, timeout=timeout)
         self._user_agent = user_agent or os.environ.get(
             "WIKIMEDIA_USER_AGENT",
             "dtst/1.0 (https://github.com/dtst)",
@@ -55,20 +55,14 @@ class WikimediaEngine(SearchEngine):
             "format": "json",
         }
         headers = {"User-Agent": self._user_agent}
-        try:
-            r = requests.get(
-                COMMONS_API,
-                params=params,
-                headers=headers,
-                timeout=30,
-            )
-            r.raise_for_status()
-            data = r.json()
-        except (requests.RequestException, ValueError) as e:
-            logger.warning(
-                "Wikimedia request failed for %r page %s: %s", query, page, e
-            )
-            return []
+        r = self._session.get(
+            COMMONS_API,
+            params=params,
+            headers=headers,
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        data = r.json()
         results: list[dict] = []
         pages = data.get("query", {}).get("pages") or {}
         if not isinstance(pages, dict):

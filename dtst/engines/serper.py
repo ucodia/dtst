@@ -2,8 +2,6 @@ import logging
 import os
 from urllib.parse import urlparse
 
-import requests
-
 from dtst.engines.base import SearchEngine
 
 logger = logging.getLogger(__name__)
@@ -12,8 +10,15 @@ SERPER_IMAGES_URL = "https://google.serper.dev/images"
 
 
 class SerperEngine(SearchEngine):
-    def __init__(self, api_key: str | None = None, *, min_size: int = 1024) -> None:
-        super().__init__(min_size=min_size)
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        min_size: int = 1024,
+        retries: int = 3,
+        timeout: int | float = 30,
+    ) -> None:
+        super().__init__(min_size=min_size, retries=retries, timeout=timeout)
         self._api_key = api_key or os.environ.get("SERPER_API_KEY", "")
 
     @property
@@ -31,13 +36,14 @@ class SerperEngine(SearchEngine):
             "X-API-KEY": self._api_key,
             "Content-Type": "application/json",
         }
-        try:
-            r = requests.post(SERPER_IMAGES_URL, json=payload, headers=headers, timeout=30)
-            r.raise_for_status()
-            data = r.json()
-        except (requests.RequestException, ValueError) as e:
-            logger.warning("Serper request failed for %r page %s: %s", query, page, e)
-            return []
+        r = self._session.post(
+            SERPER_IMAGES_URL,
+            json=payload,
+            headers=headers,
+            timeout=self._timeout,
+        )
+        r.raise_for_status()
+        data = r.json()
         images = data.get("images") or []
         if not isinstance(images, list):
             return []

@@ -1,8 +1,6 @@
 import logging
 import os
 
-import requests
-
 from dtst.engines.base import SearchEngine
 
 logger = logging.getLogger(__name__)
@@ -27,8 +25,15 @@ SIZE_VARIANTS = ("o", "k", "h")
 
 
 class FlickrEngine(SearchEngine):
-    def __init__(self, api_key: str | None = None, *, min_size: int = 1024) -> None:
-        super().__init__(min_size=min_size)
+    def __init__(
+        self,
+        api_key: str | None = None,
+        *,
+        min_size: int = 1024,
+        retries: int = 3,
+        timeout: int | float = 30,
+    ) -> None:
+        super().__init__(min_size=min_size, retries=retries, timeout=timeout)
         self._api_key = api_key or os.environ.get("FLICKR_API_KEY", "")
 
     @property
@@ -50,13 +55,9 @@ class FlickrEngine(SearchEngine):
             "format": "json",
             "nojsoncallback": 1,
         }
-        try:
-            r = requests.get(FLICKR_REST, params=params, timeout=30)
-            r.raise_for_status()
-            data = r.json()
-        except (requests.RequestException, ValueError) as e:
-            logger.warning("Flickr request failed for %r page %s: %s", query, page, e)
-            return []
+        r = self._session.get(FLICKR_REST, params=params, timeout=self._timeout)
+        r.raise_for_status()
+        data = r.json()
         if data.get("stat") != "ok":
             logger.warning("Flickr API error for %r: %s", query, data.get("message", data))
             return []
