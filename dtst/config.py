@@ -28,7 +28,9 @@ class SubjectConfig:
 
 
 def load_config(path: str | Path) -> SubjectConfig:
-    with open(path) as f:
+    config_path = Path(path).resolve()
+    config_dir = config_path.parent
+    with open(config_path) as f:
         data = yaml.safe_load(f)
     if not data or not isinstance(data, dict):
         raise click.ClickException("Config must be a non-empty YAML object")
@@ -61,5 +63,5 @@ def load_config(path: str | Path) -> SubjectConfig:
         aliases=aliases,
         query_contexts=query_contexts,
         engines=engines,
-        output_dir=Path(output_dir.strip()),
+        output_dir=config_dir / output_dir.strip(),
     )
