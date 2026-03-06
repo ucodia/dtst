@@ -107,8 +107,7 @@ def cmd(
     Flickr, Serper (Google Images), Brave and Wikimedia Commons using
     an expanded query matrix of name variations and contextual terms.
     Results are deduplicated and written to results.jsonl in the output
-    directory so multiple runs accumulate new results. A derived
-    urls.txt is also generated for convenience.
+    directory so multiple runs accumulate new results.
 
     Query matrix: By default, the command runs two kinds of queries for
     each subject term (name and aliases): (1) the term alone, e.g.
@@ -191,7 +190,6 @@ def cmd(
     out_dir = cfg.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     results_file = out_dir / "results.jsonl"
-    urls_file = out_dir / "urls.txt"
 
     existing_results: list[dict] = []
     if results_file.exists():
@@ -211,11 +209,6 @@ def cmd(
         for r in deduped:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-    urls = sorted({r["url"] for r in deduped if r.get("url")})
-    with open(urls_file, "w") as f:
-        for url in urls:
-            f.write(url + "\n")
-
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
@@ -223,5 +216,6 @@ def cmd(
     for en in engine_list:
         click.echo(f"  {en}: {engine_counts.get(en, 0)} results")
     click.echo(f"Total unique results (after dedup): {len(deduped)}")
+    click.echo(f"New URLs added: {len(deduped) - len(existing_results)}")
     click.echo(f"Errors: {error_count}")
     click.echo(f"Time: {minutes}m {seconds}s")

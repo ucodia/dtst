@@ -189,7 +189,7 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
     """Download images from search results.
 
     Reads the output_dir from a subject YAML config, loads results.jsonl
-    (or falls back to urls.txt) from that directory, and downloads each
+    from that directory, and downloads each
     URL into a raw/ subdirectory. Files are named by the MD5 hash of the
     URL with the extension derived from the HTTP Content-Type header.
     Existing files are skipped unless --force is set.
@@ -225,20 +225,13 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
     cfg = load_config(config)
     output_dir = cfg.output_dir
     results_file = output_dir / "results.jsonl"
-    urls_file = output_dir / "urls.txt"
     raw_dir = output_dir / "raw"
 
-    if results_file.exists():
-        urls = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
-        logger.info("Loaded URLs from %s", results_file)
-    elif urls_file.exists():
-        if license_filter is not None:
-            logger.warning("--license filter requires results.jsonl; ignoring filter with urls.txt fallback")
-        with open(urls_file) as f:
-            urls = sorted({line.strip() for line in f if line.strip()})
-        logger.info("Loaded URLs from %s (fallback)", urls_file)
-    else:
-        raise click.ClickException(f"No results found: neither {results_file} nor {urls_file} exists")
+    if not results_file.exists():
+        raise click.ClickException(f"Results file not found: {results_file}")
+
+    urls = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
+    logger.info("Loaded URLs from %s", results_file)
 
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
