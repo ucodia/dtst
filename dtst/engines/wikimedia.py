@@ -1,6 +1,8 @@
 import logging
 import os
+import re
 import time
+
 import requests
 
 from dtst.engines.base import SearchEngine
@@ -8,7 +10,14 @@ from dtst.engines.base import SearchEngine
 logger = logging.getLogger(__name__)
 
 COMMONS_API = "https://commons.wikimedia.org/w/api.php"
-MIN_SIZE = 1024
+
+
+def _strip_html(text: str) -> str:
+    return re.sub(r"<[^>]+>", "", text).strip()
+
+
+def _normalize_license(raw: str) -> str:
+    return raw.strip().lower().replace(" ", "-")
 
 
 class WikimediaEngine(SearchEngine):
@@ -16,7 +25,10 @@ class WikimediaEngine(SearchEngine):
         self,
         user_agent: str | None = None,
         delay: float = 0.2,
+        *,
+        min_size: int = 1024,
     ) -> None:
+        super().__init__(min_size=min_size)
         self._user_agent = user_agent or os.environ.get(
             "WIKIMEDIA_USER_AGENT",
             "dtst/1.0 (https://github.com/dtst)",
@@ -27,7 +39,7 @@ class WikimediaEngine(SearchEngine):
     def name(self) -> str:
         return "wikimedia"
 
-    def search(self, query: str, page: int) -> list[str]:
+    def search(self, query: str, page: int) -> list[dict]:
         time.sleep(self._delay)
         gsrlimit = 50
         gsroffset = (page - 1) * gsrlimit
@@ -39,7 +51,7 @@ class WikimediaEngine(SearchEngine):
             "gsrlimit": gsrlimit,
             "gsroffset": gsroffset,
             "prop": "imageinfo",
-            "iiprop": "url|size|mime",
+            "iiprop": "url|size|mime|extmetadata",
             "format": "json",
         }
         headers = {"User-Agent": self._user_agent}
@@ -57,13 +69,16 @@ class WikimediaEngine(SearchEngine):
                 "Wikimedia request failed for %r page %s: %s", query, page, e
             )
             return []
-        urls: list[str] = []
+        results: list[dict] = []
         pages = data.get("query", {}).get("pages") or {}
         if not isinstance(pages, dict):
             return []
         for _pid, p in pages.items():
             if not isinstance(p, dict):
                 continue
+            page_title = p.get("title") or ""
+            if page_title.startswith("File:"):
+                page_title = page_title[5:]
             info_list = p.get("imageinfo")
             if not info_list or not isinstance(info_list, list):
                 continue
@@ -80,9 +95,37 @@ class WikimediaEngine(SearchEngine):
                 h = info.get("height")
                 if w is not None and h is not None:
                     try:
-                        if max(int(w), int(h)) < MIN_SIZE:
+                        if max(int(w), int(h)) < self.min_size:
                             continue
                     except (TypeError, ValueError):
                         pass
-                urls.append(url)
-        return urls
+
+                ext = info.get("extmetadata") or {}
+                license_str = None
+                author = None
+                date = None
+
+                license_entry = ext.get("LicenseShortName")
+                if isinstance(license_entry, dict) and license_entry.get("value"):
+                    license_str = _normalize_license(license_entry["value"])
+
+                artist_entry = ext.get("Artist")
+                if isinstance(artist_entry, dict) and artist_entry.get("value"):
+                    author = _strip_html(artist_entry["value"])
+
+                date_entry = ext.get("DateTimeOriginal")
+                if isinstance(date_entry, dict) and date_entry.get("value"):
+                    date = _strip_html(date_entry["value"])
+
+                results.append(self._make_result(
+                    url=url,
+                    query=query,
+                    width=int(w) if w is not None else None,
+                    height=int(h) if h is not None else None,
+                    license=license_str,
+                    source_domain="commons.wikimedia.org",
+                    title=page_title or None,
+                    author=author,
+                    date=date,
+                ))
+        return results

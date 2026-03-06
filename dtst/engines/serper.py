@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import urlparse
 
 import requests
 
@@ -8,18 +9,18 @@ from dtst.engines.base import SearchEngine
 logger = logging.getLogger(__name__)
 
 SERPER_IMAGES_URL = "https://google.serper.dev/images"
-MIN_SIZE = 1024
 
 
 class SerperEngine(SearchEngine):
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(self, api_key: str | None = None, *, min_size: int = 1024) -> None:
+        super().__init__(min_size=min_size)
         self._api_key = api_key or os.environ.get("SERPER_API_KEY", "")
 
     @property
     def name(self) -> str:
         return "serper"
 
-    def search(self, query: str, page: int) -> list[str]:
+    def search(self, query: str, page: int) -> list[dict]:
         if not self._api_key:
             logger.warning("SERPER_API_KEY not set; skipping Serper")
             return []
@@ -40,7 +41,7 @@ class SerperEngine(SearchEngine):
         images = data.get("images") or []
         if not isinstance(images, list):
             return []
-        urls: list[str] = []
+        results: list[dict] = []
         for img in images:
             if not isinstance(img, dict):
                 continue
@@ -49,11 +50,28 @@ class SerperEngine(SearchEngine):
                 continue
             w = img.get("imageWidth") or img.get("original_image_width")
             h = img.get("imageHeight") or img.get("original_image_height")
+            w_int: int | None = None
+            h_int: int | None = None
             if w is not None and h is not None:
                 try:
-                    if max(int(w), int(h)) < MIN_SIZE:
+                    w_int = int(w)
+                    h_int = int(h)
+                    if max(w_int, h_int) < self.min_size:
                         continue
                 except (TypeError, ValueError):
                     pass
-            urls.append(url)
-        return urls
+
+            source_domain = None
+            link = img.get("link")
+            if link:
+                source_domain = urlparse(link).netloc or None
+
+            results.append(self._make_result(
+                url=url,
+                query=query,
+                width=w_int,
+                height=h_int,
+                title=img.get("title"),
+                source_domain=source_domain,
+            ))
+        return results

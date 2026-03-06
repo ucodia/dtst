@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import random
 import time
@@ -143,6 +144,39 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
         return "failed", url, str(e)
 
 
+def _load_urls_from_jsonl(
+    results_file: Path,
+    min_size: int,
+    license_filter: str | None,
+) -> list[str]:
+    urls: list[str] = []
+    with open(results_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            w = r.get("width")
+            h = r.get("height")
+            if w is not None and h is not None:
+                try:
+                    if max(int(w), int(h)) < min_size:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            if license_filter is not None:
+                lic = r.get("license")
+                if not lic or not lic.startswith(license_filter):
+                    continue
+            url = r.get("url")
+            if url:
+                urls.append(url)
+    return sorted(set(urls))
+
+
 @click.command("fetch")
 @click.argument("config", type=click.Path(exists=True, path_type=Path))
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count).")
@@ -150,14 +184,19 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
 @click.option("--force", "-f", is_flag=True, help="Re-download files even if they already exist.")
 @click.option("--max-wait", "-W", type=int, default=None, help="Max seconds to honor a Retry-After header (default: unlimited).")
 @click.option("--no-wait", is_flag=True, help="Never wait for Retry-After headers; use fast exponential backoff instead.")
-def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: int | None, no_wait: bool) -> None:
-    """Download images from a urls.txt file.
+@click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc').")
+def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: int | None, no_wait: bool, license_filter: str | None) -> None:
+    """Download images from search results.
 
-    Reads the output_dir from a subject YAML config, loads urls.txt
-    from that directory, and downloads each URL into a raw/
-    subdirectory. Files are named by the MD5 hash of the URL with the
-    extension derived from the HTTP Content-Type header. Existing files
-    are skipped unless --force is set.
+    Reads the output_dir from a subject YAML config, loads results.jsonl
+    (or falls back to urls.txt) from that directory, and downloads each
+    URL into a raw/ subdirectory. Files are named by the MD5 hash of the
+    URL with the extension derived from the HTTP Content-Type header.
+    Existing files are skipped unless --force is set.
+
+    When reading from results.jsonl, images can be filtered by known
+    dimensions (skipping images below the configured min_size) and by
+    license prefix (e.g. --license cc for Creative Commons only).
 
     Per-domain throttling is applied automatically to respect server
     rate limits (e.g. Wikimedia allows max 2 concurrent connections).
@@ -176,6 +215,7 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
         dtst fetch subjects/trump.yaml --force
         dtst fetch subjects/trump.yaml --max-wait 30
         dtst fetch subjects/trump.yaml --no-wait
+        dtst fetch subjects/trump.yaml --license cc
     """
     if no_wait and max_wait is not None:
         raise click.ClickException("--no-wait and --max-wait are mutually exclusive")
@@ -184,17 +224,24 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
 
     cfg = load_config(config)
     output_dir = cfg.output_dir
+    results_file = output_dir / "results.jsonl"
     urls_file = output_dir / "urls.txt"
     raw_dir = output_dir / "raw"
 
-    if not urls_file.exists():
-        raise click.ClickException(f"URLs file not found: {urls_file}")
-
-    with open(urls_file) as f:
-        urls = sorted({line.strip() for line in f if line.strip()})
+    if results_file.exists():
+        urls = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
+        logger.info("Loaded URLs from %s", results_file)
+    elif urls_file.exists():
+        if license_filter is not None:
+            logger.warning("--license filter requires results.jsonl; ignoring filter with urls.txt fallback")
+        with open(urls_file) as f:
+            urls = sorted({line.strip() for line in f if line.strip()})
+        logger.info("Loaded URLs from %s (fallback)", urls_file)
+    else:
+        raise click.ClickException(f"No results found: neither {results_file} nor {urls_file} exists")
 
     if not urls:
-        raise click.ClickException(f"No URLs found in {urls_file}")
+        raise click.ClickException("No URLs to fetch after filtering")
 
     raw_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
