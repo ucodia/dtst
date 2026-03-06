@@ -120,7 +120,7 @@ def cmd(
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_run_task, t): t for t in tasks}
-            with tqdm(total=len(futures), desc="Searching", unit="page") as pbar:
+            with tqdm(total=len(futures), desc="Searching", unit="page", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
                 for fut in as_completed(futures):
                     engine_name, urls, error = fut.result()
                     if error:

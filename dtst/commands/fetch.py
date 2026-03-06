@@ -217,7 +217,7 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_download_url, w): w for w in work}
-            with tqdm(total=len(futures), desc="Fetching", unit="url") as pbar:
+            with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
                 for future in as_completed(futures):
                     status, url, error = future.result()
                     if status == "downloaded":
