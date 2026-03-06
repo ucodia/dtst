@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -110,6 +111,7 @@ def cmd(
         cfg.name, len(engine_list), len(queries), len(tasks), num_workers,
     )
 
+    start_time = time.monotonic()
     engine_counts: dict[str, int] = {en: 0 for en in engine_list}
     all_urls: list[str] = []
     error_count = 0
@@ -144,8 +146,12 @@ def cmd(
         for u in sorted(seen):
             f.write(u + "\n")
 
+    elapsed = time.monotonic() - start_time
+    minutes, seconds = divmod(int(elapsed), 60)
+
     click.echo(f"Queries run: {len(queries)} x {len(engine_list)} engines")
     for en in engine_list:
         click.echo(f"  {en}: {engine_counts.get(en, 0)} URLs")
     click.echo(f"Total unique URLs (after dedup): {len(seen)}")
     click.echo(f"Errors: {error_count}")
+    click.echo(f"Time: {minutes}m {seconds}s")
