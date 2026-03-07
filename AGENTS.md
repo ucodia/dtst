@@ -4,6 +4,11 @@
 
 `dtst` is a Python CLI toolbox for building and curating image datasets. It is structured as a main `dtst` command with subcommands for each pipeline stage. The package is managed with `uv` and installed via `pyproject.toml`.
 
+## Project Layout
+
+- **`/docs`** — User-facing documentation (Markdown); built with Zensical; `zensical.toml` at repo root.
+- **`/dtst`** — Main package; commands in `/dtst/commands/`.
+
 ## CLI Conventions
 
 All commands use **Click** for argument parsing. Never use `argparse`.
@@ -247,7 +252,7 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 
 ## Documentation
 
-Documentation lives in `/docs` as Markdown and is built with **Zensical** (the successor to MkDocs-Material). The project uses an `mkdocs.yml` configuration file, which Zensical reads natively.
+See **Project layout** above for the documentation path (`/docs`). Documentation lives in `/docs` as Markdown and is built with **Zensical**. The project uses an `zensical.toml` configuration file.
 
 ### CLI Reference (auto-generated)
 
