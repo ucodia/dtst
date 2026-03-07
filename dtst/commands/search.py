@@ -173,15 +173,19 @@ def cmd(
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_run_task, t): t for t in tasks}
             with tqdm(total=len(futures), desc="Searching", unit="page", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
-                for fut in as_completed(futures):
-                    engine_name, results, error = fut.result()
-                    if error:
-                        error_count += 1
-                    engine_counts[engine_name] = engine_counts.get(engine_name, 0) + len(results)
-                    all_results.extend(results)
-                    total_found += len(results)
-                    pbar.set_postfix(results=total_found, errors=error_count)
-                    pbar.update(1)
+                try:
+                    for fut in as_completed(futures):
+                        engine_name, results, error = fut.result()
+                        if error:
+                            error_count += 1
+                        engine_counts[engine_name] = engine_counts.get(engine_name, 0) + len(results)
+                        all_results.extend(results)
+                        total_found += len(results)
+                        pbar.set_postfix(results=total_found, errors=error_count)
+                        pbar.update(1)
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise
 
     out_dir = cfg.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)

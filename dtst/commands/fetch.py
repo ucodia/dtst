@@ -258,21 +258,25 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_download_url, w): w for w in work}
             with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
-                for future in as_completed(futures):
-                    status, url, error = future.result()
-                    if status == "downloaded":
-                        downloaded += 1
-                    elif status == "skipped":
-                        skipped += 1
-                    elif status == "rate_limited":
-                        rate_limited += 1
-                        domain = urlparse(url).hostname or "unknown"
-                        rate_limited_domains.add(domain)
-                    else:
-                        failed += 1
-                        logger.error("Failed to download %s: %s", url, error)
-                    pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed, limited=rate_limited)
-                    pbar.update(1)
+                try:
+                    for future in as_completed(futures):
+                        status, url, error = future.result()
+                        if status == "downloaded":
+                            downloaded += 1
+                        elif status == "skipped":
+                            skipped += 1
+                        elif status == "rate_limited":
+                            rate_limited += 1
+                            domain = urlparse(url).hostname or "unknown"
+                            rate_limited_domains.add(domain)
+                        else:
+                            failed += 1
+                            logger.error("Failed to download %s: %s", url, error)
+                        pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed, limited=rate_limited)
+                        pbar.update(1)
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise
 
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
