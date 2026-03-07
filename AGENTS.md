@@ -21,15 +21,26 @@ Every subcommand is a function decorated with `@click.command()` and registered 
 import click
 
 @click.command()
-@click.argument("input_dir", type=click.Path(exists=True, file_okay=False, path_type=Path))
-@click.option("--output", "-o", required=True, type=click.Path(path_type=Path), help="Output directory")
+@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .)")
 @click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count)")
 @click.option("--dry-run", is_flag=True, help="Preview what would be done without executing")
-def my_command(input_dir, output, workers, dry_run):
+def my_command(config, output_dir, workers, dry_run):
     """One-line description of what this command does."""
     if workers is None:
         workers = cpu_count()
     # ...
+```
+
+Commands can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Config files use YAML with parameters nested under the command name:
+
+```yaml
+my_command:
+  output_dir: "./output"
+  some_param: value
 ```
 
 ### Option Patterns
@@ -176,7 +187,7 @@ def find_images(directory: Path, recursive: bool = False) -> list[Path]:
 ```
 
 - Metadata is stored as `metadata.json` in the dataset directory
-- Subject configuration is a YAML file loaded with `pyyaml`
+- Command configuration is a YAML file loaded with `pyyaml`, with parameters nested under command-specific keys (`search:`, `fetch:`, etc.)
 - Environment variables are loaded from `.env` with `python-dotenv`
 
 ## Logging
@@ -289,21 +300,22 @@ Since mkdocs-click pulls directly from your Click code, every command must be wr
 
 ```python
 @click.command()
-@click.argument("config", type=click.Path(exists=True, path_type=Path))
-@click.option("--max-pages", "-m", type=int, default=None, help="Limit pages per engine per query")
+@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config)")
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .)")
 @click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches")
-def search(config, max_pages, dry_run):
+def search(config, terms, output_dir, dry_run):
     """Search for images across multiple engines.
 
-    Reads a subject YAML config file and generates image URLs from
+    Reads an optional YAML config file and generates image URLs from
     Flickr, Google, Brave and Wikimedia Commons using an expanded
-    query matrix of name variations and contextual terms.
+    query matrix of search terms and suffixes.
 
     \b
     Examples:
-        dtst search subjects/chanterelle.yaml
-        dtst search subjects/chanterelle.yaml --dry-run
-        dtst search subjects/chanterelle.yaml --max-pages 3
+        dtst search config.yaml
+        dtst search config.yaml --dry-run
+        dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -o ./out
     """
 ```
 

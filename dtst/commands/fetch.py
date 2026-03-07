@@ -14,7 +14,7 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import load_config
+from dtst.config import FetchConfig, load_fetch_config
 from dtst.throttle import DomainThrottler
 from dtst.urls import canonicalize_image_url
 from dtst.user_agent import get_user_agent
@@ -177,22 +177,54 @@ def _load_urls_from_jsonl(
     return sorted(set(urls))
 
 
+def _resolve_config(
+    config: Path | None,
+    output_dir: Path | None,
+    min_size: int | None,
+) -> FetchConfig:
+    if config is not None:
+        cfg = load_fetch_config(config)
+    else:
+        cfg = FetchConfig()
+
+    if output_dir is not None:
+        cfg.output_dir = output_dir
+    if min_size is not None:
+        cfg.min_size = min_size
+
+    return cfg
+
+
 @click.command("fetch")
-@click.argument("config", type=click.Path(exists=True, path_type=Path))
+@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .).")
+@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count).")
 @click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
 @click.option("--force", "-f", is_flag=True, help="Re-download files even if they already exist.")
 @click.option("--max-wait", "-W", type=int, default=None, help="Max seconds to honor a Retry-After header (default: unlimited).")
 @click.option("--no-wait", is_flag=True, help="Never wait for Retry-After headers; use fast exponential backoff instead.")
 @click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc').")
-def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: int | None, no_wait: bool, license_filter: str | None) -> None:
+def cmd(
+    config: Path | None,
+    output_dir: Path | None,
+    min_size: int | None,
+    workers: int | None,
+    timeout: int,
+    force: bool,
+    max_wait: int | None,
+    no_wait: bool,
+    license_filter: str | None,
+) -> None:
     """Download images from search results.
 
-    Reads the output_dir from a subject YAML config, loads results.jsonl
-    from that directory, and downloads each
+    Reads results.jsonl from the output directory and downloads each
     URL into a raw/ subdirectory. Files are named by the MD5 hash of the
     URL with the extension derived from the HTTP Content-Type header.
     Existing files are skipped unless --force is set.
+
+    Can be invoked with just a config file, just CLI options, or both.
+    When both are provided, CLI options override config file values.
 
     When reading from results.jsonl, images can be filtered by known
     dimensions (skipping images below the configured min_size) and by
@@ -210,22 +242,21 @@ def cmd(config: Path, workers: int | None, timeout: int, force: bool, max_wait: 
     \b
     Examples:
 
-        dtst fetch subjects/trump.yaml
-        dtst fetch subjects/trump.yaml --workers 16 --timeout 60
-        dtst fetch subjects/trump.yaml --force
-        dtst fetch subjects/trump.yaml --max-wait 30
-        dtst fetch subjects/trump.yaml --no-wait
-        dtst fetch subjects/trump.yaml --license cc
+        dtst fetch config.yaml
+        dtst fetch -o ./trump
+        dtst fetch config.yaml --workers 16 --timeout 60
+        dtst fetch config.yaml --force
+        dtst fetch -o ./trump --no-wait --license cc
     """
     if no_wait and max_wait is not None:
         raise click.ClickException("--no-wait and --max-wait are mutually exclusive")
     if no_wait:
         max_wait = 0
 
-    cfg = load_config(config)
-    output_dir = cfg.output_dir
-    results_file = output_dir / "results.jsonl"
-    raw_dir = output_dir / "raw"
+    cfg = _resolve_config(config, output_dir, min_size)
+    resolved_output_dir = cfg.output_dir
+    results_file = resolved_output_dir / "results.jsonl"
+    raw_dir = resolved_output_dir / "raw"
 
     if not results_file.exists():
         raise click.ClickException(f"Results file not found: {results_file}")

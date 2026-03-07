@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
@@ -10,7 +9,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import load_config
+from dtst.config import SearchConfig, load_search_config
 from dtst.engines import ENGINE_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -62,8 +61,45 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
+def _resolve_config(
+    config: Path | None,
+    terms: str | None,
+    suffixes: str | None,
+    engines: str | None,
+    output_dir: Path | None,
+    min_size: int | None,
+) -> SearchConfig:
+    if config is not None:
+        cfg = load_search_config(config)
+    else:
+        cfg = SearchConfig()
+
+    if terms is not None:
+        cfg.terms = [t.strip() for t in terms.split(",") if t.strip()]
+    if suffixes is not None:
+        cfg.suffixes = [s.strip() for s in suffixes.split(",") if s.strip()]
+    if engines is not None:
+        cfg.engines = [e.strip().lower() for e in engines.split(",") if e.strip()]
+    if output_dir is not None:
+        cfg.output_dir = output_dir
+    if min_size is not None:
+        cfg.min_size = min_size
+
+    if not cfg.terms:
+        raise click.ClickException("Search terms must be provided via config or --terms.")
+    if not cfg.suffixes:
+        raise click.ClickException("Suffixes must be provided via config or --suffixes.")
+    if not cfg.engines:
+        raise click.ClickException("At least one engine must be specified via config or --engines.")
+
+    return cfg
+
+
 @click.command("search")
-@click.argument("config", type=click.Path(exists=True, path_type=Path))
+@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
+@click.option("--suffixes", type=str, default=None, help="Comma-separated query suffixes (override config).")
+@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .).")
 @click.option("--max-pages", "-m", type=int, default=None, help="Limit pages per engine per query.")
 @click.option("--engines", "-e", type=str, default=None, help="Comma-separated engine list (override config).")
 @click.option("--dry-run", "-n", is_flag=True, help="Print query matrix and exit without searching.")
@@ -86,12 +122,15 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     help="Request timeout in seconds.",
 )
 @click.option(
-    "--context-only",
+    "--suffix-only",
     is_flag=True,
-    help="Run only queries that include a context suffix (e.g. 'name face'). Skip queries that are just the name or alias alone.",
+    help="Run only queries that include a suffix (e.g. 'term suffix'). Skip bare term queries.",
 )
 def cmd(
-    config: Path,
+    config: Path | None,
+    terms: str | None,
+    suffixes: str | None,
+    output_dir: Path | None,
     max_pages: int | None,
     engines: str | None,
     dry_run: bool,
@@ -99,52 +138,48 @@ def cmd(
     min_size: int | None,
     retries: int,
     timeout: int | float,
-    context_only: bool,
+    suffix_only: bool,
 ) -> None:
     """Search for images across multiple engines.
 
-    Reads a subject YAML config file and generates image URLs from
+    Reads an optional YAML config file and generates image URLs from
     Flickr, Serper (Google Images), Brave and Wikimedia Commons using
-    an expanded query matrix of name variations and contextual terms.
+    an expanded query matrix of search terms and suffixes.
     Results are deduplicated and written to results.jsonl in the output
     directory so multiple runs accumulate new results.
 
+    Can be invoked with just a config file, just CLI options, or both.
+    When both are provided, CLI options override config file values.
+
     Query matrix: By default, the command runs two kinds of queries for
-    each subject term (name and aliases): (1) the term alone, e.g.
-    "chanterelle"; (2) the term with each context from query_contexts,
-    e.g. "chanterelle mushroom", "chanterelle forest". Use --context-only
-    to run only the second kind: every query will be "term + context", and
-    no query will be just the bare name or alias.
+    each term: (1) the term alone, e.g. "chanterelle"; (2) the term
+    with each suffix, e.g. "chanterelle mushroom", "chanterelle forest".
+    Use --suffix-only to run only the second kind.
 
     \b
     Examples:
 
-        dtst search subjects/chanterelle.yaml
-        dtst search subjects/chanterelle.yaml --dry-run
-        dtst search subjects/chanterelle.yaml --max-pages 3 --engines flickr,wikimedia
-        dtst search subjects/chanterelle.yaml --context-only
-        dtst search subjects/chanterelle.yaml --min-size 1024
+        dtst search config.yaml
+        dtst search config.yaml --dry-run
+        dtst search config.yaml --max-pages 3 --engines flickr,wikimedia
+        dtst search --terms "chanterelle,mushroom" --suffixes "face,portrait" --engines brave -o ./out
     """
-    cfg = load_config(config)
-    engine_list = [e.strip().lower() for e in engines.split(",")] if engines else cfg.engines
-    if not engine_list:
-        raise click.ClickException(
-            "At least one engine must be specified in the config or via --engines."
-        )
+    cfg = _resolve_config(config, terms, suffixes, engines, output_dir, min_size)
+
+    engine_list = cfg.engines
     invalid = [e for e in engine_list if e not in ENGINE_REGISTRY]
     if invalid:
         raise click.ClickException(
             f"Invalid engine(s): {set(invalid)}; valid: {sorted(ENGINE_REGISTRY)}"
         )
-    queries = cfg.query_matrix(context_only=context_only)
-    effective_min_size = min_size if min_size is not None else cfg.min_size
+    queries = cfg.query_matrix(suffix_only=suffix_only)
 
     if dry_run:
         click.echo("Query matrix:")
         for q in queries:
             click.echo(f"  {q}")
         click.echo("Engines: " + ", ".join(engine_list))
-        click.echo(f"Min size: {effective_min_size}px")
+        click.echo(f"Min size: {cfg.min_size}px")
         return
 
     num_workers = workers if workers is not None else cpu_count() or 4
@@ -156,11 +191,11 @@ def cmd(
                 continue
             limit = max_pages if max_pages is not None else DEFAULT_MAX_PAGES.get(en, 10)
             for page in range(1, limit + 1):
-                tasks.append((query, en, page, effective_min_size, retries, timeout))
+                tasks.append((query, en, page, cfg.min_size, retries, timeout))
 
     logger.info(
         'Searching for "%s" across %d engines (%d queries, %d pages, %d workers)',
-        cfg.name, len(engine_list), len(queries), len(tasks), num_workers,
+        cfg.terms[0], len(engine_list), len(queries), len(tasks), num_workers,
     )
 
     start_time = time.monotonic()
