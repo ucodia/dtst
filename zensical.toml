@@ -1,5 +1,7 @@
 [project]
 site_name = "dtst"
+repo_url = "https://github.com/Ucodia/dtst"
+repo_name = "Ucodia/dtst"
 
 [project.markdown_extensions.attr_list]
 [project.markdown_extensions.mkdocs-click]
