@@ -16,6 +16,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import load_config
 from dtst.throttle import DomainThrottler
+from dtst.urls import canonicalize_image_url
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +174,7 @@ def _load_urls_from_jsonl(
                     continue
             url = r.get("url")
             if url:
-                urls.append(url)
+                urls.append(canonicalize_image_url(url))
     return sorted(set(urls))
 
 
