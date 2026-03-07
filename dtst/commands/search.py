@@ -125,10 +125,6 @@ def cmd(
         dtst search subjects/chanterelle.yaml --context-only
         dtst search subjects/chanterelle.yaml --min-size 1024
     """
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
     cfg = load_config(config)
     engine_list = [e.strip().lower() for e in engines.split(",")] if engines else cfg.engines
     if not engine_list:

@@ -17,10 +17,9 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from dtst.config import load_config
 from dtst.throttle import DomainThrottler
 from dtst.urls import canonicalize_image_url
+from dtst.user_agent import get_user_agent
 
 logger = logging.getLogger(__name__)
-
-USER_AGENT = "dtst/0.1 (image dataset toolkit; +https://github.com/ucodia/dtst)"
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"})
 
@@ -48,7 +47,7 @@ def _attempt_download(
                     attempt_url,
                     stream=True,
                     timeout=timeout,
-                    headers={"User-Agent": USER_AGENT},
+                    headers={"User-Agent": get_user_agent()},
                 )
             except requests.RequestException:
                 throttler.release(domain)

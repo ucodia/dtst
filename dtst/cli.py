@@ -1,6 +1,7 @@
 import logging
 
 import click
+from dotenv import load_dotenv
 
 from dtst.commands import fetch, search
 
@@ -9,6 +10,7 @@ from dtst.commands import fetch, search
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging")
 def cli(verbose: bool) -> None:
     """dtst - dataset toolkit for datasets creation and curation."""
+    load_dotenv()
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("urllib3").setLevel(logging.WARNING)

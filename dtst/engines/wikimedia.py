@@ -1,9 +1,9 @@
 import logging
-import os
 import re
 import time
 
 from dtst.engines.base import SearchEngine
+from dtst.user_agent import get_user_agent
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +29,7 @@ class WikimediaEngine(SearchEngine):
         timeout: int | float = 30,
     ) -> None:
         super().__init__(min_size=min_size, retries=retries, timeout=timeout)
-        self._user_agent = user_agent or os.environ.get(
-            "WIKIMEDIA_USER_AGENT",
-            "dtst/1.0 (https://github.com/dtst)",
-        )
+        self._user_agent = user_agent or get_user_agent()
         self._delay = delay
 
     @property
