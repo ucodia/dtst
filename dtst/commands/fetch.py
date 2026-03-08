@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"})
 
+UNSUPPORTED_EXTENSIONS = frozenset({".djvu"})
+
 CONTENT_TYPE_TO_EXT: dict[str, str] = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -148,8 +150,9 @@ def _load_urls_from_jsonl(
     results_file: Path,
     min_size: int,
     license_filter: str | None,
-) -> list[str]:
+) -> tuple[list[str], int]:
     urls: list[str] = []
+    skipped_unsupported = 0
     with open(results_file) as f:
         for line in f:
             line = line.strip()
@@ -173,8 +176,14 @@ def _load_urls_from_jsonl(
                     continue
             url = r.get("url")
             if url:
-                urls.append(canonicalize_image_url(url))
-    return sorted(set(urls))
+                url = canonicalize_image_url(url)
+                path = urlparse(url).path
+                ext = Path(path).suffix.lower()
+                if ext in UNSUPPORTED_EXTENSIONS:
+                    skipped_unsupported += 1
+                    continue
+                urls.append(url)
+    return sorted(set(urls)), skipped_unsupported
 
 
 def _resolve_config(
@@ -266,8 +275,10 @@ def cmd(
     if not results_file.exists():
         raise click.ClickException(f"Results file not found: {results_file}")
 
-    urls = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
+    urls, skipped_unsupported = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
     logger.info("Loaded URLs from %s", results_file)
+    if skipped_unsupported > 0:
+        logger.info("Skipped %d URLs with unsupported format (.djvu).", skipped_unsupported)
 
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
@@ -320,6 +331,8 @@ def cmd(
     click.echo(f"\nFetch complete!")
     click.echo(f"  Downloaded: {downloaded:,}")
     click.echo(f"  Skipped (existing): {skipped:,}")
+    if skipped_unsupported > 0:
+        click.echo(f"  Skipped (unsupported format): {skipped_unsupported:,}")
     if rate_limited > 0:
         domains_str = ", ".join(sorted(rate_limited_domains))
         click.echo(f"  Rate limited: {rate_limited:,} ({domains_str})")
