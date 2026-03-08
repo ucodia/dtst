@@ -28,19 +28,30 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
     name = input_path.name
 
     try:
+        import os
         import cv2
-
         from dtst.face_align import FaceAligner
 
         image = cv2.imread(str(input_path))
         if image is None:
             return "failed", name, 0, "could not read image"
 
-        aligner = FaceAligner(
-            engine=engine,
-            max_faces=max_faces,
-            refine_landmarks=refine_landmarks,
-        )
+        # MediaPipe emits verbose C++ startup messages to stderr on first use.
+        # Redirect fd 2 at the OS level so nothing gets through regardless of
+        # how glog is configured.
+        _devnull = os.open(os.devnull, os.O_WRONLY)
+        _saved_stderr = os.dup(2)
+        os.dup2(_devnull, 2)
+        os.close(_devnull)
+        try:
+            aligner = FaceAligner(
+                engine=engine,
+                max_faces=max_faces,
+                refine_landmarks=refine_landmarks,
+            )
+        finally:
+            os.dup2(_saved_stderr, 2)
+            os.close(_saved_stderr)
         faces = aligner.get_aligned_faces(
             image,
             max_size=max_size,
