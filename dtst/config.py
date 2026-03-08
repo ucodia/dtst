@@ -22,7 +22,7 @@ class SearchConfig:
     terms: list[str] = field(default_factory=list)
     suffixes: list[str] = field(default_factory=list)
     engines: list[str] = field(default_factory=list)
-    output_dir: Path = Path(".")
+    working_dir: Path = field(default_factory=lambda: Path("."))
     min_size: int = 512
 
     def query_matrix(self, suffix_only: bool = False) -> list[str]:
@@ -38,13 +38,13 @@ class SearchConfig:
         return queries
 
 
-def _resolve_output_dir(data: dict, config_dir: Path) -> Path:
-    output_dir = data.get("output_dir")
-    if output_dir is None:
+def _resolve_working_dir(data: dict, config_dir: Path) -> Path:
+    working_dir = data.get("working_dir")
+    if working_dir is None:
         return Path(".")
-    if not isinstance(output_dir, str) or not output_dir.strip():
-        raise click.ClickException("'output_dir' must be a non-empty string")
-    return config_dir / output_dir.strip()
+    if not isinstance(working_dir, str) or not working_dir.strip():
+        raise click.ClickException("'working_dir' must be a non-empty string")
+    return config_dir / working_dir.strip()
 
 
 def load_search_config(path: str | Path) -> SearchConfig:
@@ -84,39 +84,46 @@ def load_search_config(path: str | Path) -> SearchConfig:
         terms=terms,
         suffixes=suffixes,
         engines=engines,
-        output_dir=_resolve_output_dir(data, config_dir),
+        working_dir=_resolve_working_dir(data, config_dir),
         min_size=min_size,
     )
 
 
 @dataclass
 class FetchConfig:
-    output_dir: Path = Path(".")
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    to: str = "raw"
     min_size: int = 512
 
 
 def load_fetch_config(path: str | Path) -> FetchConfig:
     data, config_dir = load_yaml(path)
-    resolved_output_dir = _resolve_output_dir(data, config_dir)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
 
     section = data.get("fetch")
     if not section or not isinstance(section, dict):
-        return FetchConfig(output_dir=resolved_output_dir)
+        return FetchConfig(working_dir=resolved_working_dir)
 
     min_size = section.get("min_size", 512)
     if not isinstance(min_size, int) or min_size < 0:
         raise click.ClickException("'fetch.min_size' must be a non-negative integer")
 
+    to = section.get("to", "raw")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'fetch.to' must be a non-empty string")
+
     return FetchConfig(
-        output_dir=resolved_output_dir,
+        working_dir=resolved_working_dir,
+        to=to.strip(),
         min_size=min_size,
     )
 
 
 @dataclass
 class ExtractFacesConfig:
-    input_dir: Path | None = None
-    output_dir: Path | None = None
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] = field(default_factory=lambda: ["raw"])
+    to: str = "faces"
     max_size: int | None = None
     engine: str = "mediapipe"
     max_faces: int = 3
@@ -128,14 +135,11 @@ class ExtractFacesConfig:
 
 def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
     data, config_dir = load_yaml(path)
-    resolved_output_dir = _resolve_output_dir(data, config_dir)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
 
     section = data.get("extract_faces")
     if not section or not isinstance(section, dict):
-        return ExtractFacesConfig(
-            input_dir=resolved_output_dir / "raw",
-            output_dir=resolved_output_dir / "faces",
-        )
+        return ExtractFacesConfig(working_dir=resolved_working_dir)
 
     max_size = section.get("max_size")
     if max_size is not None and (not isinstance(max_size, int) or max_size < 1):
@@ -167,21 +171,27 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
     if not isinstance(debug, bool):
         raise click.ClickException("'extract_faces.debug' must be a boolean")
 
-    input_dir_raw = section.get("input_dir")
-    if input_dir_raw is not None:
-        input_dir = config_dir / str(input_dir_raw).strip()
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'extract_faces.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'extract_faces.from' must contain at least one directory name")
     else:
-        input_dir = resolved_output_dir / "raw"
+        from_dirs = ["raw"]
 
-    output_dir_raw = section.get("output_dir")
-    if output_dir_raw is not None:
-        output_dir = config_dir / str(output_dir_raw).strip()
-    else:
-        output_dir = resolved_output_dir / "faces"
+    to = section.get("to", "faces")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'extract_faces.to' must be a non-empty string")
 
     return ExtractFacesConfig(
-        input_dir=input_dir,
-        output_dir=output_dir,
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip(),
         max_size=max_size,
         engine=engine,
         max_faces=max_faces,

@@ -69,8 +69,9 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
 
 def _resolve_config(
     config: Path | None,
-    input_dir: Path | None,
-    output_dir: Path | None,
+    working_dir: Path | None,
+    from_dirs: list[str] | None,
+    to: str | None,
     max_size: int | None,
     engine: str | None,
     max_faces: int | None,
@@ -84,10 +85,12 @@ def _resolve_config(
     else:
         cfg = ExtractFacesConfig()
 
-    if input_dir is not None:
-        cfg.input_dir = input_dir
-    if output_dir is not None:
-        cfg.output_dir = output_dir
+    if working_dir is not None:
+        cfg.working_dir = working_dir
+    if from_dirs is not None:
+        cfg.from_dirs = from_dirs
+    if to is not None:
+        cfg.to = to
     if max_size is not None:
         cfg.max_size = max_size
     if engine is not None:
@@ -108,8 +111,9 @@ def _resolve_config(
 
 @click.command("extract-faces")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
-@click.option("--input-dir", "-i", type=click.Path(exists=True, path_type=Path), default=None, help="Input directory with images (default: <output_dir>/raw).")
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory for face crops (default: <output_dir>/faces).")
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory (default: raw).")
+@click.option("--to", type=str, default=None, help="Destination folder name within the working directory (default: faces).")
 @click.option("--max-size", "-M", type=int, default=None, help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).")
 @click.option("--engine", "-e", type=click.Choice(["mediapipe", "dlib"], case_sensitive=False), default=None, help="Face detection engine (default: mediapipe).")
 @click.option("--max-faces", "-m", type=int, default=None, help="Max faces to extract per image (default: 1).")
@@ -120,8 +124,9 @@ def _resolve_config(
 @click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
 def cmd(
     config: Path | None,
-    input_dir: Path | None,
-    output_dir: Path | None,
+    working_dir: Path | None,
+    from_dirs: str | None,
+    to: str | None,
     max_size: int | None,
     engine: str | None,
     max_faces: int | None,
@@ -138,9 +143,10 @@ def cmd(
     The alignment normalises eye and mouth positions using the FFHQ
     alignment technique.
 
-    By default reads images from <output_dir>/raw and writes face crops
-    to <output_dir>/faces. Both directories can be overridden with
-    --input-dir and --output-dir.
+    Reads images from one or more source folders within the working
+    directory (default: raw) and writes face crops to a destination
+    folder (default: faces). Multiple source folders can be specified
+    as a comma-separated list with --from.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
@@ -149,43 +155,51 @@ def cmd(
     Examples:
         dtst extract-faces config.yaml
         dtst extract-faces config.yaml --engine dlib --max-size 512
-        dtst extract-faces --input-dir ./images --output-dir ./faces
+        dtst extract-faces -d ./crowd
+        dtst extract-faces -d ./crowd --from raw,extra --to faces
         dtst extract-faces config.yaml --max-faces 3 --no-padding
     """
+    parsed_from_dirs: list[str] | None = None
+    if from_dirs is not None:
+        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
+        if not parsed_from_dirs:
+            raise click.ClickException("--from must contain at least one folder name")
+
     cfg = _resolve_config(
-        config, input_dir, output_dir, max_size, engine, max_faces, padding,
+        config, working_dir, parsed_from_dirs, to, max_size, engine, max_faces, padding,
         refine_landmarks, no_stretch, debug,
     )
 
-    if cfg.input_dir is None:
-        raise click.ClickException(
-            "Input directory not specified. Use --input-dir or provide a config file with output_dir."
-        )
-    if cfg.output_dir is None:
-        raise click.ClickException(
-            "Output directory not specified. Use --output-dir or provide a config file with output_dir."
-        )
+    input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
+    output_dir = cfg.working_dir / cfg.to
 
-    if not cfg.input_dir.is_dir():
-        raise click.ClickException(f"Input directory does not exist: {cfg.input_dir}")
+    missing = [str(d) for d in input_dirs if not d.is_dir()]
+    if missing:
+        raise click.ClickException(f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}")
 
-    images = find_images(cfg.input_dir)
+    images: list[Path] = []
+    for input_dir in input_dirs:
+        found = find_images(input_dir)
+        logger.info("Found %d images in %s", len(found), input_dir)
+        images.extend(found)
+
     if not images:
-        raise click.ClickException(f"No images found in {cfg.input_dir}")
+        raise click.ClickException(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
-    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
 
     max_size_label = str(cfg.max_size) if cfg.max_size is not None else "none"
+    from_label = ", ".join(str(d) for d in input_dirs)
     logger.info(
-        "Extracting faces from %d images in %s (engine=%s, max_size=%s, max_faces=%d, workers=%d)",
-        len(images), cfg.input_dir, cfg.engine, max_size_label, cfg.max_faces, num_workers,
+        "Extracting faces from %d images across [%s] (engine=%s, max_size=%s, max_faces=%d, workers=%d)",
+        len(images), from_label, cfg.engine, max_size_label, cfg.max_faces, num_workers,
     )
 
     work = [
         (
             str(img_path),
-            str(cfg.output_dir),
+            str(output_dir),
             cfg.max_size,
             cfg.engine,
             cfg.max_faces,
@@ -234,4 +248,4 @@ def cmd(
     click.echo(f"  No faces detected: {no_faces_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Time: {minutes}m {seconds}s")
-    click.echo(f"  Output: {cfg.output_dir}")
+    click.echo(f"  Output: {output_dir}")

@@ -94,7 +94,7 @@ def _attempt_download(
 
 
 def _download_url(args: tuple) -> tuple[str, str, str | None]:
-    url, raw_dir, timeout, force, throttler, max_wait = args
+    url, dest_dir, timeout, force, throttler, max_wait = args
     url_hash = hashlib.md5(url.encode()).hexdigest()
     domain = urlparse(url).hostname or "unknown"
 
@@ -104,10 +104,10 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
 
         if not force:
             for ext in IMAGE_EXTENSIONS:
-                if (raw_dir / f"{url_hash}{ext}").exists():
+                if (dest_dir / f"{url_hash}{ext}").exists():
                     return "skipped", url, None
 
-        tmp_path = raw_dir / f"{url_hash}.tmp"
+        tmp_path = dest_dir / f"{url_hash}.tmp"
 
         response = _attempt_download(url, timeout, throttler, domain, max_wait)
 
@@ -134,12 +134,12 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
             tmp_path.unlink(missing_ok=True)
             return "failed", url, "downloaded file is not a valid image"
 
-        final_path = raw_dir / f"{url_hash}{ext}"
+        final_path = dest_dir / f"{url_hash}{ext}"
         tmp_path.rename(final_path)
         return "downloaded", url, None
 
     except Exception as e:
-        tmp_path = raw_dir / f"{url_hash}.tmp"
+        tmp_path = dest_dir / f"{url_hash}.tmp"
         tmp_path.unlink(missing_ok=True)
         return "failed", url, str(e)
 
@@ -179,7 +179,8 @@ def _load_urls_from_jsonl(
 
 def _resolve_config(
     config: Path | None,
-    output_dir: Path | None,
+    working_dir: Path | None,
+    to: str | None,
     min_size: int | None,
 ) -> FetchConfig:
     if config is not None:
@@ -187,8 +188,10 @@ def _resolve_config(
     else:
         cfg = FetchConfig()
 
-    if output_dir is not None:
-        cfg.output_dir = output_dir
+    if working_dir is not None:
+        cfg.working_dir = working_dir
+    if to is not None:
+        cfg.to = to
     if min_size is not None:
         cfg.min_size = min_size
 
@@ -197,7 +200,8 @@ def _resolve_config(
 
 @click.command("fetch")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .).")
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is read from and images are written to (default: .).")
+@click.option("--to", type=str, default=None, show_default=True, help="Destination folder name within the working directory (default: raw).")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count).")
 @click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
@@ -207,7 +211,8 @@ def _resolve_config(
 @click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc').")
 def cmd(
     config: Path | None,
-    output_dir: Path | None,
+    working_dir: Path | None,
+    to: str | None,
     min_size: int | None,
     workers: int | None,
     timeout: int,
@@ -218,10 +223,10 @@ def cmd(
 ) -> None:
     """Download images from search results.
 
-    Reads results.jsonl from the output directory and downloads each
-    URL into a raw/ subdirectory. Files are named by the MD5 hash of the
-    URL with the extension derived from the HTTP Content-Type header.
-    Existing files are skipped unless --force is set.
+    Reads results.jsonl from the working directory and downloads each
+    URL into a destination folder within that directory. Files are named
+    by the MD5 hash of the URL with the extension derived from the HTTP
+    Content-Type header. Existing files are skipped unless --force is set.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
@@ -243,20 +248,20 @@ def cmd(
     Examples:
 
         dtst fetch config.yaml
-        dtst fetch -o ./trump
+        dtst fetch -d ./chanterelle
+        dtst fetch -d ./chanterelle --to raw
         dtst fetch config.yaml --workers 16 --timeout 60
         dtst fetch config.yaml --force
-        dtst fetch -o ./trump --no-wait --license cc
+        dtst fetch -d ./chanterelle --no-wait --license cc
     """
     if no_wait and max_wait is not None:
         raise click.ClickException("--no-wait and --max-wait are mutually exclusive")
     if no_wait:
         max_wait = 0
 
-    cfg = _resolve_config(config, output_dir, min_size)
-    resolved_output_dir = cfg.output_dir
-    results_file = resolved_output_dir / "results.jsonl"
-    raw_dir = resolved_output_dir / "raw"
+    cfg = _resolve_config(config, working_dir, to, min_size)
+    results_file = cfg.working_dir / "results.jsonl"
+    dest_dir = cfg.working_dir / cfg.to
 
     if not results_file.exists():
         raise click.ClickException(f"Results file not found: {results_file}")
@@ -267,14 +272,14 @@ def cmd(
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
 
-    raw_dir.mkdir(parents=True, exist_ok=True)
+    dest_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
 
     throttler = DomainThrottler()
     for domain, policy in throttler.active_policies().items():
         logger.info("Throttle policy for %s: max_connections=%d, request_delay=%.1fs", domain, policy.max_connections, policy.request_delay)
 
-    logger.info("Fetching %d URLs to %s (workers=%d)", len(urls), raw_dir, num_workers)
+    logger.info("Fetching %d URLs to %s (workers=%d)", len(urls), dest_dir, num_workers)
 
     start_time = time.monotonic()
     downloaded = 0
@@ -283,7 +288,7 @@ def cmd(
     rate_limited = 0
     rate_limited_domains: set[str] = set()
 
-    work = [(url, raw_dir, timeout, force, throttler, max_wait) for url in urls]
+    work = [(url, dest_dir, timeout, force, throttler, max_wait) for url in urls]
 
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
@@ -320,4 +325,4 @@ def cmd(
         click.echo(f"  Rate limited: {rate_limited:,} ({domains_str})")
     click.echo(f"  Failed: {failed:,}")
     click.echo(f"  Time: {minutes}m {seconds}s")
-    click.echo(f"  Output: {raw_dir}")
+    click.echo(f"  Output: {dest_dir}")

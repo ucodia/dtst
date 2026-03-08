@@ -13,6 +13,28 @@
 
 All commands use **Click** for argument parsing. Never use `argparse`.
 
+### Pipeline Model
+
+The pipeline is organized around a **working directory** that acts as the project root. All commands read from and write to named folders within it. The working directory is the source of truth — users can inspect it in the file explorer, manually drop files in, and everything just works.
+
+There are three kinds of commands:
+
+- **Sourcing** commands bring images in from the outside world (e.g. `fetch`). They have a `--to` option but no `--from`.
+- **Augmenting** commands take one or more existing folders and produce a new folder (e.g. `extract-faces`). They have both `--from` and `--to`.
+- **Filtering** commands reduce an existing folder without producing a new one.
+
+`search` is a special case: it has no `--from` or `--to` and simply deposits `results.jsonl` in the working directory for `fetch` to consume.
+
+The folder names in `--from` and `--to` are always relative to `--working-dir`. Defaults encode the conventional happy-path pipeline:
+
+```
+working_dir/
+  results.jsonl       ← search output
+  raw/                ← fetch output (--to raw)
+  extra/              ← manually added images
+  faces/              ← extract-faces output (--to faces, --from raw)
+```
+
 ### Command Structure
 
 Every subcommand is a function decorated with `@click.command()` and registered to the main `dtst` CLI group. Commands live in `dtst/commands/` as individual modules.
@@ -22,10 +44,10 @@ import click
 
 @click.command()
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .)")
-@click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count)")
-@click.option("--dry-run", is_flag=True, help="Preview what would be done without executing")
-def my_command(config, output_dir, workers, dry_run):
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
+@click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count).")
+@click.option("--dry-run", is_flag=True, help="Preview what would be done without executing.")
+def my_command(config, working_dir, workers, dry_run):
     """One-line description of what this command does."""
     if workers is None:
         workers = cpu_count()
@@ -35,17 +57,28 @@ def my_command(config, output_dir, workers, dry_run):
 Commands can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
-Config files use YAML with parameters nested under the command name:
+Config files use YAML with `working_dir` at the top level and parameters nested under command-specific keys:
 
 ```yaml
-my_command:
-  output_dir: "./output"
-  some_param: value
+working_dir: "./chanterelle"
+
+fetch:
+  to: raw
+  min_size: 512
+
+extract_faces:
+  from:
+    - raw
+    - extra
+  to: faces
 ```
 
 ### Option Patterns
 
-- Always provide a short flag alias for frequently used options (`-o`, `-w`, `-t`)
+- Always provide a short flag alias for frequently used options (`-d`, `-w`, `-t`)
+- Use `--working-dir` / `-d` for the working directory on all pipeline commands
+- Use `--from` for augmenting commands that accept input folder names (comma-separated, maps to `from_dirs` in Python since `from` is a keyword)
+- Use `--to` for sourcing and augmenting commands that write to an output folder
 - Use `click.Path(path_type=Path)` so paths arrive as `Path` objects
 - Use `click.Path(exists=True)` for inputs that must already exist
 - Default `--workers` to `None` and resolve to `cpu_count()` inside the function body
@@ -301,10 +334,10 @@ Since mkdocs-click pulls directly from your Click code, every command must be wr
 ```python
 @click.command()
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
-@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config)")
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=None, help="Output directory (default: .)")
-@click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches")
-def search(config, terms, output_dir, dry_run):
+@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is written (default: .).")
+@click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches.")
+def search(config, terms, working_dir, dry_run):
     """Search for images across multiple engines.
 
     Reads an optional YAML config file and generates image URLs from
@@ -315,7 +348,7 @@ def search(config, terms, output_dir, dry_run):
     Examples:
         dtst search config.yaml
         dtst search config.yaml --dry-run
-        dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -o ./out
+        dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
     """
 ```
 
