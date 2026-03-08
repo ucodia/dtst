@@ -6,10 +6,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.3.1",
+    "dlib>=20.0.0",
+    "mediapipe>=0.10.32",
+    "numpy>=2.4.2",
+    "opencv-python-headless>=4.13.0.92",
     "pillow>=12.1.1",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
+    "scipy>=1.17.1",
     "tqdm>=4.67.3",
 ]
 

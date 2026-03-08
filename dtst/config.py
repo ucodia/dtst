@@ -4,7 +4,8 @@ from pathlib import Path
 import click
 import yaml
 
-VALID_ENGINES = frozenset({"brave", "flickr", "serper", "wikimedia"})
+VALID_SEARCH_ENGINES = frozenset({"brave", "flickr", "serper", "wikimedia"})
+VALID_FACE_ENGINES = frozenset({"mediapipe", "dlib"})
 
 
 def load_yaml(path: str | Path) -> tuple[dict, Path]:
@@ -67,10 +68,10 @@ def load_search_config(path: str | Path) -> SearchConfig:
         raise click.ClickException("'search.engines' must be a list of strings")
     if engines:
         engines = [str(e).strip().lower() for e in engines]
-        invalid = set(engines) - VALID_ENGINES
+        invalid = set(engines) - VALID_SEARCH_ENGINES
         if invalid:
             raise click.ClickException(
-                f"Invalid engine(s): {invalid}; valid: {sorted(VALID_ENGINES)}"
+                f"Invalid engine(s): {invalid}; valid: {sorted(VALID_SEARCH_ENGINES)}"
             )
     else:
         engines = []
@@ -109,4 +110,83 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     return FetchConfig(
         output_dir=resolved_output_dir,
         min_size=min_size,
+    )
+
+
+@dataclass
+class ExtractFacesConfig:
+    input_dir: Path | None = None
+    output_dir: Path | None = None
+    max_size: int | None = None
+    engine: str = "mediapipe"
+    max_faces: int = 3
+    padding: bool = True
+    refine_landmarks: bool = False
+    no_stretch: bool = False
+    debug: bool = False
+
+
+def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
+    data, config_dir = load_yaml(path)
+    resolved_output_dir = _resolve_output_dir(data, config_dir)
+
+    section = data.get("extract_faces")
+    if not section or not isinstance(section, dict):
+        return ExtractFacesConfig(
+            input_dir=resolved_output_dir / "raw",
+            output_dir=resolved_output_dir / "faces",
+        )
+
+    max_size = section.get("max_size")
+    if max_size is not None and (not isinstance(max_size, int) or max_size < 1):
+        raise click.ClickException("'extract_faces.max_size' must be a positive integer")
+
+    engine = str(section.get("engine", "mediapipe")).strip().lower()
+    if engine not in VALID_FACE_ENGINES:
+        raise click.ClickException(
+            f"Invalid face engine: {engine!r}; valid: {sorted(VALID_FACE_ENGINES)}"
+        )
+
+    max_faces = section.get("max_faces", 1)
+    if not isinstance(max_faces, int) or max_faces < 1:
+        raise click.ClickException("'extract_faces.max_faces' must be a positive integer")
+
+    padding = section.get("padding", True)
+    if not isinstance(padding, bool):
+        raise click.ClickException("'extract_faces.padding' must be a boolean")
+
+    refine_landmarks = section.get("refine_landmarks", False)
+    if not isinstance(refine_landmarks, bool):
+        raise click.ClickException("'extract_faces.refine_landmarks' must be a boolean")
+
+    no_stretch = section.get("no_stretch", False)
+    if not isinstance(no_stretch, bool):
+        raise click.ClickException("'extract_faces.no_stretch' must be a boolean")
+
+    debug = section.get("debug", False)
+    if not isinstance(debug, bool):
+        raise click.ClickException("'extract_faces.debug' must be a boolean")
+
+    input_dir_raw = section.get("input_dir")
+    if input_dir_raw is not None:
+        input_dir = config_dir / str(input_dir_raw).strip()
+    else:
+        input_dir = resolved_output_dir / "raw"
+
+    output_dir_raw = section.get("output_dir")
+    if output_dir_raw is not None:
+        output_dir = config_dir / str(output_dir_raw).strip()
+    else:
+        output_dir = resolved_output_dir / "faces"
+
+    return ExtractFacesConfig(
+        input_dir=input_dir,
+        output_dir=output_dir,
+        max_size=max_size,
+        engine=engine,
+        max_faces=max_faces,
+        padding=padding,
+        refine_landmarks=refine_landmarks,
+        no_stretch=no_stretch,
+        debug=debug,
     )
