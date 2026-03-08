@@ -70,7 +70,6 @@ def align_face(
     max_size: int | None = None,
     enable_padding: bool = True,
     debug: bool = False,
-    no_stretch: bool = False,
 ) -> PIL.Image.Image:
     """Align and crop a single face from *img* using the given landmarks.
 
@@ -125,10 +124,6 @@ def align_face(
     else:
         output_size = natural
         transform_size = max(natural, 512)
-
-    if no_stretch and qsize < output_size:
-        output_size = int(qsize)
-        transform_size = max(output_size, 512)
 
     shrink = int(np.floor(qsize / output_size * 0.5))
     if shrink > 1:
@@ -262,7 +257,6 @@ class FaceAligner:
         max_faces: int | None = None,
         enable_padding: bool = True,
         debug: bool = False,
-        no_stretch: bool = False,
     ) -> list[PIL.Image.Image]:
         """Detect faces in a BGR image and return aligned RGB PIL images."""
         landmarks_list = self.detect_landmarks(image)
@@ -279,7 +273,6 @@ class FaceAligner:
                 max_size=max_size,
                 enable_padding=enable_padding,
                 debug=debug,
-                no_stretch=no_stretch,
             )
             for landmarks in landmarks_list
         ]

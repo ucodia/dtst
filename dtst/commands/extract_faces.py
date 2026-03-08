@@ -22,7 +22,7 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
     Returns ``(status, filename, face_count, error_message)``.
     Status is one of ``"ok"``, ``"no_faces"``, ``"failed"``.
     """
-    input_path_s, output_dir_s, max_size, engine, max_faces, padding, refine_landmarks, no_stretch, debug = args
+    input_path_s, output_dir_s, max_size, engine, max_faces, padding, refine_landmarks, debug = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
     name = input_path.name
@@ -58,7 +58,6 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
             max_faces=max_faces,
             enable_padding=padding,
             debug=debug,
-            no_stretch=no_stretch,
         )
 
         if not faces:
@@ -88,7 +87,6 @@ def _resolve_config(
     max_faces: int | None,
     padding: bool | None,
     refine_landmarks: bool,
-    no_stretch: bool,
     debug: bool,
 ) -> ExtractFacesConfig:
     if config is not None:
@@ -112,8 +110,6 @@ def _resolve_config(
         cfg.padding = padding
     if refine_landmarks:
         cfg.refine_landmarks = True
-    if no_stretch:
-        cfg.no_stretch = True
     if debug:
         cfg.debug = True
 
@@ -131,7 +127,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--padding/--no-padding", default=None, help="Enable/disable reflective padding on crops (default: enabled).")
 @click.option("--refine-landmarks", is_flag=True, help="Enable MediaPipe refined landmarks (478 vs 468).")
-@click.option("--no-stretch", is_flag=True, help="Prevent upscaling small faces to output size.")
 @click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
 def cmd(
     config: Path | None,
@@ -144,7 +139,6 @@ def cmd(
     workers: int | None,
     padding: bool | None,
     refine_landmarks: bool,
-    no_stretch: bool,
     debug: bool,
 ) -> None:
     """Extract aligned face crops from images.
@@ -178,7 +172,7 @@ def cmd(
 
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, max_size, engine, max_faces, padding,
-        refine_landmarks, no_stretch, debug,
+        refine_landmarks, debug,
     )
 
     input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
@@ -216,7 +210,6 @@ def cmd(
             cfg.max_faces,
             cfg.padding,
             cfg.refine_landmarks,
-            cfg.no_stretch,
             cfg.debug,
         )
         for img_path in images

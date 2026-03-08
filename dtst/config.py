@@ -129,7 +129,6 @@ class ExtractFacesConfig:
     max_faces: int = 3
     padding: bool = True
     refine_landmarks: bool = False
-    no_stretch: bool = False
     debug: bool = False
 
 
@@ -163,10 +162,6 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
     if not isinstance(refine_landmarks, bool):
         raise click.ClickException("'extract_faces.refine_landmarks' must be a boolean")
 
-    no_stretch = section.get("no_stretch", False)
-    if not isinstance(no_stretch, bool):
-        raise click.ClickException("'extract_faces.no_stretch' must be a boolean")
-
     debug = section.get("debug", False)
     if not isinstance(debug, bool):
         raise click.ClickException("'extract_faces.debug' must be a boolean")
@@ -197,6 +192,5 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
         max_faces=max_faces,
         padding=padding,
         refine_landmarks=refine_landmarks,
-        no_stretch=no_stretch,
         debug=debug,
     )
