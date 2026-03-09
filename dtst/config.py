@@ -204,7 +204,7 @@ class ClusterConfig:
     to: str = "clusters"
     model: str = "arcface"
     top: int | None = None
-    min_cluster_size: int = 5
+    min_cluster_size: int = 16
     batch_size: int = 32
     prompt: list[str] = field(default_factory=list)
     negative: list[str] = field(default_factory=list)
