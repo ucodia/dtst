@@ -295,3 +295,34 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
         prompt=prompt,
         negative=negative,
     )
+
+
+@dataclass
+class FilterConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dir: str = "faces"
+    min_size: int | None = None
+
+
+def load_filter_config(path: str | Path) -> FilterConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("filter")
+    if not section or not isinstance(section, dict):
+        return FilterConfig(working_dir=resolved_working_dir)
+
+    from_dir = section.get("from", "faces")
+    if not isinstance(from_dir, str) or not from_dir.strip():
+        raise click.ClickException("'filter.from' must be a non-empty string")
+
+    min_size = section.get("min_size")
+    if min_size is not None:
+        if not isinstance(min_size, int) or min_size < 1:
+            raise click.ClickException("'filter.min_size' must be a positive integer")
+
+    return FilterConfig(
+        working_dir=resolved_working_dir,
+        from_dir=from_dir.strip(),
+        min_size=min_size,
+    )
