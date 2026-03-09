@@ -191,6 +191,7 @@ def _resolve_config(
     working_dir: Path | None,
     to: str | None,
     min_size: int | None,
+    license_filter: str | None,
 ) -> FetchConfig:
     if config is not None:
         cfg = load_fetch_config(config)
@@ -203,6 +204,8 @@ def _resolve_config(
         cfg.to = to
     if min_size is not None:
         cfg.min_size = min_size
+    if license_filter is not None:
+        cfg.license = license_filter
 
     return cfg
 
@@ -268,14 +271,14 @@ def cmd(
     if no_wait:
         max_wait = 0
 
-    cfg = _resolve_config(config, working_dir, to, min_size)
+    cfg = _resolve_config(config, working_dir, to, min_size, license_filter)
     results_file = cfg.working_dir / "results.jsonl"
     dest_dir = cfg.working_dir / cfg.to
 
     if not results_file.exists():
         raise click.ClickException(f"Results file not found: {results_file}")
 
-    urls, skipped_unsupported = _load_urls_from_jsonl(results_file, cfg.min_size, license_filter)
+    urls, skipped_unsupported = _load_urls_from_jsonl(results_file, cfg.min_size, cfg.license)
     logger.info("Loaded URLs from %s", results_file)
     if skipped_unsupported > 0:
         logger.info("Skipped %d URLs with unsupported format (.djvu).", skipped_unsupported)

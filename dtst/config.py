@@ -95,6 +95,7 @@ class FetchConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     to: str = "raw"
     min_size: int = 512
+    license: str | None = None
 
 
 def load_fetch_config(path: str | Path) -> FetchConfig:
@@ -113,10 +114,17 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     if not isinstance(to, str) or not to.strip():
         raise click.ClickException("'fetch.to' must be a non-empty string")
 
+    license_filter = section.get("license")
+    if license_filter is not None:
+        if not isinstance(license_filter, str) or not license_filter.strip():
+            raise click.ClickException("'fetch.license' must be a non-empty string")
+        license_filter = license_filter.strip()
+
     return FetchConfig(
         working_dir=resolved_working_dir,
         to=to.strip(),
         min_size=min_size,
+        license=license_filter,
     )
 
 
