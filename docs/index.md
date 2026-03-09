@@ -95,16 +95,70 @@ dtst extract-faces -d crowd --max-faces 1 --max-size 512
 dtst extract-faces -d crowd --engine dlib
 ```
 
+## Step 4: Filter
+
+The `filter` command lets you remove images that don't meet certain criteria. Rather than deleting them, it moves rejects to a `filtered/` subfolder within the source folder. This keeps everything non-destructive and easy to undo.
+
+For example, to remove face crops smaller than 1024 pixels:
+
+```bash
+dtst filter -d crowd --from faces --min-size 1024
+```
+
+After this runs, images below the threshold are in `crowd/faces/filtered/`. You can review them in the file explorer and move any back if the filter was too aggressive.
+
+To preview what would be filtered without moving anything:
+
+```bash
+dtst filter -d crowd --from faces --min-size 1024 --dry-run
+```
+
+To undo filtering and restore all images back to the source folder:
+
+```bash
+dtst filter -d crowd --from faces --clear
+```
+
+## Step 5: Cluster
+
+The `cluster` command groups similar images together for easier curation. It computes embeddings for each image, runs unsupervised clustering, and writes each cluster to a numbered subdirectory sorted by size (000 is the largest).
+
+For face datasets, the default `arcface` model clusters by identity, grouping photos of the same person together:
+
+```bash
+dtst cluster -d crowd --from faces
+```
+
+After this runs, `crowd/clusters/` contains folders like `000/`, `001/`, etc., each with images of a distinct person. Images that don't fit any cluster are placed in `noise/`. You can browse the folders, keep the ones you want, and delete the rest.
+
+To limit the output to the top 3 clusters:
+
+```bash
+dtst cluster -d crowd --from faces --top 3
+```
+
+For general image datasets (not faces), use the `clip` model which clusters by visual similarity:
+
+```bash
+dtst cluster -d crowd --from raw --model clip
+```
+
 ## The resulting layout
 
-After running all three steps your working directory looks like this:
+After running all five steps your working directory looks like this:
 
 ```
 crowd/
-  results.jsonl       ← search output, accumulates across runs
-  raw/                ← images downloaded by fetch
-  extra/              ← images you added manually
-  faces/              ← aligned face crops from extract-faces
+  results.jsonl       <- search output, accumulates across runs
+  raw/                <- images downloaded by fetch
+  extra/              <- images you added manually
+  faces/              <- aligned face crops from extract-faces
+    filtered/         <- images removed by filter
+  clusters/           <- grouped by similarity from cluster
+    000/              <- largest cluster
+    001/              <- second largest
+    noise/            <- unclustered images
+    clusters.json     <- cluster metadata
 ```
 
 Each folder is self-contained and can be inspected, filtered, or extended at any time. If you want to experiment with different extraction settings, point `--to` at a new folder to keep both versions side by side:
@@ -146,6 +200,16 @@ extract_faces:
   engine: mediapipe
   max_faces: 1
   max_size: 512
+
+filter:
+  from: faces
+  min_size: 1024
+
+cluster:
+  from: faces
+  to: clusters
+  model: arcface
+  min_cluster_size: 16
 ```
 
 Then run each stage by passing the config file:
@@ -154,6 +218,8 @@ Then run each stage by passing the config file:
 dtst search crowd.yaml
 dtst fetch crowd.yaml
 dtst extract-faces crowd.yaml
+dtst filter crowd.yaml
+dtst cluster crowd.yaml
 ```
 
 CLI options can still be used alongside the config file and will override the corresponding config values.
