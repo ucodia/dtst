@@ -27,6 +27,7 @@ def _resolve_config(
     model: str | None,
     top: int | None,
     min_cluster_size: int | None,
+    min_samples: int | None,
     batch_size: int | None,
     prompt: list[str] | None,
     negative: list[str] | None,
@@ -48,6 +49,8 @@ def _resolve_config(
         cfg.top = top
     if min_cluster_size is not None:
         cfg.min_cluster_size = min_cluster_size
+    if min_samples is not None:
+        cfg.min_samples = min_samples
     if batch_size is not None:
         cfg.batch_size = batch_size
     if prompt is not None:
@@ -66,6 +69,7 @@ def _resolve_config(
 @click.option("--model", "-m", type=click.Choice(sorted(VALID_MODELS), case_sensitive=False), default=None, help="Embedding model for similarity (default: arcface).")
 @click.option("--top", "-n", type=int, default=None, help="Maximum number of clusters to output; omit for all clusters.")
 @click.option("--min-cluster-size", type=int, default=None, help="Minimum images to form a cluster (default: 5).")
+@click.option("--min-samples", type=int, default=None, help="How many close neighbors a point needs to join a cluster; lower values include more borderline images (default: 2).")
 @click.option("--batch-size", "-b", type=int, default=None, help="Images per inference batch (default: 32).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of workers for image preloading (default: CPU count).")
 @click.option("--prompt", "-p", type=str, default=None, help="Comma-separated positive text prompts to guide CLIP clustering toward (only with --model clip).")
@@ -79,6 +83,7 @@ def cmd(
     model: str | None,
     top: int | None,
     min_cluster_size: int | None,
+    min_samples: int | None,
     batch_size: int | None,
     workers: int | None,
     prompt: str | None,
@@ -103,6 +108,19 @@ def cmd(
     negative prompts push matching images apart. This helps merge
     visually diverse images of the same concept into a single cluster.
 
+    \b
+    Tuning clustering:
+        --min-cluster-size sets the smallest group HDBSCAN will consider
+        a real cluster (default: 5). Raise it to suppress small or
+        spurious clusters; lower it to capture smaller groups.
+
+        --min-samples controls how conservative the density estimate is
+        (default: 2). It decides how many close neighbors a point needs
+        before it can join a cluster. Lower values (1-2) let borderline
+        images in; higher values push more images into the noise folder.
+        Keeping this low while adjusting --min-cluster-size is usually
+        the best starting point.
+
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
 
@@ -112,6 +130,7 @@ def cmd(
         dtst cluster -d ./project --from faces --to clusters
         dtst cluster -d ./project --model clip --from raw --to clusters
         dtst cluster -d ./project --top 3 --min-cluster-size 10
+        dtst cluster -d ./project --min-samples 1 --min-cluster-size 8
         dtst cluster -d ./bikes --model clip --prompt "motorcycle" --negative "car"
         dtst cluster config.yaml --model arcface --dry-run
     """
@@ -131,7 +150,7 @@ def cmd(
 
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, model, top,
-        min_cluster_size, batch_size, parsed_prompt, parsed_negative,
+        min_cluster_size, min_samples, batch_size, parsed_prompt, parsed_negative,
     )
 
     # Validate text prompts are only used with CLIP
@@ -165,14 +184,15 @@ def cmd(
     top_label = str(cfg.top) if cfg.top is not None else "all"
 
     logger.info(
-        "Clustering %d images from [%s] (model=%s, min_cluster_size=%d, top=%s, batch_size=%d)",
-        len(images), from_label, cfg.model, cfg.min_cluster_size, top_label, cfg.batch_size,
+        "Clustering %d images from [%s] (model=%s, min_cluster_size=%d, min_samples=%d, top=%s, batch_size=%d)",
+        len(images), from_label, cfg.model, cfg.min_cluster_size, cfg.min_samples, top_label, cfg.batch_size,
     )
 
     if dry_run:
         click.echo(f"\nDry run -- would cluster {len(images):,} images")
         click.echo(f"  Model: {cfg.model}")
         click.echo(f"  Min cluster size: {cfg.min_cluster_size}")
+        click.echo(f"  Min samples: {cfg.min_samples}")
         click.echo(f"  Top clusters: {top_label}")
         click.echo(f"  Output: {output_dir}")
         return
@@ -239,6 +259,7 @@ def cmd(
     cluster_start = time.monotonic()
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=cfg.min_cluster_size,
+        min_samples=cfg.min_samples,
         metric="euclidean",
         cluster_selection_epsilon=0.0,
     )
@@ -304,6 +325,7 @@ def cmd(
     metadata: dict = {
         "model": cfg.model,
         "min_cluster_size": cfg.min_cluster_size,
+        "min_samples": cfg.min_samples,
         "total_images": len(images),
         "embedded_images": len(valid_paths),
         "num_clusters": len(cluster_info),

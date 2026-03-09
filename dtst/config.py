@@ -213,6 +213,7 @@ class ClusterConfig:
     model: str = "arcface"
     top: int | None = None
     min_cluster_size: int = 5
+    min_samples: int = 2
     batch_size: int = 32
     prompt: list[str] = field(default_factory=list)
     negative: list[str] = field(default_factory=list)
@@ -240,6 +241,10 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
     min_cluster_size = section.get("min_cluster_size", 5)
     if not isinstance(min_cluster_size, int) or min_cluster_size < 2:
         raise click.ClickException("'cluster.min_cluster_size' must be an integer >= 2")
+
+    min_samples = section.get("min_samples", 2)
+    if not isinstance(min_samples, int) or min_samples < 1:
+        raise click.ClickException("'cluster.min_samples' must be a positive integer")
 
     batch_size = section.get("batch_size", 32)
     if not isinstance(batch_size, int) or batch_size < 1:
@@ -291,6 +296,7 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
         model=model,
         top=top,
         min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
         batch_size=batch_size,
         prompt=prompt,
         negative=negative,
