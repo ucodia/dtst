@@ -206,6 +206,8 @@ class ClusterConfig:
     top: int | None = None
     min_cluster_size: int = 5
     batch_size: int = 32
+    prompt: list[str] = field(default_factory=list)
+    negative: list[str] = field(default_factory=list)
 
 
 def load_cluster_config(path: str | Path) -> ClusterConfig:
@@ -235,6 +237,28 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
     if not isinstance(batch_size, int) or batch_size < 1:
         raise click.ClickException("'cluster.batch_size' must be a positive integer")
 
+    prompt_raw = section.get("prompt")
+    if prompt_raw is not None:
+        if isinstance(prompt_raw, list):
+            prompt = [str(p).strip() for p in prompt_raw if str(p).strip()]
+        elif isinstance(prompt_raw, str):
+            prompt = [p.strip() for p in prompt_raw.split(",") if p.strip()]
+        else:
+            raise click.ClickException("'cluster.prompt' must be a string or list of strings")
+    else:
+        prompt = []
+
+    negative_raw = section.get("negative")
+    if negative_raw is not None:
+        if isinstance(negative_raw, list):
+            negative = [str(n).strip() for n in negative_raw if str(n).strip()]
+        elif isinstance(negative_raw, str):
+            negative = [n.strip() for n in negative_raw.split(",") if n.strip()]
+        else:
+            raise click.ClickException("'cluster.negative' must be a string or list of strings")
+    else:
+        negative = []
+
     from_raw = section.get("from")
     if from_raw is not None:
         if isinstance(from_raw, list):
@@ -260,4 +284,6 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
         top=top,
         min_cluster_size=min_cluster_size,
         batch_size=batch_size,
+        prompt=prompt,
+        negative=negative,
     )

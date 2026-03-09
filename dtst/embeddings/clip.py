@@ -96,3 +96,22 @@ class CLIPBackend(EmbeddingBackend):
         matrix = np.vstack(embeddings).astype(np.float32)
         matrix = normalize(matrix)
         return matrix, valid_paths
+
+    def encode_text(self, prompts: list[str]) -> np.ndarray:
+        """Encode text prompts into the same embedding space as images.
+
+        Returns an L2-normalized array of shape (len(prompts), D).
+        """
+        import open_clip
+        import torch
+
+        if self._model is None:
+            raise RuntimeError("Model not loaded -- call .load(device) first")
+
+        tokens = open_clip.tokenize(prompts).to(self._device)
+        with torch.no_grad():
+            features = self._model.encode_text(tokens)
+
+        matrix = features.cpu().numpy().astype(np.float32)
+        matrix = normalize(matrix)
+        return matrix

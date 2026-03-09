@@ -28,6 +28,8 @@ def _resolve_config(
     top: int | None,
     min_cluster_size: int | None,
     batch_size: int | None,
+    prompt: list[str] | None,
+    negative: list[str] | None,
 ) -> ClusterConfig:
     if config is not None:
         cfg = load_cluster_config(config)
@@ -48,6 +50,10 @@ def _resolve_config(
         cfg.min_cluster_size = min_cluster_size
     if batch_size is not None:
         cfg.batch_size = batch_size
+    if prompt is not None:
+        cfg.prompt = prompt
+    if negative is not None:
+        cfg.negative = negative
 
     return cfg
 
@@ -62,6 +68,8 @@ def _resolve_config(
 @click.option("--min-cluster-size", type=int, default=None, help="Minimum images to form a cluster (default: 5).")
 @click.option("--batch-size", "-b", type=int, default=None, help="Images per inference batch (default: 32).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of workers for image preloading (default: CPU count).")
+@click.option("--prompt", "-p", type=str, default=None, help="Comma-separated positive text prompts to guide CLIP clustering toward (only with --model clip).")
+@click.option("--negative", type=str, default=None, help="Comma-separated negative text prompts to guide CLIP clustering away from (only with --model clip).")
 @click.option("--dry-run", is_flag=True, help="Show image count and configuration without clustering.")
 def cmd(
     config: Path | None,
@@ -73,6 +81,8 @@ def cmd(
     min_cluster_size: int | None,
     batch_size: int | None,
     workers: int | None,
+    prompt: str | None,
+    negative: str | None,
     dry_run: bool,
 ) -> None:
     """Cluster images by visual similarity.
@@ -87,6 +97,12 @@ def cmd(
     clustering (requires face images) and clip for general visual
     similarity clustering (works with any images).
 
+    When using --model clip, optional --prompt and --negative flags
+    accept text descriptions that shift the embedding space before
+    clustering. Positive prompts pull matching images closer together;
+    negative prompts push matching images apart. This helps merge
+    visually diverse images of the same concept into a single cluster.
+
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
 
@@ -96,6 +112,7 @@ def cmd(
         dtst cluster -d ./project --from faces --to clusters
         dtst cluster -d ./project --model clip --from raw --to clusters
         dtst cluster -d ./project --top 3 --min-cluster-size 10
+        dtst cluster -d ./bikes --model clip --prompt "motorcycle" --negative "car"
         dtst cluster config.yaml --model arcface --dry-run
     """
     parsed_from_dirs: list[str] | None = None
@@ -104,9 +121,24 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
+    parsed_prompt: list[str] | None = None
+    if prompt is not None:
+        parsed_prompt = [p.strip() for p in prompt.split(",") if p.strip()]
+
+    parsed_negative: list[str] | None = None
+    if negative is not None:
+        parsed_negative = [n.strip() for n in negative.split(",") if n.strip()]
+
     cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to, model, top, min_cluster_size, batch_size,
+        config, working_dir, parsed_from_dirs, to, model, top,
+        min_cluster_size, batch_size, parsed_prompt, parsed_negative,
     )
+
+    # Validate text prompts are only used with CLIP
+    if (cfg.prompt or cfg.negative) and cfg.model != "clip":
+        raise click.ClickException(
+            "--prompt and --negative are only supported with --model clip"
+        )
 
     input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
     output_dir = cfg.working_dir / cfg.to
@@ -167,6 +199,38 @@ def cmd(
         "Embedded %d / %d images in %.1fs",
         len(valid_paths), len(images), embed_time,
     )
+
+    # --- Text-guided shift (CLIP only) --------------------------------------
+
+    if (cfg.prompt or cfg.negative) and cfg.model == "clip":
+        from sklearn.preprocessing import normalize as l2_normalize
+
+        shift = np.zeros(embeddings.shape[1], dtype=np.float32)
+
+        if cfg.prompt:
+            pos_emb = backend.encode_text(cfg.prompt)  # (P, D)
+            pos_centroid = pos_emb.mean(axis=0)
+            shift += pos_centroid
+            logger.info("Positive prompts: %s", cfg.prompt)
+
+        if cfg.negative:
+            neg_emb = backend.encode_text(cfg.negative)  # (N, D)
+            neg_centroid = neg_emb.mean(axis=0)
+            shift -= neg_centroid
+            logger.info("Negative prompts: %s", cfg.negative)
+
+        # Project each image embedding along the shift direction
+        # and add a weighted component to pull/push
+        shift_norm = np.linalg.norm(shift)
+        if shift_norm > 0:
+            shift_dir = shift / shift_norm
+            # Add the shift direction as an extra component to each embedding
+            # Weight controls how strongly text guidance affects clustering
+            weight = 0.5
+            text_component = (embeddings @ shift_dir).reshape(-1, 1) * weight * shift_dir
+            embeddings = embeddings + text_component
+            embeddings = l2_normalize(embeddings).astype(np.float32)
+            logger.info("Applied text-guided embedding shift (weight=%.1f)", weight)
 
     # --- Clustering ----------------------------------------------------------
 
@@ -237,7 +301,7 @@ def cmd(
 
     # --- Write metadata ------------------------------------------------------
 
-    metadata = {
+    metadata: dict = {
         "model": cfg.model,
         "min_cluster_size": cfg.min_cluster_size,
         "total_images": len(images),
@@ -249,6 +313,10 @@ def cmd(
             for rank, (label, count) in enumerate(cluster_info)
         ],
     }
+    if cfg.prompt:
+        metadata["prompt"] = cfg.prompt
+    if cfg.negative:
+        metadata["negative"] = cfg.negative
 
     meta_path = output_dir / "clusters.json"
     with open(meta_path, "w") as f:
