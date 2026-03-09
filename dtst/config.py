@@ -6,6 +6,7 @@ import yaml
 
 VALID_SEARCH_ENGINES = frozenset({"brave", "flickr", "serper", "wikimedia"})
 VALID_FACE_ENGINES = frozenset({"mediapipe", "dlib"})
+VALID_EMBEDDING_MODELS = frozenset({"arcface", "clip"})
 
 
 def load_yaml(path: str | Path) -> tuple[dict, Path]:
@@ -193,4 +194,70 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
         padding=padding,
         refine_landmarks=refine_landmarks,
         debug=debug,
+    )
+
+
+@dataclass
+class ClusterConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] = field(default_factory=lambda: ["faces"])
+    to: str = "clusters"
+    model: str = "arcface"
+    top: int | None = None
+    min_cluster_size: int = 5
+    batch_size: int = 32
+
+
+def load_cluster_config(path: str | Path) -> ClusterConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("cluster")
+    if not section or not isinstance(section, dict):
+        return ClusterConfig(working_dir=resolved_working_dir)
+
+    model = str(section.get("model", "arcface")).strip().lower()
+    if model not in VALID_EMBEDDING_MODELS:
+        raise click.ClickException(
+            f"Invalid embedding model: {model!r}; valid: {sorted(VALID_EMBEDDING_MODELS)}"
+        )
+
+    top = section.get("top")
+    if top is not None:
+        if not isinstance(top, int) or top < 1:
+            raise click.ClickException("'cluster.top' must be a positive integer")
+
+    min_cluster_size = section.get("min_cluster_size", 5)
+    if not isinstance(min_cluster_size, int) or min_cluster_size < 2:
+        raise click.ClickException("'cluster.min_cluster_size' must be an integer >= 2")
+
+    batch_size = section.get("batch_size", 32)
+    if not isinstance(batch_size, int) or batch_size < 1:
+        raise click.ClickException("'cluster.batch_size' must be a positive integer")
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'cluster.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'cluster.from' must contain at least one directory name")
+    else:
+        from_dirs = ["faces"]
+
+    to = section.get("to", "clusters")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'cluster.to' must be a non-empty string")
+
+    return ClusterConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip(),
+        model=model,
+        top=top,
+        min_cluster_size=min_cluster_size,
+        batch_size=batch_size,
     )

@@ -7,14 +7,20 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.3.1",
     "dlib>=20.0.0",
+    "hdbscan>=0.8.41",
+    "insightface>=0.7.3",
     "mediapipe>=0.10.32",
     "numpy>=2.4.2",
+    "onnxruntime>=1.24.3",
+    "open-clip-torch>=3.3.0",
     "opencv-python-headless>=4.13.0.92",
     "pillow>=12.1.1",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
+    "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
+    "torch>=2.10.0",
     "tqdm>=4.67.3",
 ]
 
