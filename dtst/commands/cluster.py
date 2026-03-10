@@ -108,24 +108,23 @@ def cmd(
     negative prompts push matching images apart. This helps merge
     visually diverse images of the same concept into a single cluster.
 
-    \b
-    Tuning clustering:
-        --min-cluster-size sets the smallest group HDBSCAN will consider
-        a real cluster (default: 5). Raise it to suppress small or
-        spurious clusters; lower it to capture smaller groups.
+    --min-cluster-size sets the smallest group HDBSCAN will consider
+    a real cluster (default: 5). Raise it to suppress small or
+    spurious clusters; lower it to capture smaller groups.
 
-        --min-samples controls how conservative the density estimate is
-        (default: 2). It decides how many close neighbors a point needs
-        before it can join a cluster. Lower values (1-2) let borderline
-        images in; higher values push more images into the noise folder.
-        Keeping this low while adjusting --min-cluster-size is usually
-        the best starting point.
+    --min-samples controls how conservative the density estimate is
+    (default: 2). It decides how many close neighbors a point needs
+    before it can join a cluster. Lower values (1-2) let borderline
+    images in; higher values push more images into the noise folder.
+    Keeping this low while adjusting --min-cluster-size is usually
+    the best starting point.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
 
     \b
     Examples:
+
         dtst cluster config.yaml
         dtst cluster -d ./project --from faces --to clusters
         dtst cluster -d ./project --model clip --from raw --to clusters

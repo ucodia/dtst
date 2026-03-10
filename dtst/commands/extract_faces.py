@@ -158,6 +158,7 @@ def cmd(
 
     \b
     Examples:
+    
         dtst extract-faces config.yaml
         dtst extract-faces config.yaml --engine dlib --max-size 512
         dtst extract-faces -d ./crowd

@@ -92,6 +92,7 @@ def cmd(
 
     \b
     Examples:
+
         dtst filter -d ./project --from faces --min-size 256
         dtst filter config.yaml --min-size 128
         dtst filter -d ./project --from faces --clear

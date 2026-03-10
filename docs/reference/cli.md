@@ -35,7 +35,6 @@ clustering. Positive prompts pull matching images closer together;
 negative prompts push matching images apart. This helps merge
 visually diverse images of the same concept into a single cluster.
 
-Tuning clustering:
 --min-cluster-size sets the smallest group HDBSCAN will consider
 a real cluster (default: 5). Raise it to suppress small or
 spurious clusters; lower it to capture smaller groups.
@@ -51,6 +50,7 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
+
     dtst cluster config.yaml
     dtst cluster -d ./project --from faces --to clusters
     dtst cluster -d ./project --model clip --from raw --to clusters
@@ -101,6 +101,7 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
+
     dtst extract-faces config.yaml
     dtst extract-faces config.yaml --engine dlib --max-size 512
     dtst extract-faces -d ./crowd
@@ -200,6 +201,7 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
+
     dtst filter -d ./project --from faces --min-size 256
     dtst filter config.yaml --min-size 128
     dtst filter -d ./project --from faces --clear
