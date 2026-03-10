@@ -4,8 +4,6 @@ repo_url = "https://github.com/Ucodia/dtst"
 repo_name = "Ucodia/dtst"
 
 [project.markdown_extensions.attr_list]
-[project.markdown_extensions.mkdocs-click]
-
 [project.markdown_extensions.pymdownx.highlight]
 anchor_linenums = true
 line_spans = "__span"

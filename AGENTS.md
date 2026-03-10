@@ -298,36 +298,19 @@ logging.getLogger("PIL").setLevel(logging.WARNING)
 
 See **Project layout** above for the documentation path (`/docs`). Documentation lives in `/docs` as Markdown and is built with **Zensical**. The project uses an `zensical.toml` configuration file.
 
-### CLI Reference (auto-generated)
+### CLI Reference (pre-generated)
 
-CLI command documentation is auto-generated from Click source code using the **`mkdocs-click`** Markdown extension. This means the Click decorators and docstrings are the single source of truth for the CLI reference — there is no separate documentation to keep in sync.
+CLI command documentation is pre-generated from Click source code by `scripts/gen_cli_docs.py`. The script introspects the `dtst` CLI group and emits `docs/reference/cli.md`. This means the Click decorators and docstrings are the single source of truth for the CLI reference.
 
-In `mkdocs.yml`:
+After changing any command's options, arguments, or docstring, regenerate the CLI docs:
 
-```yaml
-markdown_extensions:
-  - attr_list
-  - mkdocs-click
+```bash
+uv run scripts/gen_cli_docs.py
 ```
-
-In `docs/reference/cli.md`:
-
-```markdown
-# CLI Reference
-
-::: mkdocs-click
-    :module: dtst.cli
-    :command: cli
-    :prog_name: dtst
-    :depth: 1
-    :style: table
-```
-
-This introspects the `dtst` CLI group at build time and generates full documentation for every subcommand, option, and argument.
 
 ### Writing Click commands for good documentation
 
-Since mkdocs-click pulls directly from your Click code, every command must be written with documentation quality in mind:
+Since the CLI docs are generated from your Click code, every command must be written with documentation quality in mind:
 
 **Command docstrings** become the command description. Write a clear one-liner as the first sentence, followed by a blank line and a longer explanation if needed. Include a usage example after a `\b` escape (which prevents Click from rewrapping the text):
 
@@ -367,7 +350,7 @@ docs/
   pipeline.md           # Pipeline stages explained
   configuration.md      # Subject YAML config reference
   reference/
-    cli.md              # Auto-generated CLI reference (mkdocs-click)
+    cli.md              # Pre-generated CLI reference (scripts/gen_cli_docs.py)
 ```
 
 Keep hand-written docs focused on the *why* and *how* — the CLI reference handles the *what*.
