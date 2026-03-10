@@ -29,12 +29,6 @@ Supports two embedding models: arcface for face identity
 clustering (requires face images) and clip for general visual
 similarity clustering (works with any images).
 
-When using --model clip, optional --prompt and --negative flags
-accept text descriptions that shift the embedding space before
-clustering. Positive prompts pull matching images closer together;
-negative prompts push matching images apart. This helps merge
-visually diverse images of the same concept into a single cluster.
-
 --min-cluster-size sets the smallest group HDBSCAN will consider
 a real cluster (default: 5). Raise it to suppress small or
 spurious clusters; lower it to capture smaller groups.
@@ -56,7 +50,6 @@ Examples:
     dtst cluster -d ./project --model clip --from raw --to clusters
     dtst cluster -d ./project --top 3 --min-cluster-size 10
     dtst cluster -d ./project --min-samples 1 --min-cluster-size 8
-    dtst cluster -d ./bikes --model clip --prompt "motorcycle" --negative "car"
     dtst cluster config.yaml --model arcface --dry-run
 
 **Usage:**
@@ -78,8 +71,7 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--min-samples` | integer | How many close neighbors a point needs to join a cluster; lower values include more borderline images (default: 2). | None |
 | `--batch-size`, `-b` | integer | Images per inference batch (default: 32). | None |
 | `--workers`, `-w` | integer | Number of workers for image preloading (default: CPU count). | None |
-| `--prompt`, `-p` | text | Comma-separated positive text prompts to guide CLIP clustering toward (only with --model clip). | None |
-| `--negative` | text | Comma-separated negative text prompts to guide CLIP clustering away from (only with --model clip). | None |
+| `--no-cache` | boolean | Skip the embedding cache and recompute from scratch. | `False` |
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 

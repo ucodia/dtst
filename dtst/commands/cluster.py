@@ -12,6 +12,7 @@ import numpy as np
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from dtst.cache import load_embeddings, save_embeddings
 from dtst.config import ClusterConfig, load_cluster_config
 from dtst.embeddings import VALID_MODELS, detect_device, get_backend
 from dtst.images import find_images
@@ -29,8 +30,7 @@ def _resolve_config(
     min_cluster_size: int | None,
     min_samples: int | None,
     batch_size: int | None,
-    prompt: list[str] | None,
-    negative: list[str] | None,
+    no_cache: bool = False,
 ) -> ClusterConfig:
     if config is not None:
         cfg = load_cluster_config(config)
@@ -53,10 +53,8 @@ def _resolve_config(
         cfg.min_samples = min_samples
     if batch_size is not None:
         cfg.batch_size = batch_size
-    if prompt is not None:
-        cfg.prompt = prompt
-    if negative is not None:
-        cfg.negative = negative
+    if no_cache:
+        cfg.no_cache = True
 
     return cfg
 
@@ -72,8 +70,7 @@ def _resolve_config(
 @click.option("--min-samples", type=int, default=None, help="How many close neighbors a point needs to join a cluster; lower values include more borderline images (default: 2).")
 @click.option("--batch-size", "-b", type=int, default=None, help="Images per inference batch (default: 32).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of workers for image preloading (default: CPU count).")
-@click.option("--prompt", "-p", type=str, default=None, help="Comma-separated positive text prompts to guide CLIP clustering toward (only with --model clip).")
-@click.option("--negative", type=str, default=None, help="Comma-separated negative text prompts to guide CLIP clustering away from (only with --model clip).")
+@click.option("--no-cache", is_flag=True, help="Skip the embedding cache and recompute from scratch.")
 @click.option("--dry-run", is_flag=True, help="Show image count and configuration without clustering.")
 def cmd(
     config: Path | None,
@@ -86,8 +83,7 @@ def cmd(
     min_samples: int | None,
     batch_size: int | None,
     workers: int | None,
-    prompt: str | None,
-    negative: str | None,
+    no_cache: bool,
     dry_run: bool,
 ) -> None:
     """Cluster images by visual similarity.
@@ -101,12 +97,6 @@ def cmd(
     Supports two embedding models: arcface for face identity
     clustering (requires face images) and clip for general visual
     similarity clustering (works with any images).
-
-    When using --model clip, optional --prompt and --negative flags
-    accept text descriptions that shift the embedding space before
-    clustering. Positive prompts pull matching images closer together;
-    negative prompts push matching images apart. This helps merge
-    visually diverse images of the same concept into a single cluster.
 
     --min-cluster-size sets the smallest group HDBSCAN will consider
     a real cluster (default: 5). Raise it to suppress small or
@@ -130,7 +120,6 @@ def cmd(
         dtst cluster -d ./project --model clip --from raw --to clusters
         dtst cluster -d ./project --top 3 --min-cluster-size 10
         dtst cluster -d ./project --min-samples 1 --min-cluster-size 8
-        dtst cluster -d ./bikes --model clip --prompt "motorcycle" --negative "car"
         dtst cluster config.yaml --model arcface --dry-run
     """
     parsed_from_dirs: list[str] | None = None
@@ -139,24 +128,10 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
-    parsed_prompt: list[str] | None = None
-    if prompt is not None:
-        parsed_prompt = [p.strip() for p in prompt.split(",") if p.strip()]
-
-    parsed_negative: list[str] | None = None
-    if negative is not None:
-        parsed_negative = [n.strip() for n in negative.split(",") if n.strip()]
-
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, model, top,
-        min_cluster_size, min_samples, batch_size, parsed_prompt, parsed_negative,
+        min_cluster_size, min_samples, batch_size, no_cache,
     )
-
-    # Validate text prompts are only used with CLIP
-    if (cfg.prompt or cfg.negative) and cfg.model != "clip":
-        raise click.ClickException(
-            "--prompt and --negative are only supported with --model clip"
-        )
 
     input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
     output_dir = cfg.working_dir / cfg.to
@@ -199,57 +174,36 @@ def cmd(
     # --- Embedding -----------------------------------------------------------
 
     start_time = time.monotonic()
-    device = detect_device()
-    backend = get_backend(cfg.model)
-    backend.load(device)
+    cached = None
 
-    with logging_redirect_tqdm():
-        embeddings, valid_paths = backend.embed(
-            images,
-            batch_size=cfg.batch_size,
-            num_workers=num_workers,
-        )
+    if not cfg.no_cache:
+        cached = load_embeddings(cfg.working_dir, cfg.model, images)
 
-    if len(valid_paths) == 0:
-        raise click.ClickException("No images produced valid embeddings")
+    if cached is not None:
+        embeddings, valid_paths = cached
+    else:
+        device = detect_device()
+        backend = get_backend(cfg.model)
+        backend.load(device)
+
+        with logging_redirect_tqdm():
+            embeddings, valid_paths = backend.embed(
+                images,
+                batch_size=cfg.batch_size,
+                num_workers=num_workers,
+            )
+
+        if len(valid_paths) == 0:
+            raise click.ClickException("No images produced valid embeddings")
+
+        if not cfg.no_cache:
+            save_embeddings(cfg.working_dir, cfg.model, images, embeddings, valid_paths)
 
     embed_time = time.monotonic() - start_time
     logger.info(
         "Embedded %d / %d images in %.1fs",
         len(valid_paths), len(images), embed_time,
     )
-
-    # --- Text-guided shift (CLIP only) --------------------------------------
-
-    if (cfg.prompt or cfg.negative) and cfg.model == "clip":
-        from sklearn.preprocessing import normalize as l2_normalize
-
-        shift = np.zeros(embeddings.shape[1], dtype=np.float32)
-
-        if cfg.prompt:
-            pos_emb = backend.encode_text(cfg.prompt)  # (P, D)
-            pos_centroid = pos_emb.mean(axis=0)
-            shift += pos_centroid
-            logger.info("Positive prompts: %s", cfg.prompt)
-
-        if cfg.negative:
-            neg_emb = backend.encode_text(cfg.negative)  # (N, D)
-            neg_centroid = neg_emb.mean(axis=0)
-            shift -= neg_centroid
-            logger.info("Negative prompts: %s", cfg.negative)
-
-        # Project each image embedding along the shift direction
-        # and add a weighted component to pull/push
-        shift_norm = np.linalg.norm(shift)
-        if shift_norm > 0:
-            shift_dir = shift / shift_norm
-            # Add the shift direction as an extra component to each embedding
-            # Weight controls how strongly text guidance affects clustering
-            weight = 0.5
-            text_component = (embeddings @ shift_dir).reshape(-1, 1) * weight * shift_dir
-            embeddings = embeddings + text_component
-            embeddings = l2_normalize(embeddings).astype(np.float32)
-            logger.info("Applied text-guided embedding shift (weight=%.1f)", weight)
 
     # --- Clustering ----------------------------------------------------------
 
@@ -334,10 +288,6 @@ def cmd(
             for rank, (label, count) in enumerate(cluster_info)
         ],
     }
-    if cfg.prompt:
-        metadata["prompt"] = cfg.prompt
-    if cfg.negative:
-        metadata["negative"] = cfg.negative
 
     meta_path = output_dir / "clusters.json"
     with open(meta_path, "w") as f:
