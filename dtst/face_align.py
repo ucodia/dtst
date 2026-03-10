@@ -69,15 +69,21 @@ def align_face(
     face_landmarks: list[tuple[int, int]],
     max_size: int | None = None,
     enable_padding: bool = True,
+    skip_partial: bool = False,
     debug: bool = False,
-) -> PIL.Image.Image:
+) -> PIL.Image.Image | None:
     """Align and crop a single face from *img* using the given landmarks.
 
     *max_size* caps the output side length. Faces smaller than *max_size*
     are kept at their natural size (no upscale). When *max_size* is
     ``None`` the output is always at natural size.
 
-    Returns a square RGB PIL Image.
+    When *skip_partial* is ``True``, faces whose aligned crop extends
+    beyond the image boundary are skipped (returns ``None``) instead of
+    being padded or truncated.
+
+    Returns a square RGB PIL Image, or ``None`` when *skip_partial*
+    rejects the face.
     """
     img = img.copy()
     lm = np.array(face_landmarks)
@@ -161,6 +167,8 @@ def align_face(
         max(pad[2] - img.size[0] + border, 0),
         max(pad[3] - img.size[1] + border, 0),
     )
+    if skip_partial and max(pad) > border - 4:
+        return None
     if enable_padding and max(pad) > border - 4:
         pad = np.maximum(pad, int(np.rint(qsize * 0.3)))
         img_arr = np.pad(np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), "reflect")
@@ -256,6 +264,7 @@ class FaceAligner:
         max_size: int | None = None,
         max_faces: int | None = None,
         enable_padding: bool = True,
+        skip_partial: bool = False,
         debug: bool = False,
     ) -> list[PIL.Image.Image]:
         """Detect faces in a BGR image and return aligned RGB PIL images."""
@@ -266,13 +275,15 @@ class FaceAligner:
             landmarks_list = landmarks_list[:max_faces]
 
         pil_img = PIL.Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        return [
+        results = [
             align_face(
                 pil_img,
                 landmarks,
                 max_size=max_size,
                 enable_padding=enable_padding,
+                skip_partial=skip_partial,
                 debug=debug,
             )
             for landmarks in landmarks_list
         ]
+        return [r for r in results if r is not None]

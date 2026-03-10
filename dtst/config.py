@@ -137,6 +137,7 @@ class ExtractFacesConfig:
     engine: str = "mediapipe"
     max_faces: int = 3
     padding: bool = True
+    skip_partial: bool = False
     refine_landmarks: bool = False
     debug: bool = False
 
@@ -166,6 +167,10 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
     padding = section.get("padding", True)
     if not isinstance(padding, bool):
         raise click.ClickException("'extract_faces.padding' must be a boolean")
+
+    skip_partial = section.get("skip_partial", False)
+    if not isinstance(skip_partial, bool):
+        raise click.ClickException("'extract_faces.skip_partial' must be a boolean")
 
     refine_landmarks = section.get("refine_landmarks", False)
     if not isinstance(refine_landmarks, bool):
@@ -200,6 +205,7 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
         engine=engine,
         max_faces=max_faces,
         padding=padding,
+        skip_partial=skip_partial,
         refine_landmarks=refine_landmarks,
         debug=debug,
     )

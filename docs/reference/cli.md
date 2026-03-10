@@ -118,6 +118,7 @@ dtst extract-faces [OPTIONS] [CONFIG]
 | `--max-faces`, `-m` | integer | Max faces to extract per image (default: 1). | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--padding` / `--no-padding` | boolean | Enable/disable reflective padding on crops (default: enabled). | None |
+| `--skip-partial` | boolean | Skip faces whose crop extends beyond the image boundary instead of padding them. | `False` |
 | `--refine-landmarks` | boolean | Enable MediaPipe refined landmarks (478 vs 468). | `False` |
 | `--debug` | boolean | Overlay landmark points on output images. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |

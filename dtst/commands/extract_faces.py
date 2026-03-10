@@ -22,7 +22,7 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
     Returns ``(status, filename, face_count, error_message)``.
     Status is one of ``"ok"``, ``"no_faces"``, ``"failed"``.
     """
-    input_path_s, output_dir_s, max_size, engine, max_faces, padding, refine_landmarks, debug = args
+    input_path_s, output_dir_s, max_size, engine, max_faces, padding, skip_partial, refine_landmarks, debug = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
     name = input_path.name
@@ -57,6 +57,7 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
             max_size=max_size,
             max_faces=max_faces,
             enable_padding=padding,
+            skip_partial=skip_partial,
             debug=debug,
         )
 
@@ -86,6 +87,7 @@ def _resolve_config(
     engine: str | None,
     max_faces: int | None,
     padding: bool | None,
+    skip_partial: bool,
     refine_landmarks: bool,
     debug: bool,
 ) -> ExtractFacesConfig:
@@ -108,6 +110,8 @@ def _resolve_config(
         cfg.max_faces = max_faces
     if padding is not None:
         cfg.padding = padding
+    if skip_partial:
+        cfg.skip_partial = True
     if refine_landmarks:
         cfg.refine_landmarks = True
     if debug:
@@ -126,6 +130,7 @@ def _resolve_config(
 @click.option("--max-faces", "-m", type=int, default=None, help="Max faces to extract per image (default: 1).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--padding/--no-padding", default=None, help="Enable/disable reflective padding on crops (default: enabled).")
+@click.option("--skip-partial", is_flag=True, help="Skip faces whose crop extends beyond the image boundary instead of padding them.")
 @click.option("--refine-landmarks", is_flag=True, help="Enable MediaPipe refined landmarks (478 vs 468).")
 @click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
 def cmd(
@@ -138,6 +143,7 @@ def cmd(
     max_faces: int | None,
     workers: int | None,
     padding: bool | None,
+    skip_partial: bool,
     refine_landmarks: bool,
     debug: bool,
 ) -> None:
@@ -173,7 +179,7 @@ def cmd(
 
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, max_size, engine, max_faces, padding,
-        refine_landmarks, debug,
+        skip_partial, refine_landmarks, debug,
     )
 
     input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
@@ -210,6 +216,7 @@ def cmd(
             cfg.engine,
             cfg.max_faces,
             cfg.padding,
+            cfg.skip_partial,
             cfg.refine_landmarks,
             cfg.debug,
         )
