@@ -8,6 +8,7 @@ dependencies = [
     "click>=8.3.1",
     "dlib>=20.0.0",
     "hdbscan>=0.8.41",
+    "imagehash>=4.3.2",
     "insightface>=0.7.3",
     "mediapipe>=0.10.32",
     "numpy>=2.4.2",

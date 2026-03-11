@@ -289,6 +289,7 @@ class FilterConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dir: str = "faces"
     min_size: int | None = None
+    min_blur: float | None = None
 
 
 def load_filter_config(path: str | Path) -> FilterConfig:
@@ -308,8 +309,60 @@ def load_filter_config(path: str | Path) -> FilterConfig:
         if not isinstance(min_size, int) or min_size < 1:
             raise click.ClickException("'filter.min_size' must be a positive integer")
 
+    min_blur = section.get("min_blur")
+    if min_blur is not None:
+        if not isinstance(min_blur, (int, float)) or min_blur < 0:
+            raise click.ClickException("'filter.min_blur' must be a non-negative number")
+        min_blur = float(min_blur)
+
     return FilterConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir.strip(),
         min_size=min_size,
+        min_blur=min_blur,
+    )
+
+
+@dataclass
+class AnalyzeConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] = field(default_factory=lambda: ["raw"])
+    phash: bool = False
+    blur: bool = False
+
+
+def load_analyze_config(path: str | Path) -> AnalyzeConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("analyze")
+    if not section or not isinstance(section, dict):
+        return AnalyzeConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'analyze.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'analyze.from' must contain at least one directory name")
+    else:
+        from_dirs = ["raw"]
+
+    phash = section.get("phash", False)
+    if not isinstance(phash, bool):
+        raise click.ClickException("'analyze.phash' must be a boolean")
+
+    blur = section.get("blur", False)
+    if not isinstance(blur, bool):
+        raise click.ClickException("'analyze.blur' must be a boolean")
+
+    return AnalyzeConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        phash=phash,
+        blur=blur,
     )

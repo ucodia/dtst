@@ -10,6 +10,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FilterConfig, load_filter_config
 from dtst.images import find_images
+from dtst.sidecar import read_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def _resolve_config(
     working_dir: Path | None,
     from_dir: str | None,
     min_size: int | None,
+    min_blur: float | None,
 ) -> FilterConfig:
     if config is not None:
         cfg = load_filter_config(config)
@@ -56,6 +58,8 @@ def _resolve_config(
         cfg.from_dir = from_dir
     if min_size is not None:
         cfg.min_size = min_size
+    if min_blur is not None:
+        cfg.min_blur = min_blur
 
     return cfg
 
@@ -65,6 +69,7 @@ def _resolve_config(
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
 @click.option("--from", "from_dir", type=str, default=None, help="Folder name to filter within the working directory (default: faces).")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; images smaller are filtered out.")
+@click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry.")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--clear", is_flag=True, help="Restore all filtered images back to the source folder.")
 @click.option("--dry-run", is_flag=True, help="Show what would be filtered without moving anything.")
@@ -73,6 +78,7 @@ def cmd(
     working_dir: Path | None,
     from_dir: str | None,
     min_size: int | None,
+    min_blur: float | None,
     workers: int | None,
     clear: bool,
     dry_run: bool,
@@ -92,16 +98,18 @@ def cmd(
 
     \b
     Examples:
-
         dtst filter -d ./project --from faces --min-size 256
+        dtst filter -d ./project --from faces --min-blur 50
+        dtst filter -d ./project --from faces --min-size 256 --min-blur 50
         dtst filter config.yaml --min-size 128
         dtst filter -d ./project --from faces --clear
         dtst filter -d ./project --from faces --min-size 256 --dry-run
     """
-    if clear and (min_size is not None):
+    has_criteria = min_size is not None or min_blur is not None
+    if clear and has_criteria:
         raise click.ClickException("--clear cannot be combined with filter criteria")
 
-    cfg = _resolve_config(config, working_dir, from_dir, min_size)
+    cfg = _resolve_config(config, working_dir, from_dir, min_size, min_blur)
     source_dir = cfg.working_dir / cfg.from_dir
     filtered_dir = source_dir / FILTERED_DIR_NAME
 
@@ -130,14 +138,15 @@ def cmd(
                 for path in filtered_images:
                     dest = source_dir / path.name
                     if dest.exists():
-                        # Avoid overwriting; skip with warning
                         logger.warning("Skipping %s (already exists in source)", path.name)
                     else:
                         path.rename(dest)
+                        sc = sidecar_path(path)
+                        if sc.exists():
+                            sc.rename(sidecar_path(dest))
                         restored += 1
                     pbar.update(1)
 
-        # Remove filtered dir if empty
         try:
             filtered_dir.rmdir()
         except OSError:
@@ -150,45 +159,72 @@ def cmd(
 
     # --- Filter mode ---------------------------------------------------------
 
-    if cfg.min_size is None:
-        raise click.ClickException("No filter criteria specified (use --min-size or check config)")
+    if cfg.min_size is None and cfg.min_blur is None:
+        raise click.ClickException("No filter criteria specified (use --min-size, --min-blur, or check config)")
 
     images = find_images(source_dir)
     if not images:
         raise click.ClickException(f"No images found in: {source_dir}")
 
     num_workers = workers if workers is not None else cpu_count() or 4
-    logger.info("Filtering %d images in %s (min_size=%d)", len(images), source_dir, cfg.min_size)
 
-    # Check dimensions in parallel (CPU-bound: opening image headers)
-    from concurrent.futures import ProcessPoolExecutor, as_completed
+    criteria_parts = []
+    if cfg.min_size is not None:
+        criteria_parts.append(f"min_size={cfg.min_size}")
+    if cfg.min_blur is not None:
+        criteria_parts.append(f"min_blur={cfg.min_blur}")
+    logger.info("Filtering %d images in %s (%s)", len(images), source_dir, ", ".join(criteria_parts))
 
-    work = [(str(p), cfg.min_size) for p in images]
-    rejects: list[tuple[Path, int, int]] = []
-    kept = 0
+    rejects: dict[Path, str] = {}
+    kept_set: set[Path] = set(images)
     failed = 0
 
-    with logging_redirect_tqdm():
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_check_image_size, w): w for w in work}
-            with tqdm(total=len(futures), desc="Checking", unit="image") as pbar:
-                try:
-                    for future in as_completed(futures):
-                        status, name, w, h, error = future.result()
-                        if status == "reject":
-                            # Find the original path from the work item
-                            original_path = Path(futures[future][0])
-                            rejects.append((original_path, w, h))
-                        elif status == "keep":
-                            kept += 1
-                        else:
-                            failed += 1
-                            logger.error("Failed to check %s: %s", name, error)
-                        pbar.set_postfix(keep=kept, reject=len(rejects), fail=failed)
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    # --- Size check (parallel, CPU-bound) ------------------------------------
+
+    if cfg.min_size is not None:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        work = [(str(p), cfg.min_size) for p in images]
+        with logging_redirect_tqdm():
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = {executor.submit(_check_image_size, w): w for w in work}
+                with tqdm(total=len(futures), desc="Checking size", unit="image") as pbar:
+                    try:
+                        for future in as_completed(futures):
+                            status, name, w, h, error = future.result()
+                            if status == "reject":
+                                original_path = Path(futures[future][0])
+                                rejects[original_path] = f"too small ({w}x{h})"
+                                kept_set.discard(original_path)
+                            elif status == "failed":
+                                failed += 1
+                                logger.error("Failed to check %s: %s", name, error)
+                            pbar.update(1)
+                    except KeyboardInterrupt:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise
+
+    # --- Blur check (sidecar lookup, no parallelism needed) ------------------
+
+    if cfg.min_blur is not None:
+        remaining = sorted(kept_set)
+        for img_path in remaining:
+            sidecar = read_sidecar(img_path)
+            blur_data = sidecar.get("blur")
+            if blur_data is None:
+                logger.warning("No blur data in sidecar for %s, skipping blur check", img_path.name)
+                continue
+            score = blur_data.get("score")
+            if score is None:
+                logger.warning("No blur score in sidecar for %s, skipping blur check", img_path.name)
+                continue
+            if score < cfg.min_blur:
+                rejects[img_path] = f"too blurry (score={score:.2f})"
+                kept_set.discard(img_path)
+
+    # --- Results -------------------------------------------------------------
+
+    kept = len(kept_set)
 
     if not rejects:
         click.echo(f"\nAll {kept:,} images pass the filter criteria.")
@@ -196,24 +232,26 @@ def cmd(
 
     if dry_run:
         click.echo(f"\nDry run -- would filter {len(rejects):,} / {len(images):,} images")
-        for path, w, h in rejects[:10]:
-            click.echo(f"  {path.name} ({w}x{h})")
+        for path, reason in list(rejects.items())[:10]:
+            click.echo(f"  {path.name} ({reason})")
         if len(rejects) > 10:
             click.echo(f"  ... and {len(rejects) - 10:,} more")
         return
 
-    # Move rejects to filtered/
     filtered_dir.mkdir(parents=True, exist_ok=True)
     moved = 0
 
     with logging_redirect_tqdm():
         with tqdm(total=len(rejects), desc="Filtering", unit="image") as pbar:
-            for path, w, h in rejects:
+            for path, reason in rejects.items():
                 try:
                     dest = filtered_dir / path.name
                     path.rename(dest)
+                    sc = sidecar_path(path)
+                    if sc.exists():
+                        sc.rename(sidecar_path(dest))
                     moved += 1
-                    logger.debug("Filtered %s (%dx%d)", path.name, w, h)
+                    logger.debug("Filtered %s (%s)", path.name, reason)
                 except OSError as e:
                     logger.error("Failed to move %s: %s", path.name, e)
                 pbar.update(1)

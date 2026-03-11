@@ -15,6 +15,43 @@ dtst [OPTIONS] COMMAND [ARGS]...
 | `--verbose`, `-v` | boolean | Enable debug logging | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst analyze { #dtst-analyze data-toc-label='analyze' }
+
+Compute image metadata and write JSON sidecars.
+
+Analyzes images in the source folders and writes per-image sidecar
+JSON files containing the requested metadata (perceptual hash,
+blur score, or both). Sidecars are merged incrementally — running
+with --phash then --blur accumulates both.
+
+At least one analyzer flag (--phash, --blur) is required.
+
+Examples:
+
+  dtst analyze --from raw --phash --blur -d ./my-dataset
+  dtst analyze config.yaml --phash
+  dtst analyze --from raw,extra --blur --force
+  dtst analyze --from raw --phash --dry-run -d ./my-dataset
+
+**Usage:**
+
+```text
+dtst analyze [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Comma-separated source folder names (default: raw). | None |
+| `--phash` | boolean | Compute perceptual hash for each image. | `False` |
+| `--blur` | boolean | Compute blur score (Laplacian variance) for each image. | `False` |
+| `--force` | boolean | Recompute all analyzers even if sidecar data already exists. | `False` |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst cluster { #dtst-cluster data-toc-label='cluster' }
 
 Cluster images by visual similarity.
@@ -194,8 +231,9 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
-
     dtst filter -d ./project --from faces --min-size 256
+    dtst filter -d ./project --from faces --min-blur 50
+    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
     dtst filter config.yaml --min-size 128
     dtst filter -d ./project --from faces --clear
     dtst filter -d ./project --from faces --min-size 256 --dry-run
@@ -213,6 +251,7 @@ dtst filter [OPTIONS] [CONFIG]
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--from` | text | Folder name to filter within the working directory (default: faces). | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
+| `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all filtered images back to the source folder. | `False` |
 | `--dry-run` | boolean | Show what would be filtered without moving anything. | `False` |

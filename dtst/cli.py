@@ -3,7 +3,7 @@ import logging
 import click
 from dotenv import load_dotenv
 
-from dtst.commands import cluster, extract_faces, fetch, filter, search
+from dtst.commands import analyze, cluster, extract_faces, fetch, filter, search
 
 
 @click.group()
@@ -17,6 +17,7 @@ def cli(verbose: bool) -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
+cli.add_command(analyze.cmd, "analyze")
 cli.add_command(cluster.cmd, "cluster")
 cli.add_command(extract_faces.cmd, "extract-faces")
 cli.add_command(fetch.cmd, "fetch")
