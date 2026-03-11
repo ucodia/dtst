@@ -14,8 +14,6 @@ from dtst.sidecar import read_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)
 
-FILTERED_DIR_NAME = "filtered"
-
 
 def _check_image_size(args: tuple) -> tuple[str, str, int, int, str | None]:
     """Check image dimensions. Returns (status, filename, width, height, error).
@@ -44,6 +42,7 @@ def _resolve_config(
     config: Path | None,
     working_dir: Path | None,
     from_dir: str | None,
+    to: str | None,
     min_size: int | None,
     min_blur: float | None,
 ) -> FilterConfig:
@@ -56,6 +55,8 @@ def _resolve_config(
         cfg.working_dir = working_dir
     if from_dir is not None:
         cfg.from_dir = from_dir
+    if to is not None:
+        cfg.to = to
     if min_size is not None:
         cfg.min_size = min_size
     if min_blur is not None:
@@ -67,7 +68,8 @@ def _resolve_config(
 @click.command("filter")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
-@click.option("--from", "from_dir", type=str, default=None, help="Folder name to filter within the working directory (default: faces).")
+@click.option("--from", "from_dir", type=str, default=None, help="Folder name to filter within the working directory.")
+@click.option("--to", type=str, default=None, help="Subfolder name for rejected images (default: filtered).", show_default="filtered")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; images smaller are filtered out.")
 @click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry.")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
@@ -77,6 +79,7 @@ def cmd(
     config: Path | None,
     working_dir: Path | None,
     from_dir: str | None,
+    to: str | None,
     min_size: int | None,
     min_blur: float | None,
     workers: int | None,
@@ -109,9 +112,13 @@ def cmd(
     if clear and has_criteria:
         raise click.ClickException("--clear cannot be combined with filter criteria")
 
-    cfg = _resolve_config(config, working_dir, from_dir, min_size, min_blur)
+    cfg = _resolve_config(config, working_dir, from_dir, to, min_size, min_blur)
+
+    if cfg.from_dir is None:
+        raise click.ClickException("--from is required (or set 'filter.from' in config)")
+
     source_dir = cfg.working_dir / cfg.from_dir
-    filtered_dir = source_dir / FILTERED_DIR_NAME
+    filtered_dir = source_dir / cfg.to
 
     if not source_dir.is_dir():
         raise click.ClickException(f"Source directory not found: {source_dir}")

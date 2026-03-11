@@ -54,6 +54,18 @@ def my_command(config, working_dir, workers, dry_run):
     # ...
 ```
 
+After adding or changing any command's options, arguments, or docstring, regenerate the CLI reference docs:
+
+```bash
+uv run scripts/gen_cli_docs.py
+```
+
+After adding or changing any command's options, arguments, or docstring, regenerate the CLI reference docs:
+
+```bash
+uv run scripts/gen_cli_docs.py
+```
+
 Commands can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 

@@ -24,7 +24,8 @@ JSON files containing the requested metadata (perceptual hash,
 blur score, or both). Sidecars are merged incrementally — running
 with --phash then --blur accumulates both.
 
-At least one analyzer flag (--phash, --blur) is required.
+At least one analyzer flag (--phash, --blur) is required unless
+using --clear.
 
 Examples:
 
@@ -32,6 +33,7 @@ Examples:
   dtst analyze config.yaml --phash
   dtst analyze --from raw,extra --blur --force
   dtst analyze --from raw --phash --dry-run -d ./my-dataset
+  dtst analyze --from raw --clear -d ./my-dataset
 
 **Usage:**
 
@@ -49,6 +51,7 @@ dtst analyze [OPTIONS] [CONFIG]
 | `--force` | boolean | Recompute all analyzers even if sidecar data already exists. | `False` |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--clear` | boolean | Remove all sidecar files from source folders. | `False` |
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
@@ -110,6 +113,44 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--workers`, `-w` | integer | Number of workers for image preloading (default: CPU count). | None |
 | `--no-cache` | boolean | Skip the embedding cache and recompute from scratch. | `False` |
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
+## dtst dedup { #dtst-dedup data-toc-label='dedup' }
+
+Deduplicate images by perceptual hash similarity.
+
+Groups images by phash hamming distance and keeps the best image
+from each duplicate group. The winner is chosen by resolution
+(width x height), then file size, then blur sharpness. Losers are
+moved to a duplicated/ subdirectory within the source folder.
+
+Requires phash sidecar data from ``dtst analyze --phash``. Blur
+scores (from ``dtst analyze --blur``) are used as a tiebreaker
+when available.
+
+Examples:
+  dtst dedup -d ./project --from faces
+  dtst dedup -d ./project --from faces --threshold 4
+  dtst dedup config.yaml --dry-run
+  dtst dedup -d ./project --from faces --clear
+
+**Usage:**
+
+```text
+dtst dedup [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--from` | text | Folder name to deduplicate within the working directory (default: faces). | None |
+| `--to` | text | Subfolder name for duplicate images (default: duplicated). | None |
+| `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |
+| `--dry-run` | boolean | Show what would be deduplicated without moving anything. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst extract-faces { #dtst-extract-faces data-toc-label='extract-faces' }
@@ -249,7 +290,8 @@ dtst filter [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--from` | text | Folder name to filter within the working directory (default: faces). | None |
+| `--from` | text | Folder name to filter within the working directory. | None |
+| `--to` | text | Subfolder name for rejected images (default: filtered). | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
 | `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |

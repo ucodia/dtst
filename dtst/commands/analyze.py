@@ -12,7 +12,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import AnalyzeConfig, load_analyze_config
 from dtst.images import find_images
-from dtst.sidecar import read_sidecar, write_sidecar
+from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,9 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
     type=int,
     help="Number of parallel workers (default: CPU count).",
 )
+@click.option("--clear", is_flag=True, help="Remove all sidecar files from source folders.")
 @click.option("--dry-run", is_flag=True, help="Preview what would be computed without writing sidecars.")
-def cmd(config, from_dirs, phash, blur, force, working_dir, workers, dry_run):
+def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_run):
     """Compute image metadata and write JSON sidecars.
 
     Analyzes images in the source folders and writes per-image sidecar
@@ -90,7 +91,8 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, dry_run):
     blur score, or both). Sidecars are merged incrementally — running
     with --phash then --blur accumulates both.
 
-    At least one analyzer flag (--phash, --blur) is required.
+    At least one analyzer flag (--phash, --blur) is required unless
+    using --clear.
 
     \b
     Examples:
@@ -99,6 +101,7 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, dry_run):
       dtst analyze config.yaml --phash
       dtst analyze --from raw,extra --blur --force
       dtst analyze --from raw --phash --dry-run -d ./my-dataset
+      dtst analyze --from raw --clear -d ./my-dataset
     """
     t0 = time.time()
 
@@ -115,13 +118,48 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, dry_run):
     if blur:
         cfg.blur = True
 
+    working = cfg.working_dir.resolve()
+
+    if clear:
+        all_images: list[Path] = []
+        for d in cfg.from_dirs:
+            src = working / d
+            if not src.is_dir():
+                logger.warning("Source directory does not exist, skipping: %s", src)
+                continue
+            all_images.extend(find_images(src))
+
+        if not all_images:
+            raise click.ClickException("No images found in source directories.")
+
+        sidecars = [sidecar_path(img) for img in all_images if sidecar_path(img).exists()]
+
+        if not sidecars:
+            click.echo("No sidecar files found. Nothing to clear.")
+            return
+
+        if dry_run:
+            click.echo(f"[dry-run] Would remove {len(sidecars):,} sidecar files")
+            return
+
+        removed = 0
+        for sc in sidecars:
+            try:
+                sc.unlink()
+                removed += 1
+            except OSError as e:
+                logger.error("Failed to remove %s: %s", sc.name, e)
+
+        elapsed = time.time() - t0
+        click.echo(f"Removed {removed:,} sidecar files ({elapsed:.1f}s)")
+        return
+
     if not cfg.phash and not cfg.blur:
         raise click.ClickException("At least one analyzer flag is required (--phash, --blur).")
 
     if workers is None:
         workers = cpu_count()
 
-    working = cfg.working_dir.resolve()
     analyzers = []
     if cfg.phash:
         analyzers.append("phash")

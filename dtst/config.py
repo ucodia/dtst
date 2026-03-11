@@ -287,7 +287,8 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
 @dataclass
 class FilterConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dir: str = "faces"
+    from_dir: str | None = None
+    to: str = "filtered"
     min_size: int | None = None
     min_blur: float | None = None
 
@@ -300,9 +301,15 @@ def load_filter_config(path: str | Path) -> FilterConfig:
     if not section or not isinstance(section, dict):
         return FilterConfig(working_dir=resolved_working_dir)
 
-    from_dir = section.get("from", "faces")
-    if not isinstance(from_dir, str) or not from_dir.strip():
-        raise click.ClickException("'filter.from' must be a non-empty string")
+    from_dir = section.get("from")
+    if from_dir is not None:
+        if not isinstance(from_dir, str) or not from_dir.strip():
+            raise click.ClickException("'filter.from' must be a non-empty string")
+        from_dir = from_dir.strip()
+
+    to = section.get("to", "filtered")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'filter.to' must be a non-empty string")
 
     min_size = section.get("min_size")
     if min_size is not None:
@@ -317,9 +324,46 @@ def load_filter_config(path: str | Path) -> FilterConfig:
 
     return FilterConfig(
         working_dir=resolved_working_dir,
-        from_dir=from_dir.strip(),
+        from_dir=from_dir,
+        to=to.strip(),
         min_size=min_size,
         min_blur=min_blur,
+    )
+
+
+@dataclass
+class DedupConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dir: str = "faces"
+    to: str = "duplicated"
+    threshold: int = 8
+
+
+def load_dedup_config(path: str | Path) -> DedupConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("dedup")
+    if not section or not isinstance(section, dict):
+        return DedupConfig(working_dir=resolved_working_dir)
+
+    from_dir = section.get("from", "faces")
+    if not isinstance(from_dir, str) or not from_dir.strip():
+        raise click.ClickException("'dedup.from' must be a non-empty string")
+
+    to = section.get("to", "duplicated")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'dedup.to' must be a non-empty string")
+
+    threshold = section.get("threshold", 8)
+    if not isinstance(threshold, int) or threshold < 0:
+        raise click.ClickException("'dedup.threshold' must be a non-negative integer")
+
+    return DedupConfig(
+        working_dir=resolved_working_dir,
+        from_dir=from_dir.strip(),
+        to=to.strip(),
+        threshold=threshold,
     )
 
 

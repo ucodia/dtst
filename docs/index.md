@@ -95,7 +95,25 @@ dtst extract-faces -d crowd --max-faces 1 --max-size 512
 dtst extract-faces -d crowd --engine dlib
 ```
 
-## Step 4: Filter
+## Step 4: Analyze
+
+The `analyze` command computes per-image metadata and stores it in JSON sidecar files alongside each image. This metadata is used by later steps such as `filter` (blur scores) and `dedup` (perceptual hashes).
+
+To compute both perceptual hashes and blur scores for all face crops:
+
+```bash
+dtst analyze -d crowd --from faces --phash --blur
+```
+
+After this runs, each image in `crowd/faces/` has a `.json` sidecar file containing its phash and blur score. Sidecars are merged incrementally, so you can run `--phash` and `--blur` separately and both values accumulate.
+
+Images that already have the requested metadata are skipped automatically. To force recomputation:
+
+```bash
+dtst analyze -d crowd --from faces --phash --blur --force
+```
+
+## Step 5: Filter
 
 The `filter` command lets you remove images that don't meet certain criteria. Rather than deleting them, it moves rejects to a `filtered/` subfolder within the source folder. This keeps everything non-destructive and easy to undo.
 
@@ -103,6 +121,18 @@ For example, to remove face crops smaller than 1024 pixels:
 
 ```bash
 dtst filter -d crowd --from faces --min-size 1024
+```
+
+You can also filter by blur score to remove blurry images. This requires blur data from the `analyze` step:
+
+```bash
+dtst filter -d crowd --from faces --min-blur 50
+```
+
+Both criteria can be combined in a single run:
+
+```bash
+dtst filter -d crowd --from faces --min-size 1024 --min-blur 50
 ```
 
 After this runs, images below the threshold are in `crowd/faces/filtered/`. You can review them in the file explorer and move any back if the filter was too aggressive.
@@ -119,7 +149,35 @@ To undo filtering and restore all images back to the source folder:
 dtst filter -d crowd --from faces --clear
 ```
 
-## Step 5: Cluster
+## Step 6: Dedup
+
+The `dedup` command finds near-duplicate images using perceptual hash similarity and keeps only the best copy from each group. This requires phash data from the `analyze` step.
+
+```bash
+dtst dedup -d crowd --from faces
+```
+
+For each group of duplicates, the winner is chosen by resolution first, then file size, then blur sharpness (if blur scores are available from `analyze`). Losers are moved to a `duplicated/` subfolder within the source folder.
+
+To use a stricter threshold (lower value means images must be more similar to be considered duplicates):
+
+```bash
+dtst dedup -d crowd --from faces --threshold 4
+```
+
+To preview what would be deduplicated without moving anything:
+
+```bash
+dtst dedup -d crowd --from faces --dry-run
+```
+
+To undo deduplication and restore all images:
+
+```bash
+dtst dedup -d crowd --from faces --clear
+```
+
+## Step 7: Cluster
 
 The `cluster` command groups similar images together for easier curation. It computes embeddings for each image, runs unsupervised clustering, and writes each cluster to a numbered subdirectory sorted by size (000 is the largest).
 
@@ -145,7 +203,7 @@ dtst cluster -d crowd --from raw --model clip
 
 ## The resulting layout
 
-After running all five steps your working directory looks like this:
+After running all seven steps your working directory looks like this:
 
 ```
 crowd/
@@ -153,7 +211,9 @@ crowd/
   raw/                <- images downloaded by fetch
   extra/              <- images you added manually
   faces/              <- aligned face crops from extract-faces
+    *.json            <- sidecar metadata from analyze (phash, blur)
     filtered/         <- images removed by filter
+    duplicated/       <- images removed by dedup
   clusters/           <- grouped by similarity from cluster
     000/              <- largest cluster
     001/              <- second largest
@@ -201,9 +261,19 @@ extract_faces:
   max_faces: 1
   max_size: 512
 
+analyze:
+  from: faces
+  phash: true
+  blur: true
+
 filter:
   from: faces
   min_size: 1024
+  min_blur: 50
+
+dedup:
+  from: faces
+  threshold: 8
 
 cluster:
   from: faces
@@ -218,7 +288,9 @@ Then run each stage by passing the config file:
 dtst search crowd.yaml
 dtst fetch crowd.yaml
 dtst extract-faces crowd.yaml
+dtst analyze crowd.yaml
 dtst filter crowd.yaml
+dtst dedup crowd.yaml
 dtst cluster crowd.yaml
 ```
 
