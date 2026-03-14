@@ -473,3 +473,56 @@ def load_augment_config(path: str | Path) -> AugmentConfig:
         flip_xy=flip_xy,
         no_copy=no_copy,
     )
+
+
+@dataclass
+class FrameConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+def load_frame_config(path: str | Path) -> FrameConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("frame")
+    if not section or not isinstance(section, dict):
+        return FrameConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'frame.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'frame.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'frame.to' must be a non-empty string")
+
+    width = section.get("width")
+    if width is not None:
+        if not isinstance(width, int) or width < 1:
+            raise click.ClickException("'frame.width' must be a positive integer")
+
+    height = section.get("height")
+    if height is not None:
+        if not isinstance(height, int) or height < 1:
+            raise click.ClickException("'frame.height' must be a positive integer")
+
+    return FrameConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+        width=width,
+        height=height,
+    )

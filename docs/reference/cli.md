@@ -302,6 +302,48 @@ dtst fetch [OPTIONS] [CONFIG]
 | `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst frame { #dtst-frame data-toc-label='frame' }
+
+Resize images to a target width and/or height.
+
+Reads images from one or more source folders and writes resized
+copies to a destination folder. Uses Lanczos resampling for
+high-quality downscaling.
+
+When both --width and --height are given, images are resized to
+exactly those dimensions (aspect ratio is not preserved). When
+only one dimension is given, the other is computed proportionally
+to preserve the original aspect ratio.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+
+    dtst frame -d ./project --from faces --to resized --width 512 --height 512
+    dtst frame -d ./project --from faces --to resized --width 512
+    dtst frame -d ./project --from raw --to small --height 256
+    dtst frame config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst frame [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--width`, `-W` | integer | Target width in pixels. If --height is omitted, aspect ratio is preserved. | None |
+| `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst filter { #dtst-filter data-toc-label='filter' }
 
 Filter images by moving rejects to a subfolder.
