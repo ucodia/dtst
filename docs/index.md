@@ -49,10 +49,10 @@ dtst search -d crowd \
 
 ## Step 2: Fetch
 
-Once you have a `results.jsonl`, the `fetch` command downloads each image into a folder inside your working directory. By default that folder is `raw/`.
+Once you have a `results.jsonl`, the `fetch` command downloads each image into a folder inside your working directory.
 
 ```bash
-dtst fetch -d crowd
+dtst fetch -d crowd --to raw
 ```
 
 After this runs, `crowd/raw/` contains all the successfully downloaded images. Files are named by a hash of their source URL so re-running fetch is safe; already-downloaded images are skipped automatically.
@@ -60,7 +60,7 @@ After this runs, `crowd/raw/` contains all the successfully downloaded images. F
 You can also filter downloads by minimum image size or license:
 
 ```bash
-dtst fetch -d crowd --min-size 1024 --license cc
+dtst fetch -d crowd --to raw --min-size 1024 --license cc
 ```
 
 ### Adding images manually
@@ -69,16 +69,16 @@ Because the working directory is the source of truth, you can supplement the fet
 
 ## Step 3: Extract faces
 
-The `extract-faces` command reads images from one or more source folders and writes aligned face crops to an output folder. It defaults to reading from `raw/` and writing to `faces/`.
+The `extract-faces` command reads images from one or more source folders and writes aligned face crops to an output folder.
 
 ```bash
-dtst extract-faces -d crowd
+dtst extract-faces -d crowd --from raw --to faces
 ```
 
 To include your manually added images alongside the fetched ones, pass both folders with `--from`:
 
 ```bash
-dtst extract-faces -d crowd --from raw,extra
+dtst extract-faces -d crowd --from raw,extra --to faces
 ```
 
 After this runs, `crowd/faces/` contains one cropped and aligned face image per detection. Images with no detected faces are skipped.
@@ -89,10 +89,10 @@ A few options that are useful in practice:
 
 ```bash
 # Limit to one face per image, use a larger output size
-dtst extract-faces -d crowd --max-faces 1 --max-size 512
+dtst extract-faces -d crowd --from raw --to faces --max-faces 1 --max-size 512
 
 # Use dlib instead of MediaPipe for detection
-dtst extract-faces -d crowd --engine dlib
+dtst extract-faces -d crowd --from raw --to faces --engine dlib
 ```
 
 ## Step 4: Analyze
@@ -115,24 +115,24 @@ dtst analyze -d crowd --from faces --phash --blur --force
 
 ## Step 5: Filter
 
-The `filter` command lets you remove images that don't meet certain criteria. Rather than deleting them, it moves rejects to a `filtered/` subfolder within the source folder. This keeps everything non-destructive and easy to undo.
+The `filter` command lets you remove images that don't meet certain criteria. Rather than deleting them, it moves rejects to a subfolder within the source folder. This keeps everything non-destructive and easy to undo.
 
 For example, to remove face crops smaller than 1024 pixels:
 
 ```bash
-dtst filter -d crowd --from faces --min-size 1024
+dtst filter -d crowd --from faces --to filtered --min-size 1024
 ```
 
 You can also filter by blur score to remove blurry images. This requires blur data from the `analyze` step:
 
 ```bash
-dtst filter -d crowd --from faces --min-blur 50
+dtst filter -d crowd --from faces --to filtered --min-blur 50
 ```
 
 Both criteria can be combined in a single run:
 
 ```bash
-dtst filter -d crowd --from faces --min-size 1024 --min-blur 50
+dtst filter -d crowd --from faces --to filtered --min-size 1024 --min-blur 50
 ```
 
 After this runs, images below the threshold are in `crowd/faces/filtered/`. You can review them in the file explorer and move any back if the filter was too aggressive.
@@ -140,13 +140,13 @@ After this runs, images below the threshold are in `crowd/faces/filtered/`. You 
 To preview what would be filtered without moving anything:
 
 ```bash
-dtst filter -d crowd --from faces --min-size 1024 --dry-run
+dtst filter -d crowd --from faces --to filtered --min-size 1024 --dry-run
 ```
 
 To undo filtering and restore all images back to the source folder:
 
 ```bash
-dtst filter -d crowd --from faces --clear
+dtst filter -d crowd --from faces --to filtered --clear
 ```
 
 ## Step 6: Dedup
@@ -154,27 +154,27 @@ dtst filter -d crowd --from faces --clear
 The `dedup` command finds near-duplicate images using perceptual hash similarity and keeps only the best copy from each group. This requires phash data from the `analyze` step.
 
 ```bash
-dtst dedup -d crowd --from faces
+dtst dedup -d crowd --from faces --to duplicated
 ```
 
-For each group of duplicates, the winner is chosen by resolution first, then file size, then blur sharpness (if blur scores are available from `analyze`). Losers are moved to a `duplicated/` subfolder within the source folder.
+For each group of duplicates, the winner is chosen by resolution first, then file size, then blur sharpness (if blur scores are available from `analyze`). Losers are moved to the `--to` subfolder within the source folder.
 
 To use a stricter threshold (lower value means images must be more similar to be considered duplicates):
 
 ```bash
-dtst dedup -d crowd --from faces --threshold 4
+dtst dedup -d crowd --from faces --to duplicated --threshold 4
 ```
 
 To preview what would be deduplicated without moving anything:
 
 ```bash
-dtst dedup -d crowd --from faces --dry-run
+dtst dedup -d crowd --from faces --to duplicated --dry-run
 ```
 
 To undo deduplication and restore all images:
 
 ```bash
-dtst dedup -d crowd --from faces --clear
+dtst dedup -d crowd --from faces --to duplicated --clear
 ```
 
 ## Step 7: Cluster
@@ -184,7 +184,7 @@ The `cluster` command groups similar images together for easier curation. It com
 For face datasets, the default `arcface` model clusters by identity, grouping photos of the same person together:
 
 ```bash
-dtst cluster -d crowd --from faces
+dtst cluster -d crowd --from faces --to clusters
 ```
 
 After this runs, `crowd/clusters/` contains folders like `000/`, `001/`, etc., each with images of a distinct person. Images that don't fit any cluster are placed in `noise/`. You can browse the folders, keep the ones you want, and delete the rest.
@@ -192,13 +192,13 @@ After this runs, `crowd/clusters/` contains folders like `000/`, `001/`, etc., e
 To limit the output to the top 3 clusters:
 
 ```bash
-dtst cluster -d crowd --from faces --top 3
+dtst cluster -d crowd --from faces --to clusters --top 3
 ```
 
 For general image datasets (not faces), use the `clip` model which clusters by visual similarity:
 
 ```bash
-dtst cluster -d crowd --from raw --model clip
+dtst cluster -d crowd --from raw --to clusters --model clip
 ```
 
 ## The resulting layout
@@ -268,11 +268,13 @@ analyze:
 
 filter:
   from: faces
+  to: filtered
   min_size: 1024
   min_blur: 50
 
 dedup:
   from: faces
+  to: duplicated
   threshold: 8
 
 cluster:

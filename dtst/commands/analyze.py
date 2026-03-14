@@ -57,7 +57,7 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
     "from_dirs",
     type=str,
     default=None,
-    help="Comma-separated source folder names (default: raw).",
+    help="Comma-separated source folder names.",
 )
 @click.option("--phash", is_flag=True, default=False, help="Compute perceptual hash for each image.")
 @click.option("--blur", is_flag=True, default=False, help="Compute blur score (Laplacian variance) for each image.")
@@ -117,6 +117,9 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         cfg.phash = True
     if blur:
         cfg.blur = True
+
+    if cfg.from_dirs is None:
+        raise click.ClickException("--from is required (or set 'analyze.from' in config)")
 
     working = cfg.working_dir.resolve()
 
