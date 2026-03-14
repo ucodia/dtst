@@ -223,6 +223,22 @@ If you only want the transformed images without copying the originals:
 dtst augment -d crowd --from faces --to augmented --flipX --no-copy
 ```
 
+## Resizing images
+
+The `frame` command resizes images to a target width and/or height using high-quality Lanczos resampling. When only one dimension is given, the other is computed proportionally to preserve the aspect ratio.
+
+To resize all face crops to 512x512:
+
+```bash
+dtst frame -d crowd --from faces --to resized --width 512 --height 512
+```
+
+To scale images to a width of 512 while preserving aspect ratio:
+
+```bash
+dtst frame -d crowd --from faces --to resized --width 512
+```
+
 ## The resulting layout
 
 After running all steps your working directory looks like this:
@@ -237,6 +253,7 @@ crowd/
     filtered/         <- images removed by filter
     duplicated/       <- images removed by dedup
   augmented/          <- transformed copies from augment
+  resized/            <- resized images from frame
   clusters/           <- grouped by similarity from cluster
     000/              <- largest cluster
     001/              <- second largest
@@ -304,6 +321,12 @@ augment:
   from: faces
   to: augmented
   flip_x: true
+
+frame:
+  from: faces
+  to: resized
+  width: 512
+  height: 512
 
 cluster:
   from: faces
