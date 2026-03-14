@@ -117,14 +117,19 @@ def _resolve_config(
     if debug:
         cfg.debug = True
 
+    if cfg.from_dirs is None:
+        raise click.ClickException("--from is required (or set 'extract_faces.from' in config)")
+    if cfg.to is None:
+        raise click.ClickException("--to is required (or set 'extract_faces.to' in config)")
+
     return cfg
 
 
 @click.command("extract-faces")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory (default: raw).")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory (default: faces).")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--max-size", "-M", type=int, default=None, help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).")
 @click.option("--engine", "-e", type=click.Choice(["mediapipe", "dlib"], case_sensitive=False), default=None, help="Face detection engine (default: mediapipe).")
 @click.option("--max-faces", "-m", type=int, default=None, help="Max faces to extract per image (default: 1).")
@@ -155,19 +160,19 @@ def cmd(
     alignment technique.
 
     Reads images from one or more source folders within the working
-    directory (default: raw) and writes face crops to a destination
-    folder (default: faces). Multiple source folders can be specified
-    as a comma-separated list with --from.
+    directory and writes face crops to a destination folder. Multiple
+    source folders can be specified as a comma-separated list with
+    --from.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
 
     \b
     Examples:
-    
+
         dtst extract-faces config.yaml
         dtst extract-faces config.yaml --engine dlib --max-size 512
-        dtst extract-faces -d ./crowd
+        dtst extract-faces -d ./crowd --from raw --to faces
         dtst extract-faces -d ./crowd --from raw,extra --to faces
         dtst extract-faces config.yaml --max-faces 3 --no-padding
     """

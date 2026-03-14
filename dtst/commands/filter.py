@@ -69,7 +69,7 @@ def _resolve_config(
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
 @click.option("--from", "from_dir", type=str, default=None, help="Folder name to filter within the working directory.")
-@click.option("--to", type=str, default=None, help="Subfolder name for rejected images (default: filtered).", show_default="filtered")
+@click.option("--to", type=str, default=None, help="Subfolder name for rejected images.")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; images smaller are filtered out.")
 @click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry.")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
@@ -101,12 +101,12 @@ def cmd(
 
     \b
     Examples:
-        dtst filter -d ./project --from faces --min-size 256
-        dtst filter -d ./project --from faces --min-blur 50
-        dtst filter -d ./project --from faces --min-size 256 --min-blur 50
+        dtst filter -d ./project --from faces --to filtered --min-size 256
+        dtst filter -d ./project --from faces --to filtered --min-blur 50
+        dtst filter -d ./project --from faces --to filtered --min-size 256 --min-blur 50
         dtst filter config.yaml --min-size 128
-        dtst filter -d ./project --from faces --clear
-        dtst filter -d ./project --from faces --min-size 256 --dry-run
+        dtst filter -d ./project --from faces --to filtered --clear
+        dtst filter -d ./project --from faces --to filtered --min-size 256 --dry-run
     """
     has_criteria = min_size is not None or min_blur is not None
     if clear and has_criteria:
@@ -116,6 +116,8 @@ def cmd(
 
     if cfg.from_dir is None:
         raise click.ClickException("--from is required (or set 'filter.from' in config)")
+    if cfg.to is None:
+        raise click.ClickException("--to is required (or set 'filter.to' in config)")
 
     source_dir = cfg.working_dir / cfg.from_dir
     filtered_dir = source_dir / cfg.to

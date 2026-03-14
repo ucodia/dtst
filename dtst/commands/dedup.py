@@ -81,6 +81,11 @@ def _resolve_config(
     if threshold is not None:
         cfg.threshold = threshold
 
+    if cfg.from_dir is None:
+        raise click.ClickException("--from is required (or set 'dedup.from' in config)")
+    if cfg.to is None:
+        raise click.ClickException("--to is required (or set 'dedup.to' in config)")
+
     return cfg
 
 
@@ -103,14 +108,13 @@ def _resolve_config(
     "from_dir",
     type=str,
     default=None,
-    help="Folder name to deduplicate within the working directory (default: faces).",
+    help="Folder name to deduplicate within the working directory.",
 )
 @click.option(
     "--to",
     type=str,
     default=None,
-    help="Subfolder name for duplicate images (default: duplicated).",
-    show_default="duplicated",
+    help="Subfolder name for duplicate images.",
 )
 @click.option(
     "--threshold",
@@ -160,10 +164,10 @@ def cmd(
 
     \b
     Examples:
-      dtst dedup -d ./project --from faces
-      dtst dedup -d ./project --from faces --threshold 4
+      dtst dedup -d ./project --from faces --to duplicated
+      dtst dedup -d ./project --from faces --to duplicated --threshold 4
       dtst dedup config.yaml --dry-run
-      dtst dedup -d ./project --from faces --clear
+      dtst dedup -d ./project --from faces --to duplicated --clear
     """
     t0 = time.time()
 

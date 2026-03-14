@@ -56,14 +56,19 @@ def _resolve_config(
     if no_cache:
         cfg.no_cache = True
 
+    if cfg.from_dirs is None:
+        raise click.ClickException("--from is required (or set 'cluster.from' in config)")
+    if cfg.to is None:
+        raise click.ClickException("--to is required (or set 'cluster.to' in config)")
+
     return cfg
 
 
 @click.command("cluster")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory (default: faces).")
-@click.option("--to", "-t", type=str, default=None, help="Destination folder name within the working directory (default: clusters).")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--to", "-t", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--model", "-m", type=click.Choice(sorted(VALID_MODELS), case_sensitive=False), default=None, help="Embedding model for similarity (default: arcface).")
 @click.option("--top", "-n", type=int, default=None, help="Maximum number of clusters to output; omit for all clusters.")
 @click.option("--min-cluster-size", type=int, default=None, help="Minimum images to form a cluster (default: 5).")

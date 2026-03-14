@@ -93,7 +93,7 @@ def load_search_config(path: str | Path) -> SearchConfig:
 @dataclass
 class FetchConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    to: str = "raw"
+    to: str | None = None
     min_size: int = 512
     license: str | None = None
 
@@ -110,8 +110,8 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     if not isinstance(min_size, int) or min_size < 0:
         raise click.ClickException("'fetch.min_size' must be a non-negative integer")
 
-    to = section.get("to", "raw")
-    if not isinstance(to, str) or not to.strip():
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'fetch.to' must be a non-empty string")
 
     license_filter = section.get("license")
@@ -122,7 +122,7 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
 
     return FetchConfig(
         working_dir=resolved_working_dir,
-        to=to.strip(),
+        to=to.strip() if to else None,
         min_size=min_size,
         license=license_filter,
     )
@@ -131,8 +131,8 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
 @dataclass
 class ExtractFacesConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dirs: list[str] = field(default_factory=lambda: ["raw"])
-    to: str = "faces"
+    from_dirs: list[str] | None = None
+    to: str | None = None
     max_size: int | None = None
     engine: str = "mediapipe"
     max_faces: int = 3
@@ -191,16 +191,16 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
         if not from_dirs:
             raise click.ClickException("'extract_faces.from' must contain at least one directory name")
     else:
-        from_dirs = ["raw"]
+        from_dirs = None
 
-    to = section.get("to", "faces")
-    if not isinstance(to, str) or not to.strip():
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'extract_faces.to' must be a non-empty string")
 
     return ExtractFacesConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs,
-        to=to.strip(),
+        to=to.strip() if to else None,
         max_size=max_size,
         engine=engine,
         max_faces=max_faces,
@@ -214,8 +214,8 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
 @dataclass
 class ClusterConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dirs: list[str] = field(default_factory=lambda: ["faces"])
-    to: str = "clusters"
+    from_dirs: list[str] | None = None
+    to: str | None = None
     model: str = "arcface"
     top: int | None = None
     min_cluster_size: int = 5
@@ -266,16 +266,16 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
         if not from_dirs:
             raise click.ClickException("'cluster.from' must contain at least one directory name")
     else:
-        from_dirs = ["faces"]
+        from_dirs = None
 
-    to = section.get("to", "clusters")
-    if not isinstance(to, str) or not to.strip():
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'cluster.to' must be a non-empty string")
 
     return ClusterConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs,
-        to=to.strip(),
+        to=to.strip() if to else None,
         model=model,
         top=top,
         min_cluster_size=min_cluster_size,
@@ -288,7 +288,7 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
 class FilterConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dir: str | None = None
-    to: str = "filtered"
+    to: str | None = None
     min_size: int | None = None
     min_blur: float | None = None
 
@@ -307,8 +307,8 @@ def load_filter_config(path: str | Path) -> FilterConfig:
             raise click.ClickException("'filter.from' must be a non-empty string")
         from_dir = from_dir.strip()
 
-    to = section.get("to", "filtered")
-    if not isinstance(to, str) or not to.strip():
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'filter.to' must be a non-empty string")
 
     min_size = section.get("min_size")
@@ -325,7 +325,7 @@ def load_filter_config(path: str | Path) -> FilterConfig:
     return FilterConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir,
-        to=to.strip(),
+        to=to.strip() if to else None,
         min_size=min_size,
         min_blur=min_blur,
     )
@@ -334,8 +334,8 @@ def load_filter_config(path: str | Path) -> FilterConfig:
 @dataclass
 class DedupConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dir: str = "faces"
-    to: str = "duplicated"
+    from_dir: str | None = None
+    to: str | None = None
     threshold: int = 8
 
 
@@ -347,12 +347,12 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
     if not section or not isinstance(section, dict):
         return DedupConfig(working_dir=resolved_working_dir)
 
-    from_dir = section.get("from", "faces")
-    if not isinstance(from_dir, str) or not from_dir.strip():
+    from_dir = section.get("from")
+    if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
         raise click.ClickException("'dedup.from' must be a non-empty string")
 
-    to = section.get("to", "duplicated")
-    if not isinstance(to, str) or not to.strip():
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'dedup.to' must be a non-empty string")
 
     threshold = section.get("threshold", 8)
@@ -361,8 +361,8 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
 
     return DedupConfig(
         working_dir=resolved_working_dir,
-        from_dir=from_dir.strip(),
-        to=to.strip(),
+        from_dir=from_dir.strip() if from_dir else None,
+        to=to.strip() if to else None,
         threshold=threshold,
     )
 
@@ -370,7 +370,7 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
 @dataclass
 class AnalyzeConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dirs: list[str] = field(default_factory=lambda: ["raw"])
+    from_dirs: list[str] | None = None
     phash: bool = False
     blur: bool = False
 
@@ -394,7 +394,7 @@ def load_analyze_config(path: str | Path) -> AnalyzeConfig:
         if not from_dirs:
             raise click.ClickException("'analyze.from' must contain at least one directory name")
     else:
-        from_dirs = ["raw"]
+        from_dirs = None
 
     phash = section.get("phash", False)
     if not isinstance(phash, bool):
@@ -406,7 +406,7 @@ def load_analyze_config(path: str | Path) -> AnalyzeConfig:
 
     return AnalyzeConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
+        from_dirs=from_dirs if from_dirs else None,
         phash=phash,
         blur=blur,
     )

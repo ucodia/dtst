@@ -207,13 +207,16 @@ def _resolve_config(
     if license_filter is not None:
         cfg.license = license_filter
 
+    if cfg.to is None:
+        raise click.ClickException("--to is required (or set 'fetch.to' in config)")
+
     return cfg
 
 
 @click.command("fetch")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is read from and images are written to (default: .).")
-@click.option("--to", type=str, default=None, show_default=True, help="Destination folder name within the working directory (default: raw).")
+@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count).")
 @click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
@@ -260,11 +263,10 @@ def cmd(
     Examples:
 
         dtst fetch config.yaml
-        dtst fetch -d ./chanterelle
         dtst fetch -d ./chanterelle --to raw
         dtst fetch config.yaml --workers 16 --timeout 60
         dtst fetch config.yaml --force
-        dtst fetch -d ./chanterelle --no-wait --license cc
+        dtst fetch -d ./chanterelle --to raw --no-wait --license cc
     """
     if no_wait and max_wait is not None:
         raise click.ClickException("--no-wait and --max-wait are mutually exclusive")

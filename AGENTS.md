@@ -25,7 +25,7 @@ There are three kinds of commands:
 
 `search` is a special case: it has no `--from` or `--to` and simply deposits `results.jsonl` in the working directory for `fetch` to consume.
 
-The folder names in `--from` and `--to` are always relative to `--working-dir`. Defaults encode the conventional happy-path pipeline:
+The folder names in `--from` and `--to` are always relative to `--working-dir` and are mandatory (either via CLI flags or a config file). The conventional happy-path pipeline uses these folder names:
 
 ```
 working_dir/

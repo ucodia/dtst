@@ -45,7 +45,7 @@ dtst analyze [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folder names (default: raw). | None |
+| `--from` | text | Comma-separated source folder names. | None |
 | `--phash` | boolean | Compute perceptual hash for each image. | `False` |
 | `--blur` | boolean | Compute blur score (Laplacian variance) for each image. | `False` |
 | `--force` | boolean | Recompute all analyzers even if sidecar data already exists. | `False` |
@@ -103,8 +103,8 @@ dtst cluster [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory (default: faces). | None |
-| `--to`, `-t` | text | Destination folder name within the working directory (default: clusters). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to`, `-t` | text | Destination folder name within the working directory. | None |
 | `--model`, `-m` | choice (`arcface` &#x7C; `clip`) | Embedding model for similarity (default: arcface). | None |
 | `--top`, `-n` | integer | Maximum number of clusters to output; omit for all clusters. | None |
 | `--min-cluster-size` | integer | Minimum images to form a cluster (default: 5). | None |
@@ -129,10 +129,10 @@ scores (from ``dtst analyze --blur``) are used as a tiebreaker
 when available.
 
 Examples:
-  dtst dedup -d ./project --from faces
-  dtst dedup -d ./project --from faces --threshold 4
+  dtst dedup -d ./project --from faces --to duplicated
+  dtst dedup -d ./project --from faces --to duplicated --threshold 4
   dtst dedup config.yaml --dry-run
-  dtst dedup -d ./project --from faces --clear
+  dtst dedup -d ./project --from faces --to duplicated --clear
 
 **Usage:**
 
@@ -145,8 +145,8 @@ dtst dedup [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--from` | text | Folder name to deduplicate within the working directory (default: faces). | None |
-| `--to` | text | Subfolder name for duplicate images (default: duplicated). | None |
+| `--from` | text | Folder name to deduplicate within the working directory. | None |
+| `--to` | text | Subfolder name for duplicate images. | None |
 | `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |
@@ -163,9 +163,9 @@ The alignment normalises eye and mouth positions using the FFHQ
 alignment technique.
 
 Reads images from one or more source folders within the working
-directory (default: raw) and writes face crops to a destination
-folder (default: faces). Multiple source folders can be specified
-as a comma-separated list with --from.
+directory and writes face crops to a destination folder. Multiple
+source folders can be specified as a comma-separated list with
+--from.
 
 Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
@@ -174,7 +174,7 @@ Examples:
 
     dtst extract-faces config.yaml
     dtst extract-faces config.yaml --engine dlib --max-size 512
-    dtst extract-faces -d ./crowd
+    dtst extract-faces -d ./crowd --from raw --to faces
     dtst extract-faces -d ./crowd --from raw,extra --to faces
     dtst extract-faces config.yaml --max-faces 3 --no-padding
 
@@ -189,8 +189,8 @@ dtst extract-faces [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory (default: raw). | None |
-| `--to` | text | Destination folder name within the working directory (default: faces). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to` | text | Destination folder name within the working directory. | None |
 | `--max-size`, `-M` | integer | Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit). | None |
 | `--engine`, `-e` | choice (`mediapipe` &#x7C; `dlib`) | Face detection engine (default: mediapipe). | None |
 | `--max-faces`, `-m` | integer | Max faces to extract per image (default: 1). | None |
@@ -229,11 +229,10 @@ are mutually exclusive.
 Examples:
 
     dtst fetch config.yaml
-    dtst fetch -d ./chanterelle
     dtst fetch -d ./chanterelle --to raw
     dtst fetch config.yaml --workers 16 --timeout 60
     dtst fetch config.yaml --force
-    dtst fetch -d ./chanterelle --no-wait --license cc
+    dtst fetch -d ./chanterelle --to raw --no-wait --license cc
 
 **Usage:**
 
@@ -246,7 +245,7 @@ dtst fetch [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory where results.jsonl is read from and images are written to (default: .). | None |
-| `--to` | text | Destination folder name within the working directory (default: raw). | None |
+| `--to` | text | Destination folder name within the working directory. | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels (default: 512). | None |
 | `--workers`, `-w` | integer | Number of parallel download threads (default: CPU count). | None |
 | `--timeout`, `-t` | integer | Per-request timeout in seconds. | `30` |
@@ -258,11 +257,11 @@ dtst fetch [OPTIONS] [CONFIG]
 
 ## dtst filter { #dtst-filter data-toc-label='filter' }
 
-Filter images by moving rejects to a filtered/ subfolder.
+Filter images by moving rejects to a subfolder.
 
 Evaluates images in a source folder against filter criteria and
-moves those that fail into a filtered/ subdirectory within the
-source folder. Filtered images can be restored with --clear.
+moves those that fail into a subdirectory within the source
+folder. Filtered images can be restored with --clear.
 
 This is a non-destructive operation: no images are deleted, only
 moved. The file explorer serves as the UI for reviewing what was
@@ -272,12 +271,12 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
-    dtst filter -d ./project --from faces --min-size 256
-    dtst filter -d ./project --from faces --min-blur 50
-    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
+    dtst filter -d ./project --from faces --to filtered --min-size 256
+    dtst filter -d ./project --from faces --to filtered --min-blur 50
+    dtst filter -d ./project --from faces --to filtered --min-size 256 --min-blur 50
     dtst filter config.yaml --min-size 128
-    dtst filter -d ./project --from faces --clear
-    dtst filter -d ./project --from faces --min-size 256 --dry-run
+    dtst filter -d ./project --from faces --to filtered --clear
+    dtst filter -d ./project --from faces --to filtered --min-size 256 --dry-run
 
 **Usage:**
 
@@ -291,7 +290,7 @@ dtst filter [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--from` | text | Folder name to filter within the working directory. | None |
-| `--to` | text | Subfolder name for rejected images (default: filtered). | None |
+| `--to` | text | Subfolder name for rejected images. | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
 | `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
