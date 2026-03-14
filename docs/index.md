@@ -201,9 +201,31 @@ For general image datasets (not faces), use the `clip` model which clusters by v
 dtst cluster -d crowd --from raw --to clusters --model clip
 ```
 
+## Augmenting a dataset
+
+The `augment` command increases dataset size by applying image transformations. It reads from one or more source folders and writes the transformed images (plus optionally the originals) to a destination folder.
+
+To double your face dataset with horizontal flips:
+
+```bash
+dtst augment -d crowd --from faces --to augmented --flipX
+```
+
+You can combine multiple transforms in a single run. This produces the original plus three variants of each image (4x the dataset):
+
+```bash
+dtst augment -d crowd --from faces --to augmented --flipX --flipY --flipXY
+```
+
+If you only want the transformed images without copying the originals:
+
+```bash
+dtst augment -d crowd --from faces --to augmented --flipX --no-copy
+```
+
 ## The resulting layout
 
-After running all seven steps your working directory looks like this:
+After running all steps your working directory looks like this:
 
 ```
 crowd/
@@ -214,6 +236,7 @@ crowd/
     *.json            <- sidecar metadata from analyze (phash, blur)
     filtered/         <- images removed by filter
     duplicated/       <- images removed by dedup
+  augmented/          <- transformed copies from augment
   clusters/           <- grouped by similarity from cluster
     000/              <- largest cluster
     001/              <- second largest
@@ -276,6 +299,11 @@ dedup:
   from: faces
   to: duplicated
   threshold: 8
+
+augment:
+  from: faces
+  to: augmented
+  flip_x: true
 
 cluster:
   from: faces
