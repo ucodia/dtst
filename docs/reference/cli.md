@@ -55,6 +55,53 @@ dtst analyze [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst augment { #dtst-augment data-toc-label='augment' }
+
+Augment a dataset by applying image transformations.
+
+Reads images from one or more source folders and writes transformed
+copies to a destination folder. By default the original images are
+also copied to the output; use --no-copy to write only the
+transformed versions.
+
+At least one transform flag (--flipX, --flipY, --flipXY) is
+required. Multiple flags can be combined in a single run to
+produce several variants of each image.
+
+Transformed files are named with a suffix indicating the transform:
+photo.jpg becomes photo_flipX.jpg, photo_flipY.jpg, photo_flipXY.jpg.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+
+    dtst augment -d ./project --from faces --to augmented --flipX
+    dtst augment -d ./project --from faces --to augmented --flipX --flipY --flipXY
+    dtst augment -d ./project --from faces --to augmented --flipX --no-copy
+    dtst augment config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst augment [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--flipX` | boolean | Apply horizontal flip. | `False` |
+| `--flipY` | boolean | Apply vertical flip. | `False` |
+| `--flipXY` | boolean | Apply both horizontal and vertical flip (180-degree rotation). | `False` |
+| `--no-copy` | boolean | Do not copy original images to the output folder. | `False` |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst cluster { #dtst-cluster data-toc-label='cluster' }
 
 Cluster images by visual similarity.

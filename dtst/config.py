@@ -410,3 +410,66 @@ def load_analyze_config(path: str | Path) -> AnalyzeConfig:
         phash=phash,
         blur=blur,
     )
+
+
+@dataclass
+class AugmentConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    flip_x: bool = False
+    flip_y: bool = False
+    flip_xy: bool = False
+    no_copy: bool = False
+
+
+def load_augment_config(path: str | Path) -> AugmentConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("augment")
+    if not section or not isinstance(section, dict):
+        return AugmentConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'augment.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'augment.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'augment.to' must be a non-empty string")
+
+    flip_x = section.get("flip_x", False)
+    if not isinstance(flip_x, bool):
+        raise click.ClickException("'augment.flip_x' must be a boolean")
+
+    flip_y = section.get("flip_y", False)
+    if not isinstance(flip_y, bool):
+        raise click.ClickException("'augment.flip_y' must be a boolean")
+
+    flip_xy = section.get("flip_xy", False)
+    if not isinstance(flip_xy, bool):
+        raise click.ClickException("'augment.flip_xy' must be a boolean")
+
+    no_copy = section.get("no_copy", False)
+    if not isinstance(no_copy, bool):
+        raise click.ClickException("'augment.no_copy' must be a boolean")
+
+    return AugmentConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+        flip_x=flip_x,
+        flip_y=flip_y,
+        flip_xy=flip_xy,
+        no_copy=no_copy,
+    )
