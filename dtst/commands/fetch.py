@@ -2,8 +2,10 @@ import hashlib
 import json
 import logging
 import random
+import re
 import shutil
 import subprocess
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
@@ -67,6 +69,9 @@ YTDLP_DOMAINS = frozenset({
     "tiktok.com",
     "www.tiktok.com",
 })
+
+
+_YTDLP_PROGRESS_RE = re.compile(r"\[download\]\s+([\d.]+)%")
 
 
 def _is_ytdlp_url(url: str) -> bool:
@@ -215,8 +220,14 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
         return "failed", url, str(e)
 
 
-def _download_ytdlp(args: tuple) -> tuple[str, str, str | None]:
-    """Download a URL using yt-dlp as a subprocess."""
+def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str | None]:
+    """Download a URL using yt-dlp as a subprocess.
+
+    When *progress_callback* is provided it is called with
+    ``(url, percentage)`` each time yt-dlp reports download progress.
+    The ``--newline`` flag ensures progress lines are flushed on
+    separate lines so they can be parsed in real time.
+    """
     url, dest_dir_s, archive_path_s, force = args
     dest_dir = Path(dest_dir_s)
 
@@ -224,6 +235,8 @@ def _download_ytdlp(args: tuple) -> tuple[str, str, str | None]:
         cmd = [
             "yt-dlp",
             "--no-playlist",
+            "--newline",
+            "--socket-timeout", "60",
             "-o", str(dest_dir / "%(id)s.%(ext)s"),
             "--no-overwrites",
         ]
@@ -233,28 +246,41 @@ def _download_ytdlp(args: tuple) -> tuple[str, str, str | None]:
 
         cmd.append(url)
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=600,
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
 
-        if result.returncode == 0:
-            return "downloaded", url, None
+        # Read stderr in a daemon thread to prevent pipe buffer deadlock
+        stderr_chunks: list[str] = []
+        stderr_thread = threading.Thread(
+            target=lambda: stderr_chunks.extend(proc.stderr), daemon=True,
+        )
+        stderr_thread.start()
 
-        stderr = result.stderr.strip()
+        stdout_chunks: list[str] = []
+        for line in proc.stdout:
+            stdout_chunks.append(line)
+            if progress_callback is not None:
+                m = _YTDLP_PROGRESS_RE.search(line)
+                if m:
+                    progress_callback(url, float(m.group(1)))
+
+        proc.wait()
+        stderr_thread.join(timeout=10)
+        stderr = "".join(stderr_chunks).strip()
+        stdout_full = "".join(stdout_chunks)
+
+        if proc.returncode == 0:
+            return "downloaded", url, None
 
         # yt-dlp returns 0 even for "already recorded", but some
         # versions may use a non-zero exit code; treat archive
         # hits as skips
-        if "has already been recorded" in stderr or "has already been recorded" in result.stdout:
+        if "has already been recorded" in stderr or "has already been recorded" in stdout_full:
             return "skipped", url, None
 
         return "failed", url, stderr[-200:] if len(stderr) > 200 else stderr
 
-    except subprocess.TimeoutExpired:
-        return "failed", url, "yt-dlp timed out after 600s"
     except FileNotFoundError:
         return "failed", url, "yt-dlp not found (is it installed?)"
     except Exception as e:
@@ -520,6 +546,14 @@ def cmd(
 
         logger.info("Downloading %d URLs via yt-dlp (workers=%d)", len(ytdlp_urls), ytdlp_workers)
 
+        # Shared progress state updated by worker threads
+        _ytdlp_progress: dict[str, float] = {}
+        _progress_lock = threading.Lock()
+
+        def _on_progress(url: str, pct: float) -> None:
+            with _progress_lock:
+                _ytdlp_progress[url] = pct
+
         work_yt = [
             (url, str(dest_dir), archive_path, force)
             for url in ytdlp_urls
@@ -527,20 +561,53 @@ def cmd(
 
         with logging_redirect_tqdm():
             with ThreadPoolExecutor(max_workers=ytdlp_workers) as executor:
-                futures = {executor.submit(_download_ytdlp, w): w for w in work_yt}
-                with tqdm(total=len(futures), desc="Fetching (yt-dlp)", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
+                all_futures = {
+                    executor.submit(_download_ytdlp, w, _on_progress): w
+                    for w in work_yt
+                }
+                done_futures: set = set()
+                total_videos = len(all_futures)
+                with tqdm(
+                    total=total_videos,
+                    desc="Fetching (yt-dlp)",
+                    unit="video",
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}{postfix}]",
+                ) as pbar:
                     try:
-                        for future in as_completed(futures):
-                            status, url, error = future.result()
-                            if status == "downloaded":
-                                downloaded += 1
-                            elif status == "skipped":
-                                skipped += 1
-                            else:
-                                failed += 1
-                                logger.error("Failed to download %s: %s", url, error)
+                        prev_frac = 0.0
+                        while len(done_futures) < total_videos:
+                            newly_done = {f for f in all_futures if f.done()} - done_futures
+                            for f in newly_done:
+                                done_futures.add(f)
+                                status, url, error = f.result()
+                                if status == "downloaded":
+                                    downloaded += 1
+                                elif status == "skipped":
+                                    skipped += 1
+                                else:
+                                    failed += 1
+                                    logger.error("Failed to download %s: %s", url, error)
+                                with _progress_lock:
+                                    _ytdlp_progress.pop(url, None)
+
+                            # Smoothly advance the bar: completed videos
+                            # count as 1.0, active ones contribute their
+                            # current fraction (0..1).
+                            with _progress_lock:
+                                active_frac = sum(
+                                    p / 100.0 for p in _ytdlp_progress.values()
+                                )
+                            current = len(done_futures) + active_frac
+                            delta = current - prev_frac
+                            if delta > 0:
+                                pbar.n = int(current * 100) / 100
+                                pbar.refresh()
+                                prev_frac = current
+
                             pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed)
-                            pbar.update(1)
+
+                            if len(done_futures) < total_videos:
+                                time.sleep(0.3)
                     except KeyboardInterrupt:
                         executor.shutdown(wait=False, cancel_futures=True)
                         raise
