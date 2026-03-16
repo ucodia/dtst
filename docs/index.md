@@ -63,6 +63,16 @@ You can also filter downloads by minimum image size or license:
 dtst fetch -d crowd --to raw --min-size 1024 --license cc
 ```
 
+### Fetching from a URL list
+
+Instead of `results.jsonl`, you can provide a plain text file of URLs with `--input`. This is useful when you have a curated list of image or video URLs:
+
+```bash
+dtst fetch -d crowd --to raw --input urls.txt
+```
+
+URLs pointing to known video platforms (YouTube, Vimeo, etc.) are automatically downloaded with yt-dlp. All other URLs are fetched directly via HTTP. Both image and video URLs can be mixed in the same file.
+
 ### Adding images manually
 
 Because the working directory is the source of truth, you can supplement the fetched images by simply copying files into any folder. For example, drop additional crowd photos into `crowd/extra/`. No registration or import command is needed.

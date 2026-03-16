@@ -2,6 +2,8 @@ import hashlib
 import json
 import logging
 import random
+import shutil
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from multiprocessing import cpu_count
@@ -22,6 +24,7 @@ from dtst.user_agent import get_user_agent
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"})
+VIDEO_EXTENSIONS = frozenset({".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v"})
 
 UNSUPPORTED_EXTENSIONS = frozenset({".djvu"})
 
@@ -35,6 +38,49 @@ CONTENT_TYPE_TO_EXT: dict[str, str] = {
 }
 
 MAX_RETRIES = 3
+
+# Domains where yt-dlp should be used instead of direct HTTP download.
+# These are video hosting platforms whose URLs require extraction logic.
+YTDLP_DOMAINS = frozenset({
+    "youtube.com",
+    "www.youtube.com",
+    "m.youtube.com",
+    "youtu.be",
+    "vimeo.com",
+    "www.vimeo.com",
+    "player.vimeo.com",
+    "dailymotion.com",
+    "www.dailymotion.com",
+    "twitch.tv",
+    "www.twitch.tv",
+    "clips.twitch.tv",
+    "streamable.com",
+    "rumble.com",
+    "bitchute.com",
+    "www.bitchute.com",
+    "odysee.com",
+    "peertube.social",
+    "bilibili.com",
+    "www.bilibili.com",
+    "nicovideo.jp",
+    "www.nicovideo.jp",
+    "tiktok.com",
+    "www.tiktok.com",
+})
+
+
+def _is_ytdlp_url(url: str) -> bool:
+    """Decide whether a URL should be handled by yt-dlp.
+
+    Returns True for known video hosting domains, False for everything
+    else (including direct .mp4 links on CDNs, which requests can
+    handle fine).
+    """
+    hostname = urlparse(url).hostname
+    if hostname is None:
+        return False
+    hostname = hostname.lower()
+    return hostname in YTDLP_DOMAINS
 
 
 def _attempt_download(
@@ -105,7 +151,7 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
             return "rate_limited", url, None
 
         if not force:
-            for ext in IMAGE_EXTENSIONS:
+            for ext in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
                 if (dest_dir / f"{url_hash}{ext}").exists():
                     return "skipped", url, None
 
@@ -127,14 +173,37 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
 
         content_type = response.headers.get("Content-Type", "")
         mime = content_type.split(";")[0].strip().lower()
-        ext = CONTENT_TYPE_TO_EXT.get(mime, ".jpg")
+        ext = CONTENT_TYPE_TO_EXT.get(mime)
 
-        try:
-            with Image.open(tmp_path) as img:
-                img.verify()
-        except Exception:
-            tmp_path.unlink(missing_ok=True)
-            return "failed", url, "downloaded file is not a valid image"
+        # For images, validate with PIL and use Content-Type extension
+        if ext is not None:
+            try:
+                with Image.open(tmp_path) as img:
+                    img.verify()
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                return "failed", url, "downloaded file is not a valid image"
+
+            final_path = dest_dir / f"{url_hash}{ext}"
+            tmp_path.rename(final_path)
+            return "downloaded", url, None
+
+        # For non-image content (e.g. direct .mp4 links), keep the file
+        # and derive extension from the URL path or Content-Type
+        url_ext = Path(urlparse(url).path).suffix.lower()
+        if url_ext in VIDEO_EXTENSIONS:
+            ext = url_ext
+        elif "video/" in mime:
+            ext = ".mp4"
+        else:
+            # Fallback: assume image and try to validate
+            try:
+                with Image.open(tmp_path) as img:
+                    img.verify()
+                ext = ".jpg"
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                return "failed", url, f"unknown content type: {mime}"
 
         final_path = dest_dir / f"{url_hash}{ext}"
         tmp_path.rename(final_path)
@@ -143,6 +212,52 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
     except Exception as e:
         tmp_path = dest_dir / f"{url_hash}.tmp"
         tmp_path.unlink(missing_ok=True)
+        return "failed", url, str(e)
+
+
+def _download_ytdlp(args: tuple) -> tuple[str, str, str | None]:
+    """Download a URL using yt-dlp as a subprocess."""
+    url, dest_dir_s, archive_path_s, force = args
+    dest_dir = Path(dest_dir_s)
+
+    try:
+        cmd = [
+            "yt-dlp",
+            "--no-playlist",
+            "-o", str(dest_dir / "%(id)s.%(ext)s"),
+            "--no-overwrites",
+        ]
+
+        if not force and archive_path_s:
+            cmd.extend(["--download-archive", archive_path_s])
+
+        cmd.append(url)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+
+        if result.returncode == 0:
+            return "downloaded", url, None
+
+        stderr = result.stderr.strip()
+
+        # yt-dlp returns 0 even for "already recorded", but some
+        # versions may use a non-zero exit code; treat archive
+        # hits as skips
+        if "has already been recorded" in stderr or "has already been recorded" in result.stdout:
+            return "skipped", url, None
+
+        return "failed", url, stderr[-200:] if len(stderr) > 200 else stderr
+
+    except subprocess.TimeoutExpired:
+        return "failed", url, "yt-dlp timed out after 600s"
+    except FileNotFoundError:
+        return "failed", url, "yt-dlp not found (is it installed?)"
+    except Exception as e:
         return "failed", url, str(e)
 
 
@@ -186,10 +301,26 @@ def _load_urls_from_jsonl(
     return sorted(set(urls)), skipped_unsupported
 
 
+def _load_urls_from_txt(txt_file: Path) -> list[str]:
+    """Load URLs from a plain text file, one per line.
+
+    Blank lines and lines starting with ``#`` are ignored.
+    """
+    urls: list[str] = []
+    with open(txt_file) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            urls.append(line)
+    return sorted(set(urls))
+
+
 def _resolve_config(
     config: Path | None,
     working_dir: Path | None,
     to: str | None,
+    input_file: str | None,
     min_size: int | None,
     license_filter: str | None,
 ) -> FetchConfig:
@@ -202,6 +333,8 @@ def _resolve_config(
         cfg.working_dir = working_dir
     if to is not None:
         cfg.to = to
+    if input_file is not None:
+        cfg.input = input_file
     if min_size is not None:
         cfg.min_size = min_size
     if license_filter is not None:
@@ -213,21 +346,28 @@ def _resolve_config(
     return cfg
 
 
+def _check_ytdlp() -> bool:
+    """Return True if yt-dlp is available on PATH."""
+    return shutil.which("yt-dlp") is not None
+
+
 @click.command("fetch")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is read from and images are written to (default: .).")
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where input is read from and media is written to (default: .).")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count).")
+@click.option("--input", "-i", "input_file", type=str, default=None, help="Input file name relative to the working directory (default: results.jsonl). Supports .jsonl and .txt formats.")
+@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; only applies to .jsonl input (default: 512).")
+@click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count for images, 2 for video).")
 @click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
 @click.option("--force", "-f", is_flag=True, help="Re-download files even if they already exist.")
 @click.option("--max-wait", "-W", type=int, default=None, help="Max seconds to honor a Retry-After header (default: unlimited).")
 @click.option("--no-wait", is_flag=True, help="Never wait for Retry-After headers; use fast exponential backoff instead.")
-@click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc').")
+@click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input.")
 def cmd(
     config: Path | None,
     working_dir: Path | None,
     to: str | None,
+    input_file: str | None,
     min_size: int | None,
     workers: int | None,
     timeout: int,
@@ -236,34 +376,35 @@ def cmd(
     no_wait: bool,
     license_filter: str | None,
 ) -> None:
-    """Download images from search results.
+    """Download images and videos from a URL list.
 
-    Reads results.jsonl from the working directory and downloads each
-    URL into a destination folder within that directory. Files are named
-    by the MD5 hash of the URL with the extension derived from the HTTP
-    Content-Type header. Existing files are skipped unless --force is set.
+    By default, reads results.jsonl from the working directory, which
+    is the output of ``dtst search``. Alternatively, pass --input to
+    read from a different file. Two formats are supported:
+
+    \b
+      .jsonl  JSON Lines with a "url" field per line (search output).
+              Supports --min-size and --license filtering.
+      .txt    Plain text with one URL per line. Lines starting with
+              # are treated as comments.
+
+    URLs are routed automatically: known video hosting domains
+    (YouTube, Vimeo, etc.) are downloaded with yt-dlp, all other
+    URLs are downloaded directly with HTTP requests.
+
+    Image files are named by the MD5 hash of the URL. Video files
+    are named by yt-dlp using the video ID and original extension.
+    Existing files are skipped unless --force is set.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
-
-    When reading from results.jsonl, images can be filtered by known
-    dimensions (skipping images below the configured min_size) and by
-    license prefix (e.g. --license cc for Creative Commons only).
-
-    Per-domain throttling is applied automatically to respect server
-    rate limits (e.g. Wikimedia allows max 2 concurrent connections).
-    If a domain returns repeated 429 errors, remaining URLs for that
-    domain are skipped.
-
-    By default, Retry-After headers are honored. Use --max-wait to cap
-    the wait time, or --no-wait to skip waiting entirely. The two flags
-    are mutually exclusive.
 
     \b
     Examples:
 
         dtst fetch config.yaml
         dtst fetch -d ./chanterelle --to raw
+        dtst fetch -d ./project --to videos --input urls.txt
         dtst fetch config.yaml --workers 16 --timeout 60
         dtst fetch config.yaml --force
         dtst fetch -d ./chanterelle --to raw --no-wait --license cc
@@ -273,29 +414,57 @@ def cmd(
     if no_wait:
         max_wait = 0
 
-    cfg = _resolve_config(config, working_dir, to, min_size, license_filter)
-    results_file = cfg.working_dir / "results.jsonl"
-    dest_dir = cfg.working_dir / cfg.to
+    cfg = _resolve_config(config, working_dir, to, input_file, min_size, license_filter)
 
-    if not results_file.exists():
-        raise click.ClickException(f"Results file not found: {results_file}")
+    # Determine input file and format
+    input_name = cfg.input or "results.jsonl"
+    input_path = cfg.working_dir / input_name
+    input_ext = Path(input_name).suffix.lower()
 
-    urls, skipped_unsupported = _load_urls_from_jsonl(results_file, cfg.min_size, cfg.license)
-    logger.info("Loaded URLs from %s", results_file)
+    if not input_path.exists():
+        raise click.ClickException(f"Input file not found: {input_path}")
+
+    # Load URLs based on file format
+    skipped_unsupported = 0
+    if input_ext == ".jsonl":
+        urls, skipped_unsupported = _load_urls_from_jsonl(input_path, cfg.min_size, cfg.license)
+        logger.info("Loaded URLs from %s (jsonl mode)", input_path)
+    elif input_ext == ".txt":
+        urls = _load_urls_from_txt(input_path)
+        logger.info("Loaded URLs from %s (txt mode)", input_path)
+    else:
+        raise click.ClickException(
+            f"Unsupported input file format: {input_ext} (expected .jsonl or .txt)"
+        )
+
     if skipped_unsupported > 0:
         logger.info("Skipped %d URLs with unsupported format (.djvu).", skipped_unsupported)
 
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
 
+    dest_dir = cfg.working_dir / cfg.to
     dest_dir.mkdir(parents=True, exist_ok=True)
-    num_workers = workers if workers is not None else cpu_count() or 4
 
-    throttler = DomainThrottler()
-    for domain, policy in throttler.active_policies().items():
-        logger.info("Throttle policy for %s: max_connections=%d, request_delay=%.1fs", domain, policy.max_connections, policy.request_delay)
+    # Partition URLs into direct download vs yt-dlp
+    direct_urls: list[str] = []
+    ytdlp_urls: list[str] = []
+    for url in urls:
+        if _is_ytdlp_url(url):
+            ytdlp_urls.append(url)
+        else:
+            direct_urls.append(url)
 
-    logger.info("Fetching %d URLs to %s (workers=%d)", len(urls), dest_dir, num_workers)
+    if ytdlp_urls and not _check_ytdlp():
+        raise click.ClickException(
+            f"Found {len(ytdlp_urls)} video URL(s) requiring yt-dlp but it is not installed. "
+            "Install it with: pip install yt-dlp"
+        )
+
+    logger.info(
+        "Fetching %d URLs to %s (%d direct, %d yt-dlp)",
+        len(urls), dest_dir, len(direct_urls), len(ytdlp_urls),
+    )
 
     start_time = time.monotonic()
     downloaded = 0
@@ -304,31 +473,79 @@ def cmd(
     rate_limited = 0
     rate_limited_domains: set[str] = set()
 
-    work = [(url, dest_dir, timeout, force, throttler, max_wait) for url in urls]
+    # --- Direct HTTP downloads -----------------------------------------------
 
-    with logging_redirect_tqdm():
-        with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_download_url, w): w for w in work}
-            with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
-                try:
-                    for future in as_completed(futures):
-                        status, url, error = future.result()
-                        if status == "downloaded":
-                            downloaded += 1
-                        elif status == "skipped":
-                            skipped += 1
-                        elif status == "rate_limited":
-                            rate_limited += 1
-                            domain = urlparse(url).hostname or "unknown"
-                            rate_limited_domains.add(domain)
-                        else:
-                            failed += 1
-                            logger.error("Failed to download %s: %s", url, error)
-                        pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed, limited=rate_limited)
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    if direct_urls:
+        num_workers = workers if workers is not None else cpu_count() or 4
+        throttler = DomainThrottler()
+        for domain, policy in throttler.active_policies().items():
+            logger.info(
+                "Throttle policy for %s: max_connections=%d, request_delay=%.1fs",
+                domain, policy.max_connections, policy.request_delay,
+            )
+
+        logger.info("Downloading %d URLs via HTTP (workers=%d)", len(direct_urls), num_workers)
+
+        work = [(url, dest_dir, timeout, force, throttler, max_wait) for url in direct_urls]
+
+        with logging_redirect_tqdm():
+            with ThreadPoolExecutor(max_workers=num_workers) as executor:
+                futures = {executor.submit(_download_url, w): w for w in work}
+                with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
+                    try:
+                        for future in as_completed(futures):
+                            status, url, error = future.result()
+                            if status == "downloaded":
+                                downloaded += 1
+                            elif status == "skipped":
+                                skipped += 1
+                            elif status == "rate_limited":
+                                rate_limited += 1
+                                domain = urlparse(url).hostname or "unknown"
+                                rate_limited_domains.add(domain)
+                            else:
+                                failed += 1
+                                logger.error("Failed to download %s: %s", url, error)
+                            pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed, limited=rate_limited)
+                            pbar.update(1)
+                    except KeyboardInterrupt:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise
+
+    # --- yt-dlp downloads ----------------------------------------------------
+
+    if ytdlp_urls:
+        ytdlp_workers = workers if workers is not None else 2
+        archive_path = str(dest_dir / ".ytdl-archive") if not force else None
+
+        logger.info("Downloading %d URLs via yt-dlp (workers=%d)", len(ytdlp_urls), ytdlp_workers)
+
+        work_yt = [
+            (url, str(dest_dir), archive_path, force)
+            for url in ytdlp_urls
+        ]
+
+        with logging_redirect_tqdm():
+            with ThreadPoolExecutor(max_workers=ytdlp_workers) as executor:
+                futures = {executor.submit(_download_ytdlp, w): w for w in work_yt}
+                with tqdm(total=len(futures), desc="Fetching (yt-dlp)", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
+                    try:
+                        for future in as_completed(futures):
+                            status, url, error = future.result()
+                            if status == "downloaded":
+                                downloaded += 1
+                            elif status == "skipped":
+                                skipped += 1
+                            else:
+                                failed += 1
+                                logger.error("Failed to download %s: %s", url, error)
+                            pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed)
+                            pbar.update(1)
+                    except KeyboardInterrupt:
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        raise
+
+    # --- Summary -------------------------------------------------------------
 
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)

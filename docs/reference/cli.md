@@ -250,33 +250,33 @@ dtst extract-faces [OPTIONS] [CONFIG]
 
 ## dtst fetch { #dtst-fetch data-toc-label='fetch' }
 
-Download images from search results.
+Download images and videos from a URL list.
 
-Reads results.jsonl from the working directory and downloads each
-URL into a destination folder within that directory. Files are named
-by the MD5 hash of the URL with the extension derived from the HTTP
-Content-Type header. Existing files are skipped unless --force is set.
+By default, reads results.jsonl from the working directory, which
+is the output of ``dtst search``. Alternatively, pass --input to
+read from a different file. Two formats are supported:
+
+  .jsonl  JSON Lines with a "url" field per line (search output).
+          Supports --min-size and --license filtering.
+  .txt    Plain text with one URL per line. Lines starting with
+          # are treated as comments.
+
+URLs are routed automatically: known video hosting domains
+(YouTube, Vimeo, etc.) are downloaded with yt-dlp, all other
+URLs are downloaded directly with HTTP requests.
+
+Image files are named by the MD5 hash of the URL. Video files
+are named by yt-dlp using the video ID and original extension.
+Existing files are skipped unless --force is set.
 
 Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
-
-When reading from results.jsonl, images can be filtered by known
-dimensions (skipping images below the configured min_size) and by
-license prefix (e.g. --license cc for Creative Commons only).
-
-Per-domain throttling is applied automatically to respect server
-rate limits (e.g. Wikimedia allows max 2 concurrent connections).
-If a domain returns repeated 429 errors, remaining URLs for that
-domain are skipped.
-
-By default, Retry-After headers are honored. Use --max-wait to cap
-the wait time, or --no-wait to skip waiting entirely. The two flags
-are mutually exclusive.
 
 Examples:
 
     dtst fetch config.yaml
     dtst fetch -d ./chanterelle --to raw
+    dtst fetch -d ./project --to videos --input urls.txt
     dtst fetch config.yaml --workers 16 --timeout 60
     dtst fetch config.yaml --force
     dtst fetch -d ./chanterelle --to raw --no-wait --license cc
@@ -291,15 +291,16 @@ dtst fetch [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory where results.jsonl is read from and images are written to (default: .). | None |
+| `--working-dir`, `-d` | path | Working directory where input is read from and media is written to (default: .). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
-| `--min-size`, `-s` | integer | Minimum image dimension in pixels (default: 512). | None |
-| `--workers`, `-w` | integer | Number of parallel download threads (default: CPU count). | None |
+| `--input`, `-i` | text | Input file name relative to the working directory (default: results.jsonl). Supports .jsonl and .txt formats. | None |
+| `--min-size`, `-s` | integer | Minimum image dimension in pixels; only applies to .jsonl input (default: 512). | None |
+| `--workers`, `-w` | integer | Number of parallel download threads (default: CPU count for images, 2 for video). | None |
 | `--timeout`, `-t` | integer | Per-request timeout in seconds. | `30` |
 | `--force`, `-f` | boolean | Re-download files even if they already exist. | `False` |
 | `--max-wait`, `-W` | integer | Max seconds to honor a Retry-After header (default: unlimited). | None |
 | `--no-wait` | boolean | Never wait for Retry-After headers; use fast exponential backoff instead. | `False` |
-| `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'). | None |
+| `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst frame { #dtst-frame data-toc-label='frame' }

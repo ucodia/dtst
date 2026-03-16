@@ -94,6 +94,7 @@ def load_search_config(path: str | Path) -> SearchConfig:
 class FetchConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     to: str | None = None
+    input: str | None = None
     min_size: int = 512
     license: str | None = None
 
@@ -114,6 +115,12 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     if to is not None and (not isinstance(to, str) or not to.strip()):
         raise click.ClickException("'fetch.to' must be a non-empty string")
 
+    input_file = section.get("input")
+    if input_file is not None:
+        if not isinstance(input_file, str) or not input_file.strip():
+            raise click.ClickException("'fetch.input' must be a non-empty string")
+        input_file = input_file.strip()
+
     license_filter = section.get("license")
     if license_filter is not None:
         if not isinstance(license_filter, str) or not license_filter.strip():
@@ -123,6 +130,7 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     return FetchConfig(
         working_dir=resolved_working_dir,
         to=to.strip() if to else None,
+        input=input_file,
         min_size=min_size,
         license=license_filter,
     )
