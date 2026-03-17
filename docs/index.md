@@ -130,33 +130,33 @@ The `filter` command lets you remove images that don't meet certain criteria. Ra
 For example, to remove face crops smaller than 1024 pixels:
 
 ```bash
-dtst filter -d crowd --from faces --to filtered --min-size 1024
+dtst filter -d crowd --from faces --min-size 1024
 ```
 
 You can also filter by blur score to remove blurry images. This requires blur data from the `analyze` step:
 
 ```bash
-dtst filter -d crowd --from faces --to filtered --min-blur 50
+dtst filter -d crowd --from faces --min-blur 50
 ```
 
 Both criteria can be combined in a single run:
 
 ```bash
-dtst filter -d crowd --from faces --to filtered --min-size 1024 --min-blur 50
+dtst filter -d crowd --from faces --min-size 1024 --min-blur 50
 ```
 
-After this runs, images below the threshold are in `crowd/faces/filtered/`. You can review them in the file explorer and move any back if the filter was too aggressive.
+After this runs, images below the threshold are in `crowd/faces/filtered/` (the default `--to` subfolder). You can review them in the file explorer and move any back if the filter was too aggressive.
 
 To preview what would be filtered without moving anything:
 
 ```bash
-dtst filter -d crowd --from faces --to filtered --min-size 1024 --dry-run
+dtst filter -d crowd --from faces --min-size 1024 --dry-run
 ```
 
 To undo filtering and restore all images back to the source folder:
 
 ```bash
-dtst filter -d crowd --from faces --to filtered --clear
+dtst filter -d crowd --from faces --clear
 ```
 
 ## Step 6: Dedup
@@ -164,27 +164,27 @@ dtst filter -d crowd --from faces --to filtered --clear
 The `dedup` command finds near-duplicate images using perceptual hash similarity and keeps only the best copy from each group. This requires phash data from the `analyze` step.
 
 ```bash
-dtst dedup -d crowd --from faces --to duplicated
+dtst dedup -d crowd --from faces
 ```
 
-For each group of duplicates, the winner is chosen by resolution first, then file size, then blur sharpness (if blur scores are available from `analyze`). Losers are moved to the `--to` subfolder within the source folder.
+For each group of duplicates, the winner is chosen by resolution first, then file size, then blur sharpness (if blur scores are available from `analyze`). Losers are moved to `duplicated/` within the source folder by default (configurable with `--to`).
 
 To use a stricter threshold (lower value means images must be more similar to be considered duplicates):
 
 ```bash
-dtst dedup -d crowd --from faces --to duplicated --threshold 4
+dtst dedup -d crowd --from faces --threshold 4
 ```
 
 To preview what would be deduplicated without moving anything:
 
 ```bash
-dtst dedup -d crowd --from faces --to duplicated --dry-run
+dtst dedup -d crowd --from faces --dry-run
 ```
 
 To undo deduplication and restore all images:
 
 ```bash
-dtst dedup -d crowd --from faces --to duplicated --clear
+dtst dedup -d crowd --from faces --clear
 ```
 
 ## Step 7: Cluster

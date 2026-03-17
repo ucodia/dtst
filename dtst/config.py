@@ -296,7 +296,7 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
 class FilterConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dir: str | None = None
-    to: str | None = None
+    to: str = "filtered"
     min_size: int | None = None
     min_blur: float | None = None
 
@@ -315,8 +315,8 @@ def load_filter_config(path: str | Path) -> FilterConfig:
             raise click.ClickException("'filter.from' must be a non-empty string")
         from_dir = from_dir.strip()
 
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
+    to = section.get("to", "filtered")
+    if not isinstance(to, str) or not to.strip():
         raise click.ClickException("'filter.to' must be a non-empty string")
 
     min_size = section.get("min_size")
@@ -333,7 +333,7 @@ def load_filter_config(path: str | Path) -> FilterConfig:
     return FilterConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir,
-        to=to.strip() if to else None,
+        to=to.strip(),
         min_size=min_size,
         min_blur=min_blur,
     )
@@ -343,7 +343,7 @@ def load_filter_config(path: str | Path) -> FilterConfig:
 class DedupConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dir: str | None = None
-    to: str | None = None
+    to: str = "duplicated"
     threshold: int = 8
 
 
@@ -359,8 +359,8 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
     if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
         raise click.ClickException("'dedup.from' must be a non-empty string")
 
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
+    to = section.get("to", "duplicated")
+    if not isinstance(to, str) or not to.strip():
         raise click.ClickException("'dedup.to' must be a non-empty string")
 
     threshold = section.get("threshold", 8)
@@ -370,7 +370,7 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
     return DedupConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir.strip() if from_dir else None,
-        to=to.strip() if to else None,
+        to=to.strip(),
         threshold=threshold,
     )
 

@@ -176,10 +176,11 @@ scores (from ``dtst analyze --blur``) are used as a tiebreaker
 when available.
 
 Examples:
-  dtst dedup -d ./project --from faces --to duplicated
-  dtst dedup -d ./project --from faces --to duplicated --threshold 4
+  dtst dedup -d ./project --from faces
+  dtst dedup -d ./project --from faces --threshold 4
+  dtst dedup -d ./project --from faces --to my-dupes
   dtst dedup config.yaml --dry-run
-  dtst dedup -d ./project --from faces --to duplicated --clear
+  dtst dedup -d ./project --from faces --clear
 
 **Usage:**
 
@@ -193,7 +194,7 @@ dtst dedup [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--from` | text | Folder name to deduplicate within the working directory. | None |
-| `--to` | text | Subfolder name for duplicate images. | None |
+| `--to` | text | Subfolder name for duplicate images. | `duplicated` |
 | `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |
@@ -361,12 +362,13 @@ Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
 
 Examples:
-    dtst filter -d ./project --from faces --to filtered --min-size 256
-    dtst filter -d ./project --from faces --to filtered --min-blur 50
-    dtst filter -d ./project --from faces --to filtered --min-size 256 --min-blur 50
+    dtst filter -d ./project --from faces --min-size 256
+    dtst filter -d ./project --from faces --min-blur 50
+    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
+    dtst filter -d ./project --from faces --to rejects --min-size 256
     dtst filter config.yaml --min-size 128
-    dtst filter -d ./project --from faces --to filtered --clear
-    dtst filter -d ./project --from faces --to filtered --min-size 256 --dry-run
+    dtst filter -d ./project --from faces --clear
+    dtst filter -d ./project --from faces --min-size 256 --dry-run
 
 **Usage:**
 
@@ -380,7 +382,7 @@ dtst filter [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--from` | text | Folder name to filter within the working directory. | None |
-| `--to` | text | Subfolder name for rejected images. | None |
+| `--to` | text | Subfolder name for rejected images. | `filtered` |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
 | `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |

@@ -83,8 +83,6 @@ def _resolve_config(
 
     if cfg.from_dir is None:
         raise click.ClickException("--from is required (or set 'dedup.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'dedup.to' in config)")
 
     return cfg
 
@@ -115,6 +113,7 @@ def _resolve_config(
     type=str,
     default=None,
     help="Subfolder name for duplicate images.",
+    show_default="duplicated",
 )
 @click.option(
     "--threshold",
@@ -156,7 +155,8 @@ def cmd(
     Groups images by phash hamming distance and keeps the best image
     from each duplicate group. The winner is chosen by resolution
     (width x height), then file size, then blur sharpness. Losers are
-    moved to a duplicated/ subdirectory within the source folder.
+    moved to a duplicated/ subdirectory within the source folder
+    (configurable with --to).
 
     Requires phash sidecar data from ``dtst analyze --phash``. Blur
     scores (from ``dtst analyze --blur``) are used as a tiebreaker
@@ -164,10 +164,11 @@ def cmd(
 
     \b
     Examples:
-      dtst dedup -d ./project --from faces --to duplicated
-      dtst dedup -d ./project --from faces --to duplicated --threshold 4
+      dtst dedup -d ./project --from faces
+      dtst dedup -d ./project --from faces --threshold 4
+      dtst dedup -d ./project --from faces --to my-dupes
       dtst dedup config.yaml --dry-run
-      dtst dedup -d ./project --from faces --to duplicated --clear
+      dtst dedup -d ./project --from faces --clear
     """
     t0 = time.time()
 
