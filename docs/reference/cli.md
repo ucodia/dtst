@@ -169,7 +169,8 @@ Deduplicate images by perceptual hash similarity.
 Groups images by phash hamming distance and keeps the best image
 from each duplicate group. The winner is chosen by resolution
 (width x height), then file size, then blur sharpness. Losers are
-moved to a duplicated/ subdirectory within the source folder.
+moved to a duplicated/ subdirectory within the source folder
+(configurable with --to).
 
 Requires phash sidecar data from ``dtst analyze --phash``. Blur
 scores (from ``dtst analyze --blur``) are used as a tiebreaker
@@ -194,7 +195,7 @@ dtst dedup [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--from` | text | Folder name to deduplicate within the working directory. | None |
-| `--to` | text | Subfolder name for duplicate images. | `duplicated` |
+| `--to` | text | Subfolder name for duplicate images. | None |
 | `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |
@@ -352,6 +353,51 @@ dtst fetch [OPTIONS] [CONFIG]
 | `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst filter { #dtst-filter data-toc-label='filter' }
+
+Filter images by moving rejects to a subfolder.
+
+Evaluates images in a source folder against filter criteria and
+moves those that fail into a subdirectory within the source
+folder (default: filtered/). Filtered images can be restored
+with --clear.
+
+This is a non-destructive operation: no images are deleted, only
+moved. The file explorer serves as the UI for reviewing what was
+filtered. To undo individual decisions, move files back manually.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+    dtst filter -d ./project --from faces --min-size 256
+    dtst filter -d ./project --from faces --min-blur 50
+    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
+    dtst filter -d ./project --from faces --to rejects --min-size 256
+    dtst filter config.yaml --min-size 128
+    dtst filter -d ./project --from faces --clear
+    dtst filter -d ./project --from faces --min-size 256 --dry-run
+
+**Usage:**
+
+```text
+dtst filter [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--from` | text | Folder name to filter within the working directory. | None |
+| `--to` | text | Subfolder name for rejected images. | None |
+| `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
+| `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--clear` | boolean | Restore all filtered images back to the source folder. | `False` |
+| `--dry-run` | boolean | Show what would be filtered without moving anything. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst frame { #dtst-frame data-toc-label='frame' }
 
 Resize images to a target width and/or height.
@@ -394,48 +440,32 @@ dtst frame [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst filter { #dtst-filter data-toc-label='filter' }
+## dtst run { #dtst-run data-toc-label='run' }
 
-Filter images by moving rejects to a subfolder.
+Run a named workflow defined in a config file.
 
-Evaluates images in a source folder against filter criteria and
-moves those that fail into a subdirectory within the source
-folder. Filtered images can be restored with --clear.
-
-This is a non-destructive operation: no images are deleted, only
-moved. The file explorer serves as the UI for reviewing what was
-filtered. To undo individual decisions, move files back manually.
-
-Can be invoked with just a config file, just CLI options, or both.
-When both are provided, CLI options override config file values.
+Executes a sequence of dtst commands and shell commands as defined
+in the workflows section of the config file. Each command step
+inherits its defaults from the corresponding config section unless
+inherit: false is set.
 
 Examples:
-    dtst filter -d ./project --from faces --min-size 256
-    dtst filter -d ./project --from faces --min-blur 50
-    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
-    dtst filter -d ./project --from faces --to rejects --min-size 256
-    dtst filter config.yaml --min-size 128
-    dtst filter -d ./project --from faces --clear
-    dtst filter -d ./project --from faces --min-size 256 --dry-run
+    dtst run pipeline config.yaml
+    dtst run pipeline config.yaml --dry-run
+    dtst run pipeline config.yaml -d ./my_dataset
 
 **Usage:**
 
 ```text
-dtst filter [OPTIONS] [CONFIG]
+dtst run [OPTIONS] WORKFLOW CONFIG
 ```
 
 **Options:**
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--from` | text | Folder name to filter within the working directory. | None |
-| `--to` | text | Subfolder name for rejected images. | `filtered` |
-| `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
-| `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
-| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
-| `--clear` | boolean | Restore all filtered images back to the source folder. | `False` |
-| `--dry-run` | boolean | Show what would be filtered without moving anything. | `False` |
+| `--working-dir`, `-d` | path | Override working directory. | None |
+| `--dry-run` | boolean | Print steps without executing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst search { #dtst-search data-toc-label='search' }

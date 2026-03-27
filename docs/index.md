@@ -394,3 +394,67 @@ dtst cluster crowd.yaml
 ```
 
 CLI options can still be used alongside the config file and will override the corresponding config values.
+
+## Running workflows
+
+Instead of running each stage manually, you can define named workflows in your config file and execute them with a single command. Add a `workflows` section to your YAML:
+
+```yaml
+# crowd.yaml (append to the config above)
+workflows:
+  full:
+    - search
+    - fetch
+    - extract-faces
+    - analyze
+    - filter
+    - dedup
+
+  faces_only:
+    - extract-faces:
+        from: [raw, extra]
+        to: faces_fresh
+    - analyze
+    - dedup:
+        threshold: 4
+```
+
+Then run a workflow by name:
+
+```bash
+dtst run full crowd.yaml
+```
+
+Each step inherits its defaults from the corresponding config section. To ignore the config section and start from scratch, set `inherit: false`:
+
+```yaml
+extract_faces:
+  from: [raw, extra]
+  to: faces
+  engine: mediapipe
+  max_faces: 1
+
+workflows:
+  dlib_faces:
+    - extract-faces:
+        inherit: false
+        from: [raw]
+        to: faces_dlib
+        engine: dlib
+```
+
+Shell commands can be included with `exec`:
+
+```yaml
+workflows:
+  with_pause:
+    - search
+    - exec: "sleep 10"
+    - fetch
+```
+
+To preview what a workflow will do without executing:
+
+```bash
+dtst run full crowd.yaml --dry-run
+```

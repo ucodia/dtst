@@ -591,3 +591,82 @@ def load_frame_config(path: str | Path) -> FrameConfig:
         width=width,
         height=height,
     )
+
+
+@dataclass
+class WorkflowStep:
+    command: str | None = None
+    exec: str | None = None
+    inherit: bool = True
+    overrides: dict = field(default_factory=dict)
+
+
+@dataclass
+class WorkflowConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    steps: list[WorkflowStep] = field(default_factory=list)
+
+
+def load_workflow_config(path: str | Path, workflow_name: str) -> WorkflowConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    workflows = data.get("workflows")
+    if not workflows or not isinstance(workflows, dict):
+        raise click.ClickException("Config must have a 'workflows' section")
+
+    workflow = workflows.get(workflow_name)
+    if workflow is None:
+        available = ", ".join(sorted(workflows.keys()))
+        raise click.ClickException(
+            f"Workflow '{workflow_name}' not found; available: {available}"
+        )
+    if not isinstance(workflow, list):
+        raise click.ClickException(
+            f"Workflow '{workflow_name}' must be a list of steps"
+        )
+
+    steps: list[WorkflowStep] = []
+    for i, raw_step in enumerate(workflow, 1):
+        if isinstance(raw_step, str):
+            steps.append(WorkflowStep(command=raw_step))
+        elif isinstance(raw_step, dict):
+            if "exec" in raw_step:
+                exec_cmd = raw_step["exec"]
+                if not isinstance(exec_cmd, str) or not exec_cmd.strip():
+                    raise click.ClickException(
+                        f"Step {i}: 'exec' must be a non-empty string"
+                    )
+                steps.append(WorkflowStep(exec=exec_cmd.strip()))
+            else:
+                keys = list(raw_step.keys())
+                if len(keys) != 1:
+                    raise click.ClickException(
+                        f"Step {i}: expected a single command key, got {keys}"
+                    )
+                cmd_name = keys[0]
+                raw_overrides = raw_step[cmd_name]
+                if raw_overrides is None:
+                    overrides = {}
+                elif isinstance(raw_overrides, dict):
+                    overrides = dict(raw_overrides)
+                else:
+                    raise click.ClickException(
+                        f"Step {i}: overrides for '{cmd_name}' must be a mapping"
+                    )
+                inherit = overrides.pop("inherit", True)
+                if not isinstance(inherit, bool):
+                    raise click.ClickException(
+                        f"Step {i}: 'inherit' must be a boolean"
+                    )
+                steps.append(
+                    WorkflowStep(
+                        command=cmd_name, inherit=inherit, overrides=overrides
+                    )
+                )
+        else:
+            raise click.ClickException(
+                f"Step {i}: must be a command name or mapping"
+            )
+
+    return WorkflowConfig(working_dir=resolved_working_dir, steps=steps)
