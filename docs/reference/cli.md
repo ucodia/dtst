@@ -249,6 +249,54 @@ dtst extract-faces [OPTIONS] [CONFIG]
 | `--debug` | boolean | Overlay landmark points on output images. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst extract-frames { #dtst-extract-frames data-toc-label='extract-frames' }
+
+Extract keyframes from video files using ffmpeg.
+
+Reads video files from one or more source folders and extracts
+keyframes (I-frames) to a destination folder. Each video produces
+a set of numbered images named as
+``{video_stem}_{frame_number}.{format}``.
+
+Only I-frames are decoded, which avoids interpolated or blurry
+frames and produces the sharpest possible output. The --keyframes
+option sets the minimum interval between extracted frames: with
+the default of 10, at most one keyframe every 10 seconds is kept.
+Lower values produce more frames, higher values produce fewer.
+
+Supported video formats: .mp4, .mkv, .avi, .mov, .webm, .flv,
+.wmv, .m4v.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+
+    dtst extract-frames -d ./project --from videos --to frames
+    dtst extract-frames -d ./project --from videos --to frames --keyframes 5
+    dtst extract-frames -d ./project --from videos --to frames --keyframes 30 --format png
+    dtst extract-frames config.yaml
+    dtst extract-frames config.yaml --keyframes 20 --dry-run
+
+**Usage:**
+
+```text
+dtst extract-frames [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--keyframes`, `-k` | float | Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10). | None |
+| `--format`, `-F` | choice (`jpg` &#x7C; `png`) | Output image format (default: jpg). | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be done without extracting frames. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst fetch { #dtst-fetch data-toc-label='fetch' }
 
 Download images and videos from a URL list.

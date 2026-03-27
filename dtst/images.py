@@ -4,6 +4,10 @@ IMAGE_EXTENSIONS = frozenset(
     {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 )
 
+VIDEO_EXTENSIONS = frozenset(
+    {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v"}
+)
+
 
 def find_images(directory: Path, recursive: bool = False) -> list[Path]:
     """Return sorted list of image files in *directory*.
@@ -20,4 +24,22 @@ def find_images(directory: Path, recursive: bool = False) -> list[Path]:
         p
         for p in directory.glob(pattern)
         if p.is_file() and p.suffix.lower() in IMAGE_EXTENSIONS
+    )
+
+
+def find_videos(directory: Path, recursive: bool = False) -> list[Path]:
+    """Return sorted list of video files in *directory*.
+
+    Parameters
+    ----------
+    directory:
+        Root directory to scan.
+    recursive:
+        If ``True``, search subdirectories as well.
+    """
+    pattern = "**/*" if recursive else "*"
+    return sorted(
+        p
+        for p in directory.glob(pattern)
+        if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
     )

@@ -233,6 +233,34 @@ If you only want the transformed images without copying the originals:
 dtst augment -d crowd --from faces --to augmented --flipX --no-copy
 ```
 
+## Extracting frames from video
+
+The `extract-frames` command extracts keyframes (I-frames) from video files using ffmpeg. This is useful when you have downloaded videos with `fetch` and want to turn them into an image dataset. Only I-frames are decoded, which avoids interpolated or blurry frames and produces the sharpest possible output.
+
+To extract keyframes with the default minimum interval of 10 seconds:
+
+```bash
+dtst extract-frames -d crowd --from videos --to frames
+```
+
+For denser extraction (one keyframe every 5 seconds):
+
+```bash
+dtst extract-frames -d crowd --from videos --to frames --keyframes 5
+```
+
+For sparser extraction on long videos (one keyframe every 30 seconds):
+
+```bash
+dtst extract-frames -d crowd --from videos --to frames --keyframes 30
+```
+
+Frames are named as `{video_stem}_{frame_number}.jpg` by default. To use PNG instead:
+
+```bash
+dtst extract-frames -d crowd --from videos --to frames --format png
+```
+
 ## Resizing images
 
 The `frame` command resizes images to a target width and/or height using high-quality Lanczos resampling. When only one dimension is given, the other is computed proportionally to preserve the aspect ratio.
@@ -257,11 +285,13 @@ After running all steps your working directory looks like this:
 crowd/
   results.jsonl       <- search output, accumulates across runs
   raw/                <- images downloaded by fetch
+  videos/             <- videos downloaded by fetch (yt-dlp)
   extra/              <- images you added manually
   faces/              <- aligned face crops from extract-faces
     *.json            <- sidecar metadata from analyze (phash, blur)
     filtered/         <- images removed by filter
     duplicated/       <- images removed by dedup
+  frames/             <- still frames extracted from videos
   augmented/          <- transformed copies from augment
   resized/            <- resized images from frame
   clusters/           <- grouped by similarity from cluster
@@ -326,6 +356,12 @@ dedup:
   from: faces
   to: duplicated
   threshold: 8
+
+extract_frames:
+  from: videos
+  to: frames
+  keyframes: 10
+  format: jpg
 
 augment:
   from: faces

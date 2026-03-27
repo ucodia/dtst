@@ -237,6 +237,11 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
             "--no-playlist",
             "--newline",
             "--socket-timeout", "60",
+            # Video-only (no audio) with fallback to best combined
+            # if separate video streams are unavailable. Prefer highest
+            # resolution, best codecs (H.264 > AV1 > VP9), highest bitrate.
+            "-f", "bv/b",
+            "-S", "res,vcodec:h264:av01:vp9,br",
             "-o", str(dest_dir / "%(id)s.%(ext)s"),
             "--no-overwrites",
         ]

@@ -483,6 +483,63 @@ def load_augment_config(path: str | Path) -> AugmentConfig:
     )
 
 
+VALID_FRAME_FORMATS = frozenset({"jpg", "png"})
+
+
+@dataclass
+class ExtractFramesConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    keyframes: float = 10.0
+    format: str = "jpg"
+
+
+def load_extract_frames_config(path: str | Path) -> ExtractFramesConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("extract_frames")
+    if not section or not isinstance(section, dict):
+        return ExtractFramesConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'extract_frames.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'extract_frames.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'extract_frames.to' must be a non-empty string")
+
+    keyframes = section.get("keyframes", 10.0)
+    if not isinstance(keyframes, (int, float)) or keyframes <= 0:
+        raise click.ClickException("'extract_frames.keyframes' must be a positive number")
+    keyframes = float(keyframes)
+
+    fmt = str(section.get("format", "jpg")).strip().lower()
+    if fmt not in VALID_FRAME_FORMATS:
+        raise click.ClickException(
+            f"Invalid frame format: {fmt!r}; valid: {sorted(VALID_FRAME_FORMATS)}"
+        )
+
+    return ExtractFramesConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+        keyframes=keyframes,
+        format=fmt,
+    )
+
+
 @dataclass
 class FrameConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
