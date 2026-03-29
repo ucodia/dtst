@@ -483,6 +483,45 @@ def load_augment_config(path: str | Path) -> AugmentConfig:
     )
 
 
+@dataclass
+class CopyConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+
+
+def load_copy_config(path: str | Path) -> CopyConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("copy")
+    if not section or not isinstance(section, dict):
+        return CopyConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'copy.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'copy.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'copy.to' must be a non-empty string")
+
+    return CopyConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+    )
+
+
 VALID_FRAME_FORMATS = frozenset({"jpg", "png"})
 
 

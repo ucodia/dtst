@@ -162,6 +162,38 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst copy { #dtst-copy data-toc-label='copy' }
+
+Copy images from one or more folders to a destination folder.
+
+Duplicates the contents of the source folders into the destination
+without any transformation. Files that already exist in the
+destination (by name) are skipped.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+    dtst copy -d ./project --from raw --to backup
+    dtst copy -d ./project --from raw,extra --to combined
+    dtst copy config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst copy [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--dry-run` | boolean | Preview what would be copied without creating files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst dedup { #dtst-dedup data-toc-label='dedup' }
 
 Deduplicate images by perceptual hash similarity.
