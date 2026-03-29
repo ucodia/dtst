@@ -68,6 +68,7 @@ def _resolve_config(
     engines: str | None,
     working_dir: Path | None,
     min_size: int | None,
+    output: str | None,
 ) -> SearchConfig:
     if config is not None:
         cfg = load_search_config(config)
@@ -84,6 +85,8 @@ def _resolve_config(
         cfg.working_dir = working_dir
     if min_size is not None:
         cfg.min_size = min_size
+    if output is not None:
+        cfg.output = output
 
     if not cfg.terms:
         raise click.ClickException("Search terms must be provided via config or --terms.")
@@ -99,7 +102,8 @@ def _resolve_config(
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
 @click.option("--suffixes", type=str, default=None, help="Comma-separated query suffixes (override config).")
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is written (default: .).")
+@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results are written (default: .).")
+@click.option("--output", "-o", type=str, default=None, help="Output filename within the working directory (default: results.jsonl).")
 @click.option("--max-pages", "-m", type=int, default=None, help="Limit pages per engine per query.")
 @click.option("--engines", "-e", type=str, default=None, help="Comma-separated engine list (override config).")
 @click.option("--dry-run", "-n", is_flag=True, help="Print query matrix and exit without searching.")
@@ -131,6 +135,7 @@ def cmd(
     terms: str | None,
     suffixes: str | None,
     working_dir: Path | None,
+    output: str | None,
     max_pages: int | None,
     engines: str | None,
     dry_run: bool,
@@ -145,8 +150,9 @@ def cmd(
     Reads an optional YAML config file and generates image URLs from
     Flickr, Serper (Google Images), Brave and Wikimedia Commons using
     an expanded query matrix of search terms and suffixes.
-    Results are deduplicated and written to results.jsonl in the working
-    directory so multiple runs accumulate new results.
+    Results are deduplicated and written to a JSONL file in the working
+    directory (default: results.jsonl) so multiple runs accumulate new
+    results.
 
     Can be invoked with just a config file, just CLI options, or both.
     When both are provided, CLI options override config file values.
@@ -164,7 +170,7 @@ def cmd(
         dtst search config.yaml --max-pages 3 --engines flickr,wikimedia
         dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
     """
-    cfg = _resolve_config(config, terms, suffixes, engines, working_dir, min_size)
+    cfg = _resolve_config(config, terms, suffixes, engines, working_dir, min_size, output)
 
     engine_list = cfg.engines
     invalid = [e for e in engine_list if e not in ENGINE_REGISTRY]
@@ -224,7 +230,7 @@ def cmd(
 
     working_dir_path = cfg.working_dir
     working_dir_path.mkdir(parents=True, exist_ok=True)
-    results_file = working_dir_path / "results.jsonl"
+    results_file = working_dir_path / cfg.output
 
     existing_results: list[dict] = []
     if results_file.exists():

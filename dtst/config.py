@@ -25,6 +25,7 @@ class SearchConfig:
     engines: list[str] = field(default_factory=list)
     working_dir: Path = field(default_factory=lambda: Path("."))
     min_size: int = 512
+    output: str = "results.jsonl"
 
     def query_matrix(self, suffix_only: bool = False) -> list[str]:
         queries: list[str] = []
@@ -81,12 +82,17 @@ def load_search_config(path: str | Path) -> SearchConfig:
     if not isinstance(min_size, int) or min_size < 0:
         raise click.ClickException("'search.min_size' must be a non-negative integer")
 
+    output = section.get("output", "results.jsonl")
+    if not isinstance(output, str) or not output.strip():
+        raise click.ClickException("'search.output' must be a non-empty string")
+
     return SearchConfig(
         terms=terms,
         suffixes=suffixes,
         engines=engines,
         working_dir=_resolve_working_dir(data, config_dir),
         min_size=min_size,
+        output=output.strip(),
     )
 
 

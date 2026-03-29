@@ -507,8 +507,9 @@ Search for images across multiple engines.
 Reads an optional YAML config file and generates image URLs from
 Flickr, Serper (Google Images), Brave and Wikimedia Commons using
 an expanded query matrix of search terms and suffixes.
-Results are deduplicated and written to results.jsonl in the working
-directory so multiple runs accumulate new results.
+Results are deduplicated and written to a JSONL file in the working
+directory (default: results.jsonl) so multiple runs accumulate new
+results.
 
 Can be invoked with just a config file, just CLI options, or both.
 When both are provided, CLI options override config file values.
@@ -537,7 +538,8 @@ dtst search [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--terms` | text | Comma-separated search terms (override config). | None |
 | `--suffixes` | text | Comma-separated query suffixes (override config). | None |
-| `--working-dir`, `-d` | path | Working directory where results.jsonl is written (default: .). | None |
+| `--working-dir`, `-d` | path | Working directory where results are written (default: .). | None |
+| `--output`, `-o` | text | Output filename within the working directory (default: results.jsonl). | None |
 | `--max-pages`, `-m` | integer | Limit pages per engine per query. | None |
 | `--engines`, `-e` | text | Comma-separated engine list (override config). | None |
 | `--dry-run`, `-n` | boolean | Print query matrix and exit without searching. | `False` |
