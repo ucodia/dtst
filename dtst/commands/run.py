@@ -9,33 +9,28 @@ from dtst.config import load_workflow_config
 logger = logging.getLogger(__name__)
 
 
-def _resolve_param_name(click_cmd, key):
-    """Map a YAML override key to the Click parameter name for a command."""
-    param_names = {p.name for p in click_cmd.params}
-    if key in param_names:
-        return key
-    if key == "from":
-        for candidate in ("from_dirs", "from_dir"):
-            if candidate in param_names:
-                return candidate
-    return None
+def _build_cli_args(step, config_path, working_dir, workflow_working_dir):
+    """Convert a workflow step into CLI argument strings for Click to parse."""
+    args = []
 
+    if step.inherit:
+        args.append(str(config_path))
 
-def _prepare_kwargs(click_cmd, overrides):
-    """Convert YAML step overrides to ctx.invoke keyword arguments."""
-    kwargs = {}
-    for key, value in overrides.items():
-        param_name = _resolve_param_name(click_cmd, key)
-        if param_name is None:
-            raise click.ClickException(
-                f"Unknown parameter '{key}' for command '{click_cmd.name}'"
-            )
-        if isinstance(value, list):
-            value = ",".join(str(v) for v in value)
-        if param_name == "working_dir" and value is not None:
-            value = Path(value)
-        kwargs[param_name] = value
-    return kwargs
+    wd = working_dir or (workflow_working_dir if not step.inherit else None)
+    if wd:
+        args.extend(["--working-dir", str(wd)])
+
+    for key, value in step.overrides.items():
+        flag = f"--{key}"
+        if isinstance(value, bool):
+            if value:
+                args.append(flag)
+        elif isinstance(value, list):
+            args.extend([flag, ",".join(str(v) for v in value)])
+        else:
+            args.extend([flag, str(value)])
+
+    return args
 
 
 @click.command("run")
@@ -112,19 +107,11 @@ def cmd(ctx, workflow, config, working_dir, dry_run):
                 click.echo(f"  [dry-run] {cmd_name}")
             continue
 
-        kwargs = _prepare_kwargs(click_cmd, step.overrides)
-
-        if step.inherit:
-            kwargs.setdefault("config", config_path)
-        else:
-            kwargs.setdefault("config", None)
-            kwargs.setdefault(
-                "working_dir", working_dir or workflow_cfg.working_dir
-            )
-
-        if working_dir is not None:
-            kwargs["working_dir"] = working_dir
-
-        ctx.invoke(click_cmd, **kwargs)
+        args = _build_cli_args(
+            step, config_path, working_dir, workflow_cfg.working_dir
+        )
+        sub_ctx = click_cmd.make_context(cmd_name, args, parent=ctx)
+        with sub_ctx:
+            click_cmd.invoke(sub_ctx)
 
     click.echo(f"\nWorkflow '{workflow}' completed ({total} steps)")
