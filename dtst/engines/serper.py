@@ -29,7 +29,7 @@ class SerperEngine(SearchEngine):
         if not self._api_key:
             logger.warning("SERPER_API_KEY not set; skipping Serper")
             return []
-        payload: dict = {"q": query, "num": 10}
+        payload: dict = {"q": query, "num": 100}
         if page > 1:
             payload["page"] = page
         headers = {

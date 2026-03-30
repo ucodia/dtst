@@ -15,9 +15,9 @@ from dtst.engines import ENGINE_REGISTRY
 logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_PAGES = {
-    "brave": 10,
+    "brave": 1,
     "flickr": 40,
-    "serper": 10,
+    "serper": 1,
     "wikimedia": 20,
 }
 
