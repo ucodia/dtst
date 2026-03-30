@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from dtst.sidecar import sidecar_path
+
 IMAGE_EXTENSIONS = frozenset(
     {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
 )
@@ -62,3 +64,11 @@ def find_videos(directory: Path, recursive: bool = False) -> list[Path]:
         for p in directory.glob(pattern)
         if p.is_file() and p.suffix.lower() in VIDEO_EXTENSIONS
     )
+
+
+def move_image(src: Path, dest: Path) -> None:
+    """Move an image and its sidecar file to a new location."""
+    src.rename(dest)
+    sc = sidecar_path(src)
+    if sc.exists():
+        sc.rename(sidecar_path(dest))

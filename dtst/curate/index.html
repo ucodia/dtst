@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dtst curate</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #1a1a1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+.header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.view-toggle {
+    display: flex;
+    background: #333;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.view-toggle button {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.view-toggle button.active {
+    background: #4a9eff;
+    color: #fff;
+}
+
+.view-toggle button:hover:not(.active) {
+    background: #444;
+    color: #ddd;
+}
+
+.stats {
+    font-size: 13px;
+    color: #999;
+    white-space: nowrap;
+}
+
+.stats span {
+    margin: 0 4px;
+}
+
+.stats .count {
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.sort-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.sort-group label {
+    font-size: 13px;
+    color: #999;
+    margin-right: 4px;
+}
+
+.btn-sort {
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.btn-sort.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+}
+
+.slider-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.slider-group label {
+    font-size: 13px;
+    color: #999;
+}
+
+.slider-group input[type="range"] {
+    width: 100px;
+    accent-color: #4a9eff;
+}
+
+.header-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.btn {
+    padding: 6px 14px;
+    border: 1px solid #555;
+    border-radius: 6px;
+    background: #333;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.btn:hover { background: #444; }
+
+.btn-apply {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #fff;
+    font-weight: 500;
+}
+
+.btn-apply:hover { background: #3a8eef; }
+
+.btn-apply:disabled {
+    background: #555;
+    border-color: #555;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.grid {
+    display: grid;
+    gap: 8px;
+    padding: 16px;
+}
+
+.cell {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, opacity 0.15s;
+}
+
+.cell.selected {
+    border-color: #4a9eff;
+}
+
+.cell:not(.selected) {
+    opacity: 0.35;
+}
+
+.cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cell .expand-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.6);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s;
+    font-size: 14px;
+    z-index: 2;
+}
+
+.cell:hover .expand-btn { opacity: 1; }
+.cell .expand-btn:hover { background: rgba(0,0,0,0.8); }
+
+.meta-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.75);
+    padding: 6px 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #ccc;
+    opacity: 0;
+    transition: opacity 0.15s;
+    max-height: 70%;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.cell:hover .meta-overlay,
+.lb-content:hover .meta-overlay { opacity: 1; }
+
+.meta-overlay .meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.meta-overlay .meta-key { color: #888; flex-shrink: 0; }
+.meta-overlay .meta-val { color: #ddd; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+.lightbox {
+    display: none;
+    position: fixed;
+    top: var(--header-height, 49px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: rgba(0,0,0,1);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.lightbox.open { display: flex; }
+
+body.lightbox-open { overflow: hidden; }
+
+.lightbox .lb-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: calc(100vh - var(--header-height, 49px) - 20px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.lightbox .lb-content img {
+    max-width: 100%;
+    max-height: calc(100vh - var(--header-height, 49px) - 20px);
+    object-fit: contain;
+    border-radius: 4px;
+    display: block;
+}
+
+.lightbox .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 28px;
+    cursor: pointer;
+    z-index: 201;
+}
+
+.lightbox .nav-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    font-size: 32px;
+    cursor: pointer;
+    padding: 12px 16px;
+    border-radius: 6px;
+    z-index: 201;
+}
+
+.lightbox .nav-btn:hover { background: rgba(255,255,255,0.2); }
+.lightbox .nav-prev { left: 16px; }
+.lightbox .nav-next { right: 16px; }
+
+.lightbox .lb-content.deselected img {
+    opacity: 0.35;
+}
+
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 60vh;
+    font-size: 16px;
+    color: #888;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div class="header-title">dtst curate</div>
+    <div class="view-toggle">
+        <button id="btn-source" class="active" onclick="switchView('source')">Source <span id="source-count"></span></button>
+        <button id="btn-filtered" onclick="switchView('filtered')">Filtered <span id="filtered-count"></span></button>
+    </div>
+    <div class="stats">
+        Total: <span class="count" id="stat-total">0</span>
+        &middot; Selected: <span class="count" id="stat-selected">0</span>
+        &middot; Filtered: <span class="count" id="stat-filtered">0</span>
+    </div>
+    <div class="sort-group">
+        <label>Sort</label>
+        <button class="btn btn-sort active" data-sort="name" onclick="setSort('name')">Name</button>
+        <button class="btn btn-sort" data-sort="resolution" onclick="setSort('resolution')">Resolution</button>
+        <button class="btn btn-sort" data-sort="size" onclick="setSort('size')">Size</button>
+    </div>
+    <div class="slider-group">
+        <label for="size-slider">Size</label>
+        <input type="range" id="size-slider" min="80" max="400" value="240" oninput="updateGridSize(this.value)">
+    </div>
+    <div class="header-actions">
+        <button class="btn" onclick="selectAll()">Select all</button>
+        <button class="btn" onclick="unselectAll()">Unselect all</button>
+        <button class="btn btn-apply" id="btn-apply" onclick="applyFilter()">Apply</button>
+    </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="lightbox" id="lightbox">
+    <button class="close-btn" onclick="closeLightbox()">&times;</button>
+    <button class="nav-btn nav-prev" onclick="navLightbox(-1)">&#8249;</button>
+    <button class="nav-btn nav-next" onclick="navLightbox(1)">&#8250;</button>
+    <div class="lb-content" id="lb-content">
+        <img id="lb-img" src="" alt="">
+        <div class="meta-overlay" id="lb-meta"></div>
+    </div>
+</div>
+
+<div class="loading" id="loading">Loading images...</div>
+
+<script>
+const state = {
+    view: "source",
+    images: [],
+    selected: new Set(),
+    filteredCount: 0,
+    sourceCount: 0,
+    lightboxIndex: -1,
+    sort: "name",
+};
+
+async function loadImages(view) {
+    const loading = document.getElementById("loading");
+    const grid = document.getElementById("grid");
+    loading.style.display = "flex";
+    grid.innerHTML = "";
+
+    const resp = await fetch("/api/images?view=" + encodeURIComponent(view));
+    const data = await resp.json();
+
+    state.view = view;
+    state.images = data.images;
+    state.filteredCount = data.filtered_count;
+    state.sourceCount = data.source_count;
+
+    state.selected.clear();
+    if (view === "source") {
+        data.images.forEach(img => state.selected.add(img.filename));
+    }
+
+    sortImages();
+    renderGrid();
+    updateCounts();
+    updateViewToggle();
+    loading.style.display = "none";
+}
+
+function sortImages() {
+    const key = state.sort;
+    state.images.sort(function(a, b) {
+        if (key === "resolution") {
+            return (b.width * b.height) - (a.width * a.height);
+        }
+        if (key === "size") {
+            return (b.file_size || 0) - (a.file_size || 0);
+        }
+        return a.filename.localeCompare(b.filename);
+    });
+}
+
+function setSort(key) {
+    state.sort = key;
+    document.querySelectorAll(".btn-sort").forEach(function(btn) {
+        btn.classList.toggle("active", btn.dataset.sort === key);
+    });
+    sortImages();
+    renderGrid();
+}
+
+function renderGrid() {
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+
+    state.images.forEach((img, index) => {
+        const cell = document.createElement("div");
+        cell.className = "cell" + (state.selected.has(img.filename) ? " selected" : "");
+        cell.dataset.filename = img.filename;
+
+        cell.innerHTML =
+            '<img src="' + escapeAttr(img.url) + '" loading="lazy" alt="' + escapeAttr(img.filename) + '">' +
+            '<button class="expand-btn" onclick="event.stopPropagation(); openLightbox(' + index + ')">&#x26F6;</button>' +
+            '<div class="meta-overlay">' + renderMeta(img.sidecar, img) + '</div>';
+
+        cell.addEventListener("click", function() { toggleSelect(img.filename); });
+        grid.appendChild(cell);
+    });
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function renderMeta(sidecar, img) {
+    let rows = '<div class="meta-row"><span class="meta-key">file</span><span class="meta-val">' + escapeHtml(img.filename) + '</span></div>';
+
+    if (img.width && img.height) {
+        rows += '<div class="meta-row"><span class="meta-key">resolution</span><span class="meta-val">' + img.width + '&times;' + img.height + '</span></div>';
+    }
+    if (img.file_size) {
+        rows += '<div class="meta-row"><span class="meta-key">file size</span><span class="meta-val">' + formatFileSize(img.file_size) + '</span></div>';
+    }
+    if (sidecar && sidecar.blur) {
+        rows += '<div class="meta-row"><span class="meta-key">blur</span><span class="meta-val">' + sidecar.blur.score + '</span></div>';
+    }
+    if (sidecar && sidecar.phash) {
+        rows += '<div class="meta-row"><span class="meta-key">phash</span><span class="meta-val">' + escapeHtml(sidecar.phash.hash) + '</span></div>';
+    }
+    if (sidecar && sidecar.tags && sidecar.tags.scores) {
+        const scores = sidecar.tags.scores;
+        const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        sorted.forEach(function(entry) {
+            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(entry[0]) + '</span><span class="meta-val">' + entry[1].toFixed(3) + '</span></div>';
+        });
+    }
+    return rows;
+}
+
+function toggleSelect(filename) {
+    if (state.selected.has(filename)) {
+        state.selected.delete(filename);
+    } else {
+        state.selected.add(filename);
+    }
+    const cell = document.querySelector('.cell[data-filename="' + CSS.escape(filename) + '"]');
+    if (cell) {
+        cell.classList.toggle("selected", state.selected.has(filename));
+    }
+    updateCounts();
+}
+
+function selectAll() {
+    state.images.forEach(img => state.selected.add(img.filename));
+    document.querySelectorAll(".cell").forEach(c => c.classList.add("selected"));
+    updateCounts();
+}
+
+function unselectAll() {
+    state.selected.clear();
+    document.querySelectorAll(".cell").forEach(c => c.classList.remove("selected"));
+    updateCounts();
+}
+
+function updateCounts() {
+    document.getElementById("stat-total").textContent = state.images.length;
+    document.getElementById("stat-selected").textContent = state.selected.size;
+    document.getElementById("stat-filtered").textContent = state.filteredCount;
+    document.getElementById("source-count").textContent = "(" + state.sourceCount + ")";
+    document.getElementById("filtered-count").textContent = "(" + state.filteredCount + ")";
+
+    const btn = document.getElementById("btn-apply");
+    let moveCount;
+    if (state.view === "source") {
+        moveCount = state.images.length - state.selected.size;
+        btn.textContent = moveCount > 0 ? "Apply (filter " + moveCount + ")" : "Apply";
+    } else {
+        moveCount = state.selected.size;
+        btn.textContent = moveCount > 0 ? "Apply (restore " + moveCount + ")" : "Apply";
+    }
+    btn.disabled = moveCount === 0;
+}
+
+function updateViewToggle() {
+    document.getElementById("btn-source").classList.toggle("active", state.view === "source");
+    document.getElementById("btn-filtered").classList.toggle("active", state.view === "filtered");
+}
+
+function updateGridSize(size) {
+    document.getElementById("grid").style.gridTemplateColumns = "repeat(auto-fill, minmax(" + size + "px, 1fr))";
+}
+
+async function switchView(view) {
+    if (view === state.view) return;
+    await loadImages(view);
+}
+
+async function applyFilter() {
+    const btn = document.getElementById("btn-apply");
+    btn.disabled = true;
+    btn.textContent = "Applying...";
+
+    const body = {
+        view: state.view,
+        selected: Array.from(state.selected),
+    };
+
+    const resp = await fetch("/api/apply", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+    });
+    const result = await resp.json();
+
+    if (result.errors && result.errors.length > 0) {
+        alert("Some files could not be moved:\n" + result.errors.join("\n"));
+    }
+
+    await loadImages(state.view);
+}
+
+function openLightbox(index) {
+    state.lightboxIndex = index;
+    const img = state.images[index];
+    document.getElementById("lb-img").src = img.url;
+    document.getElementById("lb-meta").innerHTML = renderMeta(img.sidecar, img);
+    document.getElementById("lightbox").classList.add("open");
+    document.body.classList.add("lightbox-open");
+    updateLightboxSelection();
+}
+
+function updateLightboxSelection() {
+    const content = document.getElementById("lb-content");
+    const img = state.images[state.lightboxIndex];
+    if (!img) return;
+    content.classList.toggle("deselected", !state.selected.has(img.filename));
+}
+
+function closeLightbox() {
+    document.getElementById("lightbox").classList.remove("open");
+    document.body.classList.remove("lightbox-open");
+    state.lightboxIndex = -1;
+}
+
+function navLightbox(delta) {
+    if (state.images.length === 0) return;
+    let idx = state.lightboxIndex + delta;
+    if (idx < 0) idx = state.images.length - 1;
+    if (idx >= state.images.length) idx = 0;
+    openLightbox(idx);
+}
+
+document.addEventListener("keydown", function(e) {
+    if (!document.getElementById("lightbox").classList.contains("open")) return;
+    if (e.key === "Escape") closeLightbox();
+    if (e.key === "ArrowLeft") navLightbox(-1);
+    if (e.key === "ArrowRight") navLightbox(1);
+});
+
+document.getElementById("lightbox").addEventListener("click", function(e) {
+    if (e.target === this) closeLightbox();
+});
+
+document.getElementById("lb-content").addEventListener("click", function() {
+    const img = state.images[state.lightboxIndex];
+    if (!img) return;
+    toggleSelect(img.filename);
+    updateLightboxSelection();
+});
+
+function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function escapeAttr(str) {
+    return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function measureHeader() {
+    const h = document.querySelector(".header").offsetHeight;
+    document.documentElement.style.setProperty("--header-height", h + "px");
+}
+measureHeader();
+window.addEventListener("resize", measureHeader);
+
+updateGridSize(240);
+loadImages("source");
+</script>
+</body>
+</html>

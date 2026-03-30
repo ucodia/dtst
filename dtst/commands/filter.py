@@ -9,8 +9,8 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FilterConfig, load_filter_config
-from dtst.files import find_images
-from dtst.sidecar import read_sidecar, sidecar_path
+from dtst.files import find_images, move_image
+from dtst.sidecar import read_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +161,7 @@ def cmd(
                     if dest.exists():
                         logger.warning("Skipping %s (already exists in source)", path.name)
                     else:
-                        path.rename(dest)
-                        sc = sidecar_path(path)
-                        if sc.exists():
-                            sc.rename(sidecar_path(dest))
+                        move_image(path, dest)
                         restored += 1
                     pbar.update(1)
 
@@ -303,10 +300,7 @@ def cmd(
             for path, reason in rejects.items():
                 try:
                     dest = filtered_dir / path.name
-                    path.rename(dest)
-                    sc = sidecar_path(path)
-                    if sc.exists():
-                        sc.rename(sidecar_path(dest))
+                    move_image(path, dest)
                     moved += 1
                     logger.debug("Filtered %s (%s)", path.name, reason)
                 except OSError as e:

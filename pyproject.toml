@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.3.1",
+    "fastapi>=0.115.0",
     "dlib>=20.0.0",
     "hdbscan>=0.8.41",
     "imagehash>=4.3.2",
@@ -23,6 +24,7 @@ dependencies = [
     "scipy>=1.17.1",
     "torch>=2.10.0",
     "tqdm>=4.67.3",
+    "uvicorn>=0.34.0",
 ]
 
 [project.scripts]

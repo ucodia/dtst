@@ -724,6 +724,42 @@ def load_frame_config(path: str | Path) -> FrameConfig:
 
 
 @dataclass
+class CurateConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dir: str | None = None
+    to: str = "filtered_manual"
+    port: int = 8888
+
+
+def load_curate_config(path: str | Path) -> CurateConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("curate")
+    if not section or not isinstance(section, dict):
+        return CurateConfig(working_dir=resolved_working_dir)
+
+    from_dir = section.get("from")
+    if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
+        raise click.ClickException("'curate.from' must be a non-empty string")
+
+    to = section.get("to", "filtered_manual")
+    if not isinstance(to, str) or not to.strip():
+        raise click.ClickException("'curate.to' must be a non-empty string")
+
+    port = section.get("port", 8888)
+    if not isinstance(port, int) or port < 1 or port > 65535:
+        raise click.ClickException("'curate.port' must be an integer between 1 and 65535")
+
+    return CurateConfig(
+        working_dir=resolved_working_dir,
+        from_dir=from_dir.strip() if from_dir else None,
+        to=to.strip(),
+        port=port,
+    )
+
+
+@dataclass
 class WorkflowStep:
     command: str | None = None
     exec: str | None = None
