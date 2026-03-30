@@ -236,6 +236,7 @@ class ClusterConfig:
     min_samples: int = 2
     batch_size: int = 32
     no_cache: bool = False
+    clean: bool = False
 
 
 def load_cluster_config(path: str | Path) -> ClusterConfig:
@@ -269,6 +270,10 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
     if not isinstance(batch_size, int) or batch_size < 1:
         raise click.ClickException("'cluster.batch_size' must be a positive integer")
 
+    clean = section.get("clean", False)
+    if not isinstance(clean, bool):
+        raise click.ClickException("'cluster.clean' must be a boolean")
+
     from_raw = section.get("from")
     if from_raw is not None:
         if isinstance(from_raw, list):
@@ -295,6 +300,7 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
         batch_size=batch_size,
+        clean=clean,
     )
 
 

@@ -31,6 +31,7 @@ def _resolve_config(
     min_samples: int | None,
     batch_size: int | None,
     no_cache: bool = False,
+    clean: bool = False,
 ) -> ClusterConfig:
     if config is not None:
         cfg = load_cluster_config(config)
@@ -55,6 +56,8 @@ def _resolve_config(
         cfg.batch_size = batch_size
     if no_cache:
         cfg.no_cache = True
+    if clean:
+        cfg.clean = True
 
     if cfg.from_dirs is None:
         raise click.ClickException("--from is required (or set 'cluster.from' in config)")
@@ -76,6 +79,7 @@ def _resolve_config(
 @click.option("--batch-size", "-b", type=int, default=None, help="Images per inference batch (default: 32).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of workers for image preloading (default: CPU count).")
 @click.option("--no-cache", is_flag=True, help="Skip the embedding cache and recompute from scratch.")
+@click.option("--clean", is_flag=True, help="Remove the output directory before writing new clusters.")
 @click.option("--dry-run", is_flag=True, help="Show image count and configuration without clustering.")
 def cmd(
     config: Path | None,
@@ -89,6 +93,7 @@ def cmd(
     batch_size: int | None,
     workers: int | None,
     no_cache: bool,
+    clean: bool,
     dry_run: bool,
 ) -> None:
     """Cluster images by visual similarity.
@@ -135,7 +140,7 @@ def cmd(
 
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, model, top,
-        min_cluster_size, min_samples, batch_size, no_cache,
+        min_cluster_size, min_samples, batch_size, no_cache, clean,
     )
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
@@ -251,6 +256,10 @@ def cmd(
         cluster_info = cluster_info[: cfg.top]
 
     # --- Write output --------------------------------------------------------
+
+    if cfg.clean and output_dir.exists():
+        shutil.rmtree(output_dir)
+        logger.info("Cleaned output directory: %s", output_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     copied = 0

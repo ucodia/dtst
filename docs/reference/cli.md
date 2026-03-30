@@ -159,6 +159,7 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--batch-size`, `-b` | integer | Images per inference batch (default: 32). | None |
 | `--workers`, `-w` | integer | Number of workers for image preloading (default: CPU count). | None |
 | `--no-cache` | boolean | Skip the embedding cache and recompute from scratch. | `False` |
+| `--clean` | boolean | Remove the output directory before writing new clusters. | `False` |
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
