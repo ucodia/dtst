@@ -66,8 +66,6 @@ YTDLP_DOMAINS = frozenset({
     "www.bilibili.com",
     "nicovideo.jp",
     "www.nicovideo.jp",
-    "tiktok.com",
-    "www.tiktok.com",
 })
 
 
