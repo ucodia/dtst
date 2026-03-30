@@ -72,7 +72,7 @@ When both are provided, CLI options override config file values.
 Config files use YAML with `working_dir` at the top level and parameters nested under command-specific keys:
 
 ```yaml
-working_dir: "./chanterelle"
+working_dir: "./scratch/chanterelle"
 
 fetch:
   to: raw

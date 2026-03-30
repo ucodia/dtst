@@ -313,7 +313,7 @@ For repeatable pipelines, collect your parameters into a YAML config file:
 
 ```yaml
 # crowd.yaml
-working_dir: "./crowd"
+working_dir: "./scratch/crowd"
 
 search:
   terms:
