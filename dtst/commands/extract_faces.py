@@ -11,7 +11,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import ExtractFacesConfig, load_extract_faces_config
-from dtst.images import find_images
+from dtst.files import find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ def _resolve_config(
 @click.command("extract-faces")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--max-size", "-M", type=int, default=None, help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).")
 @click.option("--engine", "-e", type=click.Choice(["mediapipe", "dlib"], case_sensitive=False), default=None, help="Face detection engine (default: mediapipe).")
@@ -187,7 +187,7 @@ def cmd(
         skip_partial, refine_landmarks, debug,
     )
 
-    input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
+    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]

@@ -9,6 +9,25 @@ VIDEO_EXTENSIONS = frozenset(
 )
 
 
+def resolve_dirs(working_dir: Path, names: list[str]) -> list[Path]:
+    """Expand folder names relative to *working_dir*, supporting globs.
+
+    Literal names (e.g. ``"raw"``) resolve to a single path.  Patterns
+    containing ``*`` or ``?`` (e.g. ``"images/*"``) are expanded via
+    :meth:`Path.glob` and only existing directories are kept.  Results
+    are returned in sorted order with duplicates removed.
+    """
+    dirs: dict[Path, None] = {}
+    for name in names:
+        if "*" in name or "?" in name:
+            for p in sorted(working_dir.glob(name)):
+                if p.is_dir():
+                    dirs[p] = None
+        else:
+            dirs[working_dir / name] = None
+    return list(dirs)
+
+
 def find_images(directory: Path, recursive: bool = False) -> list[Path]:
     """Return sorted list of image files in *directory*.
 

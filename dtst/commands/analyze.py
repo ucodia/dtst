@@ -11,7 +11,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import AnalyzeConfig, load_analyze_config
-from dtst.images import find_images
+from dtst.files import find_images, resolve_dirs
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
     "from_dirs",
     type=str,
     default=None,
-    help="Comma-separated source folder names.",
+    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
 )
 @click.option("--phash", is_flag=True, default=False, help="Compute perceptual hash for each image.")
 @click.option("--blur", is_flag=True, default=False, help="Compute blur score (Laplacian variance) for each image.")
@@ -123,10 +123,11 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
 
     working = cfg.working_dir.resolve()
 
+    input_dirs = resolve_dirs(working, cfg.from_dirs)
+
     if clear:
         all_images: list[Path] = []
-        for d in cfg.from_dirs:
-            src = working / d
+        for src in input_dirs:
             if not src.is_dir():
                 logger.warning("Source directory does not exist, skipping: %s", src)
                 continue
@@ -170,8 +171,7 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         analyzers.append("blur")
 
     all_images: list[Path] = []
-    for d in cfg.from_dirs:
-        src = working / d
+    for src in input_dirs:
         if not src.is_dir():
             logger.warning("Source directory does not exist, skipping: %s", src)
             continue

@@ -15,7 +15,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from dtst.cache import load_embeddings, save_embeddings
 from dtst.config import ClusterConfig, load_cluster_config
 from dtst.embeddings import VALID_MODELS, detect_device, get_backend
-from dtst.images import find_images
+from dtst.files import find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def _resolve_config(
 @click.command("cluster")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", "-t", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--model", "-m", type=click.Choice(sorted(VALID_MODELS), case_sensitive=False), default=None, help="Embedding model for similarity (default: arcface).")
 @click.option("--top", "-n", type=int, default=None, help="Maximum number of clusters to output; omit for all clusters.")
@@ -138,7 +138,7 @@ def cmd(
         min_cluster_size, min_samples, batch_size, no_cache,
     )
 
-    input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
+    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]

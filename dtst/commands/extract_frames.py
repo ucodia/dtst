@@ -15,7 +15,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import VALID_FRAME_FORMATS, ExtractFramesConfig, load_extract_frames_config
-from dtst.images import find_videos
+from dtst.files import find_videos, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ def _check_ffmpeg() -> bool:
 @click.command("extract-frames")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--keyframes", "-k", type=float, default=None, help="Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10).")
 @click.option("--format", "-F", "fmt", type=click.Choice(sorted(VALID_FRAME_FORMATS), case_sensitive=False), default=None, help="Output image format (default: jpg).")
@@ -230,7 +230,7 @@ def cmd(
             "ffmpeg is not installed or not on PATH. Install it with: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         )
 
-    input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
+    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]

@@ -89,7 +89,7 @@ extract_faces:
 
 - Always provide a short flag alias for frequently used options (`-d`, `-w`, `-t`)
 - Use `--working-dir` / `-d` for the working directory on all pipeline commands
-- Use `--from` for augmenting commands that accept input folder names (comma-separated, maps to `from_dirs` in Python since `from` is a keyword)
+- Use `--from` for augmenting commands that accept input folder names (comma-separated, supports globs like `images/*`, maps to `from_dirs` in Python since `from` is a keyword). Glob expansion is handled by `resolve_dirs()` in `dtst/files.py`.
 - Use `--to` for sourcing and augmenting commands that write to an output folder
 - Use `click.Path(path_type=Path)` so paths arrive as `Path` objects
 - Use `click.Path(exists=True)` for inputs that must already exist

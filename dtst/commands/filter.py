@@ -9,7 +9,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FilterConfig, load_filter_config
-from dtst.images import find_images
+from dtst.files import find_images
 from dtst.sidecar import read_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)

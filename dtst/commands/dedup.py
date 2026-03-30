@@ -12,7 +12,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import DedupConfig, load_dedup_config
-from dtst.images import find_images
+from dtst.files import find_images
 from dtst.sidecar import read_all_sidecars, sidecar_path
 
 logger = logging.getLogger(__name__)

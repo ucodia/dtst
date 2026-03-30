@@ -11,7 +11,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FrameConfig, load_frame_config
-from dtst.images import find_images
+from dtst.files import find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def _resolve_config(
 @click.command("frame")
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folder names within the working directory.")
+@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--width", "-W", type=int, default=None, help="Target width in pixels. If --height is omitted, aspect ratio is preserved.")
 @click.option("--height", "-H", type=int, default=None, help="Target height in pixels. If --width is omitted, aspect ratio is preserved.")
@@ -144,7 +144,7 @@ def cmd(
 
     cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, width, height)
 
-    input_dirs = [cfg.working_dir / d for d in cfg.from_dirs]
+    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]

@@ -45,7 +45,7 @@ dtst analyze [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folder names. | None |
+| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
 | `--phash` | boolean | Compute perceptual hash for each image. | `False` |
 | `--blur` | boolean | Compute blur score (Laplacian variance) for each image. | `False` |
 | `--force` | boolean | Recompute all analyzers even if sidecar data already exists. | `False` |
@@ -92,7 +92,7 @@ dtst augment [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--flipX` | boolean | Apply horizontal flip. | `False` |
 | `--flipY` | boolean | Apply vertical flip. | `False` |
@@ -150,7 +150,7 @@ dtst cluster [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to`, `-t` | text | Destination folder name within the working directory. | None |
 | `--model`, `-m` | choice (`arcface` &#x7C; `clip`) | Embedding model for similarity (default: arcface). | None |
 | `--top`, `-n` | integer | Maximum number of clusters to output; omit for all clusters. | None |
@@ -189,7 +189,7 @@ dtst copy [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--dry-run` | boolean | Preview what would be copied without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
@@ -270,7 +270,7 @@ dtst extract-faces [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--max-size`, `-M` | integer | Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit). | None |
 | `--engine`, `-e` | choice (`mediapipe` &#x7C; `dlib`) | Face detection engine (default: mediapipe). | None |
@@ -322,7 +322,7 @@ dtst extract-frames [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--keyframes`, `-k` | float | Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10). | None |
 | `--format`, `-F` | choice (`jpg` &#x7C; `png`) | Output image format (default: jpg). | None |
@@ -463,7 +463,7 @@ dtst frame [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folder names within the working directory. | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--width`, `-W` | integer | Target width in pixels. If --height is omitted, aspect ratio is preserved. | None |
 | `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
