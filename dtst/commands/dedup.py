@@ -316,7 +316,8 @@ def cmd(
             losers.append((loser, reason))
 
     if dry_run:
-        click.echo(f"\nDry run -- would move {len(losers):,} duplicates from {len(dup_groups):,} groups")
+        kept = len(valid_images) - len(losers)
+        click.echo(f"\nDry run -- would keep {kept:,}, move {len(losers):,} duplicates from {len(dup_groups):,} groups")
         for path, reason in losers[:10]:
             click.echo(f"  {path.name} ({reason})")
         if len(losers) > 10:
