@@ -20,7 +20,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FetchConfig, load_fetch_config
 from dtst.throttle import DomainThrottler
-from dtst.urls import canonicalize_image_url
+from dtst.urls import canonicalize_image_url, clean_image_url
 from dtst.user_agent import get_user_agent
 
 logger = logging.getLogger(__name__)
@@ -91,8 +91,12 @@ def _is_ytdlp_url(url: str) -> bool:
 def _attempt_download(
     url: str, timeout: int, throttler: DomainThrottler, domain: str, max_wait: float | None,
 ) -> requests.Response | None:
-    url_clean = url.split("?")[0]
-    for attempt_url in (url_clean, url):
+    url_clean = clean_image_url(url)
+    if url_clean == url:
+        attempt_urls = (url,)
+    else:
+        attempt_urls = (url_clean, url)
+    for attempt_url in attempt_urls:
         for retry in range(MAX_RETRIES):
             throttler.acquire(domain)
             try:
