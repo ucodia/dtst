@@ -390,7 +390,7 @@ def _check_ytdlp() -> bool:
 @click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where input is read from and media is written to (default: .).")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--input", "-i", "input_file", type=str, default=None, help="Input file name relative to the working directory (default: results.jsonl). Supports .jsonl and .txt formats.")
+@click.option("--input", "-i", "input_file", type=str, default=None, help="Input file name relative to the working directory. Supports .jsonl and .txt formats.")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; only applies to .jsonl input (default: 512).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count for images, 2 for video).")
 @click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
@@ -413,9 +413,8 @@ def cmd(
 ) -> None:
     """Download images and videos from a URL list.
 
-    By default, reads results.jsonl from the working directory, which
-    is the output of ``dtst search``. Alternatively, pass --input to
-    read from a different file. Two formats are supported:
+    Reads a URL list from the working directory specified by --input.
+    Two formats are supported:
 
     \b
       .jsonl  JSON Lines with a "url" field per line (search output).
@@ -452,7 +451,9 @@ def cmd(
     cfg = _resolve_config(config, working_dir, to, input_file, min_size, license_filter)
 
     # Determine input file and format
-    input_name = cfg.input or "results.jsonl"
+    if cfg.input is None:
+        raise click.ClickException("--input is required (or set 'fetch.input' in config)")
+    input_name = cfg.input
     input_path = cfg.working_dir / input_name
     input_ext = Path(input_name).suffix.lower()
 

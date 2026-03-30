@@ -334,9 +334,8 @@ dtst extract-frames [OPTIONS] [CONFIG]
 
 Download images and videos from a URL list.
 
-By default, reads results.jsonl from the working directory, which
-is the output of ``dtst search``. Alternatively, pass --input to
-read from a different file. Two formats are supported:
+Reads a URL list from the working directory specified by --input.
+Two formats are supported:
 
   .jsonl  JSON Lines with a "url" field per line (search output).
           Supports --min-size and --license filtering.
@@ -375,7 +374,7 @@ dtst fetch [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Working directory where input is read from and media is written to (default: .). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
-| `--input`, `-i` | text | Input file name relative to the working directory (default: results.jsonl). Supports .jsonl and .txt formats. | None |
+| `--input`, `-i` | text | Input file name relative to the working directory. Supports .jsonl and .txt formats. | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; only applies to .jsonl input (default: 512). | None |
 | `--workers`, `-w` | integer | Number of parallel download threads (default: CPU count for images, 2 for video). | None |
 | `--timeout`, `-t` | integer | Per-request timeout in seconds. | `30` |
