@@ -45,6 +45,8 @@ def _resolve_config(
     to: str | None,
     min_size: int | None,
     min_blur: float | None,
+    max_tag: tuple[tuple[str, float], ...] | None = None,
+    min_tag: tuple[tuple[str, float], ...] | None = None,
 ) -> FilterConfig:
     if config is not None:
         cfg = load_filter_config(config)
@@ -61,6 +63,10 @@ def _resolve_config(
         cfg.min_size = min_size
     if min_blur is not None:
         cfg.min_blur = min_blur
+    if max_tag:
+        cfg.max_tag = list(max_tag)
+    if min_tag:
+        cfg.min_tag = list(min_tag)
 
     return cfg
 
@@ -72,6 +78,8 @@ def _resolve_config(
 @click.option("--to", type=str, default=None, help="Subfolder name for rejected images.", show_default="filtered")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; images smaller are filtered out.")
 @click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry.")
+@click.option("--max-tag", type=(str, float), multiple=True, default=(), help="Reject images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25).")
+@click.option("--min-tag", type=(str, float), multiple=True, default=(), help="Reject images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--clear", is_flag=True, help="Restore all filtered images back to the source folder.")
 @click.option("--dry-run", is_flag=True, help="Show what would be filtered without moving anything.")
@@ -82,6 +90,8 @@ def cmd(
     to: str | None,
     min_size: int | None,
     min_blur: float | None,
+    max_tag: tuple[tuple[str, float], ...],
+    min_tag: tuple[tuple[str, float], ...],
     workers: int | None,
     clear: bool,
     dry_run: bool,
@@ -105,16 +115,18 @@ def cmd(
         dtst filter -d ./project --from faces --min-size 256
         dtst filter -d ./project --from faces --min-blur 50
         dtst filter -d ./project --from faces --min-size 256 --min-blur 50
+        dtst filter -d ./project --from raw --max-tag microphone 0.25
+        dtst filter -d ./project --from raw --max-tag illustration 0.2 --min-tag photograph 0.2
         dtst filter -d ./project --from faces --to rejects --min-size 256
         dtst filter config.yaml --min-size 128
         dtst filter -d ./project --from faces --clear
         dtst filter -d ./project --from faces --min-size 256 --dry-run
     """
-    has_criteria = min_size is not None or min_blur is not None
+    has_criteria = min_size is not None or min_blur is not None or max_tag or min_tag
     if clear and has_criteria:
         raise click.ClickException("--clear cannot be combined with filter criteria")
 
-    cfg = _resolve_config(config, working_dir, from_dir, to, min_size, min_blur)
+    cfg = _resolve_config(config, working_dir, from_dir, to, min_size, min_blur, max_tag, min_tag)
 
     if cfg.from_dir is None:
         raise click.ClickException("--from is required (or set 'filter.from' in config)")
@@ -168,8 +180,8 @@ def cmd(
 
     # --- Filter mode ---------------------------------------------------------
 
-    if cfg.min_size is None and cfg.min_blur is None:
-        raise click.ClickException("No filter criteria specified (use --min-size, --min-blur, or check config)")
+    if cfg.min_size is None and cfg.min_blur is None and not cfg.max_tag and not cfg.min_tag:
+        raise click.ClickException("No filter criteria specified (use --min-size, --min-blur, --max-tag, --min-tag, or check config)")
 
     images = find_images(source_dir)
     if not images:
@@ -182,6 +194,12 @@ def cmd(
         criteria_parts.append(f"min_size={cfg.min_size}")
     if cfg.min_blur is not None:
         criteria_parts.append(f"min_blur={cfg.min_blur}")
+    if cfg.max_tag:
+        for label, threshold in cfg.max_tag:
+            criteria_parts.append(f"max_tag({label})={threshold}")
+    if cfg.min_tag:
+        for label, threshold in cfg.min_tag:
+            criteria_parts.append(f"min_tag({label})={threshold}")
     logger.info("Filtering %d images in %s (%s)", len(images), source_dir, ", ".join(criteria_parts))
 
     rejects: dict[Path, str] = {}
@@ -230,6 +248,36 @@ def cmd(
             if score < cfg.min_blur:
                 rejects[img_path] = f"too blurry (score={score:.2f})"
                 kept_set.discard(img_path)
+
+    # --- Tag check (sidecar lookup, no parallelism needed) ------------------
+
+    if cfg.max_tag or cfg.min_tag:
+        remaining = sorted(kept_set)
+        for img_path in remaining:
+            sidecar = read_sidecar(img_path)
+            tags_data = sidecar.get("tags")
+            if tags_data is None:
+                logger.warning("No tag data in sidecar for %s, skipping tag check", img_path.name)
+                continue
+            scores = tags_data.get("scores", {})
+
+            rejected = False
+            if cfg.max_tag:
+                for label, threshold in cfg.max_tag:
+                    score = scores.get(label)
+                    if score is not None and score >= threshold:
+                        rejects[img_path] = f"tag '{label}' score {score:.3f} >= {threshold}"
+                        kept_set.discard(img_path)
+                        rejected = True
+                        break
+
+            if not rejected and cfg.min_tag:
+                for label, threshold in cfg.min_tag:
+                    score = scores.get(label)
+                    if score is not None and score < threshold:
+                        rejects[img_path] = f"tag '{label}' score {score:.3f} < {threshold}"
+                        kept_set.discard(img_path)
+                        break
 
     # --- Results -------------------------------------------------------------
 

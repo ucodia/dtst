@@ -305,6 +305,26 @@ class FilterConfig:
     to: str = "filtered"
     min_size: int | None = None
     min_blur: float | None = None
+    max_tag: list[tuple[str, float]] | None = None
+    min_tag: list[tuple[str, float]] | None = None
+
+
+def _parse_tag_thresholds(
+    section: dict, key: str
+) -> list[tuple[str, float]] | None:
+    raw = section.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise click.ClickException(f"'filter.{key}' must be a mapping of label to threshold")
+    result = []
+    for label, threshold in raw.items():
+        if not isinstance(label, str) or not label.strip():
+            raise click.ClickException(f"'filter.{key}' keys must be non-empty strings")
+        if not isinstance(threshold, (int, float)):
+            raise click.ClickException(f"'filter.{key}.{label}' must be a number")
+        result.append((label.strip(), float(threshold)))
+    return result if result else None
 
 
 def load_filter_config(path: str | Path) -> FilterConfig:
@@ -336,12 +356,71 @@ def load_filter_config(path: str | Path) -> FilterConfig:
             raise click.ClickException("'filter.min_blur' must be a non-negative number")
         min_blur = float(min_blur)
 
+    max_tag = _parse_tag_thresholds(section, "max_tag")
+    min_tag = _parse_tag_thresholds(section, "min_tag")
+
     return FilterConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir,
         to=to.strip(),
         min_size=min_size,
         min_blur=min_blur,
+        max_tag=max_tag,
+        min_tag=min_tag,
+    )
+
+
+@dataclass
+class TagConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    labels: list[str] | None = None
+    batch_size: int = 32
+
+
+def load_tag_config(path: str | Path) -> TagConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("tag")
+    if not section or not isinstance(section, dict):
+        return TagConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'tag.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'tag.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    labels_raw = section.get("labels")
+    if labels_raw is not None:
+        if isinstance(labels_raw, list):
+            labels = [str(l).strip() for l in labels_raw if str(l).strip()]
+        elif isinstance(labels_raw, str):
+            labels = [l.strip() for l in labels_raw.split(",") if l.strip()]
+        else:
+            raise click.ClickException("'tag.labels' must be a string or list of strings")
+        if not labels:
+            raise click.ClickException("'tag.labels' must contain at least one label")
+    else:
+        labels = None
+
+    batch_size = section.get("batch_size", 32)
+    if not isinstance(batch_size, int) or batch_size < 1:
+        raise click.ClickException("'tag.batch_size' must be a positive integer")
+
+    return TagConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        labels=labels,
+        batch_size=batch_size,
     )
 
 
