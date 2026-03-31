@@ -2,6 +2,26 @@
 site_name = "dtst"
 repo_url = "https://github.com/Ucodia/dtst"
 repo_name = "Ucodia/dtst"
+nav = [
+  { "Home" = "index.md" },
+  { "Tutorial" = [
+    { "Overview" = "tutorial/index.md" },
+    { "Collecting images" = "tutorial/collecting-images.md" },
+    { "Extracting features" = "tutorial/extracting-features.md" },
+    { "Selecting and refining" = "tutorial/selecting-and-refining.md" },
+    { "Final preparation" = "tutorial/final-preparation.md" },
+  ] },
+  { "Advanced" = [
+    { "Configuration" = "advanced/configuration.md" },
+    { "Workflows" = "advanced/workflows.md" },
+  ] },
+  { "Reference" = [
+    { "CLI" = "reference/cli.md" },
+  ] },
+]
+
+[project.theme]
+features = ["navigation.footer"]
 
 [project.markdown_extensions.attr_list]
 [project.markdown_extensions.pymdownx.highlight]

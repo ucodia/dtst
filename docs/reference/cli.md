@@ -275,8 +275,8 @@ Extract aligned face crops from images.
 
 Detects faces in each image using MediaPipe (default) or dlib,
 then produces an aligned and cropped face image for each detection.
-The alignment normalises eye and mouth positions using the FFHQ
-alignment technique.
+The alignment normalises eye and mouth positions for consistent
+face crops.
 
 Reads images from one or more source folders within the working
 directory and writes face crops to a destination folder. Multiple
