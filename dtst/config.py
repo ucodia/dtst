@@ -727,7 +727,7 @@ def load_frame_config(path: str | Path) -> FrameConfig:
 class ReviewConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dir: str | None = None
-    to: str = "filtered_manual"
+    to: str = "rejected"
     port: int = 8888
 
 
@@ -743,7 +743,7 @@ def load_review_config(path: str | Path) -> ReviewConfig:
     if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
         raise click.ClickException("'review.from' must be a non-empty string")
 
-    to = section.get("to", "filtered_manual")
+    to = section.get("to", "rejected")
     if not isinstance(to, str) or not to.strip():
         raise click.ClickException("'review.to' must be a non-empty string")
 

@@ -50,7 +50,7 @@ scratch/
       noise/
     select/
       filtered/
-      filtered_manual/
+      rejected/
       duplicated/
     final/
       1024/

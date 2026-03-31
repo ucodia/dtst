@@ -51,7 +51,7 @@ def _resolve_config(
     type=str,
     default=None,
     help="Subfolder name for filtered images.",
-    show_default="filtered_manual",
+    show_default="rejected",
 )
 @click.option(
     "--port",

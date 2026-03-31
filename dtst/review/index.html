@@ -465,7 +465,7 @@ body.lightbox-open { overflow: hidden; }
         <div class="picker-field">
             <label for="picker-to">Destination bucket</label>
             <select id="picker-to">
-                <option value="filtered_manual" selected>filtered_manual</option>
+                <option value="rejected" selected>rejected</option>
             </select>
         </div>
         <div class="picker-actions">
@@ -765,7 +765,7 @@ async function showPicker() {
         sel.appendChild(opt);
     });
 
-    document.getElementById("picker-to").innerHTML = '<option value="filtered_manual" selected>filtered_manual</option>';
+    document.getElementById("picker-to").innerHTML = '<option value="rejected" selected>rejected</option>';
     document.getElementById("picker-start").disabled = true;
 }
 
@@ -787,20 +787,20 @@ function onPickerFromChange() {
     const seen = new Set();
     toSel.innerHTML = "";
 
-    if (!subdirs.includes("filtered_manual")) {
+    if (!subdirs.includes("rejected")) {
         const opt = document.createElement("option");
-        opt.value = "filtered_manual";
-        opt.textContent = "filtered_manual";
+        opt.value = "rejected";
+        opt.textContent = "rejected";
         opt.selected = true;
         toSel.appendChild(opt);
-        seen.add("filtered_manual");
+        seen.add("rejected");
     }
 
     subdirs.forEach(function(name) {
         const opt = document.createElement("option");
         opt.value = name;
         opt.textContent = name;
-        if (name === "filtered_manual") opt.selected = true;
+        if (name === "rejected") opt.selected = true;
         toSel.appendChild(opt);
         seen.add(name);
     });

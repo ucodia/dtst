@@ -135,6 +135,6 @@ scratch/
     select/               <- reviewed and deduplicated
       *.json              <- sidecar metadata (phash, blur, tags)
       filtered/           <- images removed by filter
-      filtered_manual/    <- images removed by review
+      rejected/           <- images removed by review
       duplicated/         <- images removed by dedup
 ```
