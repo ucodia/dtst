@@ -23,6 +23,12 @@ A curated image dataset starting from the search term "crowd". The pipeline goes
 
 Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and step 12 in [Final preparation](final-preparation.md).
 
+## Buckets
+
+Every `dtst` command reads from and writes to **buckets** — named folders within the working directory. A bucket is just a plain directory on disk. There is nothing to register or configure: drop files into a folder and it becomes a bucket. You can browse buckets in the file explorer, manually add or remove files, and the tools will pick up whatever is there.
+
+Commands reference buckets through `--from` and `--to` flags. The `--from` flag accepts comma-separated names and supports globs (e.g. `images/*` to match all subfolders of `images/`).
+
 ## The directory structure
 
 As you work through the steps, your working directory grows into this layout:
@@ -43,13 +49,14 @@ scratch/
       001/
       noise/
     select/
+      filtered/
+      filtered_manual/
+      duplicated/
     final/
       1024/
       512/
       256/
 ```
-
-Each folder is a plain directory on disk. You can open it in a file explorer, manually add or remove files, and the tools will pick up whatever is there.
 
 ## Prerequisites
 

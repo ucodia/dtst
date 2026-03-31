@@ -9,7 +9,7 @@ Browse the cluster folders in your file explorer. Each numbered folder contains 
 Use the `copy` command to consolidate chosen clusters into a `select/` folder:
 
 ```bash
-dtst copy -d scratch/crowd --from cluster/000,cluster/001,cluster/003 --to select
+dtst copy -d scratch/crowd --from cluster/000 --to select
 ```
 
 This copies images without any transformation. Files that already exist by name in the destination are skipped. The original cluster output stays intact so you can experiment with different selections.
@@ -17,7 +17,7 @@ This copies images without any transformation. Files that already exist by name 
 To preview what would be copied:
 
 ```bash
-dtst copy -d scratch/crowd --from cluster/000,cluster/001 --to select --dry-run
+dtst copy -d scratch/crowd --from cluster/000 --to select --dry-run
 ```
 
 ## Analyze
@@ -134,6 +134,7 @@ scratch/
       noise/
     select/               <- reviewed and deduplicated
       *.json              <- sidecar metadata (phash, blur, tags)
-      filtered/           <- images removed by filter/review
+      filtered/           <- images removed by filter
+      filtered_manual/    <- images removed by review
       duplicated/         <- images removed by dedup
 ```
