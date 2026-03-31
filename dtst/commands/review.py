@@ -93,26 +93,31 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
     """
     cfg = _resolve_config(config, working_dir, from_dir, to, port)
 
-    if cfg.from_dir is None:
-        raise click.ClickException("--from is required (or set 'review.from' in config)")
-
     working = cfg.working_dir.resolve()
-    source_dir = working / cfg.from_dir
-    filtered_dir = source_dir / cfg.to
 
-    if not source_dir.is_dir():
-        raise click.ClickException(f"Source directory does not exist: {source_dir}")
+    if cfg.from_dir is not None:
+        source = working / cfg.from_dir
+        if not source.is_dir():
+            raise click.ClickException(f"Source directory does not exist: {source}")
+        filtered = source / cfg.to
+    else:
+        source = None
+        filtered = None
 
     import uvicorn
 
     from dtst.review.server import create_app
 
-    app = create_app(source_dir, filtered_dir)
+    app = create_app(working, source, filtered)
 
     url = f"http://localhost:{cfg.port}"
     click.echo(f"Starting review server at {url}")
-    click.echo(f"  Source: {source_dir}")
-    click.echo(f"  Filtered: {filtered_dir}")
+    if source is not None:
+        click.echo(f"  Source: {source}")
+        click.echo(f"  Filtered: {filtered}")
+    else:
+        click.echo(f"  Working dir: {working}")
+        click.echo("  Select buckets in the browser to begin.")
     click.echo("  Press Ctrl+C to stop.\n")
 
     if not no_open:

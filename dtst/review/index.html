@@ -313,12 +313,108 @@ body.lightbox-open { overflow: hidden; }
     font-size: 16px;
     color: #888;
 }
+
+.picker-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.picker-overlay.hidden { display: none; }
+
+.picker-card {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 32px 40px;
+    min-width: 360px;
+    max-width: 440px;
+}
+
+.picker-card h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 24px;
+}
+
+.picker-field {
+    margin-bottom: 16px;
+}
+
+.picker-field label {
+    display: block;
+    font-size: 13px;
+    color: #999;
+    margin-bottom: 6px;
+}
+
+.picker-field select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #333;
+    color: #e0e0e0;
+    font-size: 14px;
+    appearance: auto;
+}
+
+.picker-field select:focus {
+    outline: none;
+    border-color: #4a9eff;
+}
+
+.picker-actions {
+    margin-top: 24px;
+    text-align: right;
+}
+
+.bucket-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #999;
+    white-space: nowrap;
+}
+
+.bucket-info .bucket-label {
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.bucket-info .btn-change {
+    padding: 2px 8px;
+    font-size: 12px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: transparent;
+    color: #999;
+    cursor: pointer;
+}
+
+.bucket-info .btn-change:hover {
+    background: #333;
+    color: #e0e0e0;
+}
 </style>
 </head>
 <body>
 
 <div class="header">
     <div class="header-title">dtst review</div>
+    <div class="bucket-info" id="bucket-info" style="display:none">
+        <span class="bucket-label" id="bucket-label"></span>
+        <button class="btn-change" onclick="openPicker()">Change</button>
+    </div>
     <div class="view-toggle">
         <button id="btn-source" class="active" onclick="switchView('source')">Source <span id="source-count"></span></button>
         <button id="btn-filtered" onclick="switchView('filtered')">Filtered <span id="filtered-count"></span></button>
@@ -354,6 +450,27 @@ body.lightbox-open { overflow: hidden; }
     <div class="lb-content" id="lb-content">
         <img id="lb-img" src="" alt="">
         <div class="meta-overlay" id="lb-meta"></div>
+    </div>
+</div>
+
+<div class="picker-overlay" id="picker-overlay">
+    <div class="picker-card">
+        <h2>Select buckets</h2>
+        <div class="picker-field">
+            <label for="picker-from">Source bucket</label>
+            <select id="picker-from" onchange="onPickerFromChange()">
+                <option value="" disabled selected>Choose a bucket...</option>
+            </select>
+        </div>
+        <div class="picker-field">
+            <label for="picker-to">Destination bucket</label>
+            <select id="picker-to">
+                <option value="filtered_manual" selected>filtered_manual</option>
+            </select>
+        </div>
+        <div class="picker-actions">
+            <button class="btn btn-apply" id="picker-start" onclick="confirmPicker()" disabled>Start review</button>
+        </div>
     </div>
 </div>
 
@@ -609,6 +726,117 @@ function escapeAttr(str) {
     return str.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+let pickerBuckets = [];
+
+async function init() {
+    const resp = await fetch("/api/config");
+    const cfg = await resp.json();
+    if (cfg.configured) {
+        updateBucketInfo(cfg.from_dir, cfg.to);
+        hidePicker();
+        loadImages("source");
+    } else {
+        showPicker();
+    }
+}
+
+function updateBucketInfo(fromDir, to) {
+    const info = document.getElementById("bucket-info");
+    const label = document.getElementById("bucket-label");
+    label.textContent = fromDir + " \u203a " + to;
+    info.style.display = "flex";
+}
+
+async function showPicker() {
+    document.getElementById("loading").style.display = "none";
+    const overlay = document.getElementById("picker-overlay");
+    overlay.classList.remove("hidden");
+
+    const resp = await fetch("/api/buckets");
+    const data = await resp.json();
+    pickerBuckets = data.buckets;
+
+    const sel = document.getElementById("picker-from");
+    sel.innerHTML = '<option value="" disabled selected>Choose a bucket...</option>';
+    pickerBuckets.forEach(function(b) {
+        const opt = document.createElement("option");
+        opt.value = b.name;
+        opt.textContent = b.name;
+        sel.appendChild(opt);
+    });
+
+    document.getElementById("picker-to").innerHTML = '<option value="filtered_manual" selected>filtered_manual</option>';
+    document.getElementById("picker-start").disabled = true;
+}
+
+function hidePicker() {
+    document.getElementById("picker-overlay").classList.add("hidden");
+}
+
+function openPicker() {
+    showPicker();
+}
+
+function onPickerFromChange() {
+    const fromName = document.getElementById("picker-from").value;
+    const toSel = document.getElementById("picker-to");
+
+    const bucket = pickerBuckets.find(function(b) { return b.name === fromName; });
+    const subdirs = bucket ? bucket.subdirs : [];
+
+    const seen = new Set();
+    toSel.innerHTML = "";
+
+    if (!subdirs.includes("filtered_manual")) {
+        const opt = document.createElement("option");
+        opt.value = "filtered_manual";
+        opt.textContent = "filtered_manual";
+        opt.selected = true;
+        toSel.appendChild(opt);
+        seen.add("filtered_manual");
+    }
+
+    subdirs.forEach(function(name) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        if (name === "filtered_manual") opt.selected = true;
+        toSel.appendChild(opt);
+        seen.add(name);
+    });
+
+    document.getElementById("picker-start").disabled = !fromName;
+}
+
+async function confirmPicker() {
+    const fromDir = document.getElementById("picker-from").value;
+    const to = document.getElementById("picker-to").value;
+    if (!fromDir || !to) return;
+
+    const btn = document.getElementById("picker-start");
+    btn.disabled = true;
+    btn.textContent = "Loading...";
+
+    const resp = await fetch("/api/select", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({from_dir: fromDir, to: to}),
+    });
+    const result = await resp.json();
+
+    btn.textContent = "Start review";
+
+    if (result.error) {
+        alert(result.error);
+        btn.disabled = false;
+        return;
+    }
+
+    updateBucketInfo(fromDir, to);
+    hidePicker();
+    await loadImages("source");
+}
+
 function measureHeader() {
     const h = document.querySelector(".header").offsetHeight;
     document.documentElement.style.setProperty("--header-height", h + "px");
@@ -617,7 +845,7 @@ measureHeader();
 window.addEventListener("resize", measureHeader);
 
 updateGridSize(240);
-loadImages("source");
+init();
 </script>
 </body>
 </html>

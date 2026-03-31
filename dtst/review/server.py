@@ -23,11 +23,27 @@ class ApplyRequest(BaseModel):
     selected: list[str]
 
 
-def create_app(source_dir: Path, filtered_dir: Path) -> FastAPI:
+class SelectRequest(BaseModel):
+    from_dir: str
+    to: str
+
+
+def create_app(
+    working_dir: Path,
+    source_dir: Path | None = None,
+    filtered_dir: Path | None = None,
+) -> FastAPI:
     app = FastAPI(title="dtst review")
 
-    def resolve_dir(view: str) -> Path:
-        return filtered_dir if view == "filtered" else source_dir
+    state: dict[str, Path | None] = {
+        "source_dir": source_dir,
+        "filtered_dir": filtered_dir,
+    }
+
+    def resolve_dir(view: str) -> Path | None:
+        if view == "filtered":
+            return state["filtered_dir"]
+        return state["source_dir"]
 
     def image_info(img_path: Path, view: str) -> dict:
         sidecar = read_sidecar(img_path)
@@ -75,23 +91,74 @@ def create_app(source_dir: Path, filtered_dir: Path) -> FastAPI:
     async def index():
         return _HTML_PATH.read_text()
 
+    @app.get("/api/config")
+    async def get_config():
+        src = state["source_dir"]
+        flt = state["filtered_dir"]
+        if src is not None and flt is not None:
+            return {
+                "configured": True,
+                "from_dir": src.name,
+                "to": flt.name,
+            }
+        return {"configured": False, "from_dir": None, "to": None}
+
+    @app.get("/api/buckets")
+    async def list_buckets():
+        buckets = []
+        for p in sorted(working_dir.iterdir()):
+            if not p.is_dir() or p.name.startswith("."):
+                continue
+            subdirs = sorted(
+                s.name for s in p.iterdir() if s.is_dir() and not s.name.startswith(".")
+            )
+            buckets.append({"name": p.name, "subdirs": subdirs})
+        return {"buckets": buckets}
+
+    @app.post("/api/select")
+    async def select_buckets(req: SelectRequest):
+        target = working_dir / req.from_dir
+        if not target.is_dir():
+            return JSONResponse(
+                {"error": f"Directory does not exist: {req.from_dir}"},
+                status_code=400,
+            )
+        state["source_dir"] = target
+        state["filtered_dir"] = target / req.to
+        logger.info("Buckets selected: from=%s, to=%s", req.from_dir, req.to)
+        return {"ok": True}
+
     @app.get("/api/images")
     async def list_images(view: str = Query("source")):
+        src = state["source_dir"]
+        flt = state["filtered_dir"]
+        if src is None:
+            return {
+                "configured": False,
+                "view": view,
+                "images": [],
+                "source_count": 0,
+                "filtered_count": 0,
+            }
+
         target = resolve_dir(view)
         images = [
             image_info(p, view) for p in find_images(target)
-        ] if target.is_dir() else []
+        ] if target is not None and target.is_dir() else []
 
         return {
+            "configured": True,
             "view": view,
             "images": images,
-            "source_count": len(find_images(source_dir)) if source_dir.is_dir() else 0,
-            "filtered_count": len(find_images(filtered_dir)) if filtered_dir.is_dir() else 0,
+            "source_count": len(find_images(src)) if src.is_dir() else 0,
+            "filtered_count": len(find_images(flt)) if flt is not None and flt.is_dir() else 0,
         }
 
     @app.get("/images/{view}/{filename}")
     async def serve_image(view: str, filename: str):
         directory = resolve_dir(view)
+        if directory is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
         file_path = directory / filename
         if not file_path.is_file() or not file_path.resolve().is_relative_to(directory.resolve()):
             return JSONResponse({"error": "not found"}, status_code=404)
@@ -105,18 +172,26 @@ def create_app(source_dir: Path, filtered_dir: Path) -> FastAPI:
 
     @app.post("/api/apply")
     async def apply_filter(req: ApplyRequest):
+        src = state["source_dir"]
+        flt = state["filtered_dir"]
+        if src is None or flt is None:
+            return JSONResponse(
+                {"error": "No buckets configured"},
+                status_code=400,
+            )
+
         selected_set = set(req.selected)
 
         if req.view == "source":
             # Move unselected images from source to filtered
-            all_names = {p.name for p in find_images(source_dir)} if source_dir.is_dir() else set()
+            all_names = {p.name for p in find_images(src)} if src.is_dir() else set()
             to_move = all_names - selected_set
-            moved, errors = move_selected(source_dir, filtered_dir, to_move)
+            moved, errors = move_selected(src, flt, to_move)
         elif req.view == "filtered":
             # Move selected images from filtered back to source
-            moved, errors = move_selected(filtered_dir, source_dir, selected_set)
+            moved, errors = move_selected(flt, src, selected_set)
             try:
-                filtered_dir.rmdir()
+                flt.rmdir()
             except OSError:
                 pass
         else:
