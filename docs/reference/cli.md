@@ -442,19 +442,22 @@ Reads images from one or more source folders and writes resized
 copies to a destination folder. Uses Lanczos resampling for
 high-quality downscaling.
 
-When both --width and --height are given, images are resized to
-exactly those dimensions (aspect ratio is not preserved). When
-only one dimension is given, the other is computed proportionally
-to preserve the original aspect ratio.
+When both --width and --height are given, the --mode option controls
+how aspect ratio differences are handled:
 
-Can be invoked with just a config file, just CLI options, or both.
-When both are provided, CLI options override config file values.
+  stretch  Resize to exact dimensions, distorting if needed.
+  crop     Scale to cover the target area, then trim excess (default).
+  pad      Scale to fit within the target area, then fill the rest.
+
+When only one dimension is given, the other is computed proportionally
+and --mode is ignored.
 
 Examples:
 
-    dtst frame -d ./project --from faces --to resized --width 512 --height 512
+    dtst frame -d ./project --from faces --to resized -W 512 -H 512
+    dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode pad --fill blur
+    dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode crop --gravity top
     dtst frame -d ./project --from faces --to resized --width 512
-    dtst frame -d ./project --from raw --to small --height 256
     dtst frame config.yaml --dry-run
 
 **Usage:**
@@ -472,6 +475,10 @@ dtst frame [OPTIONS] [CONFIG]
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--width`, `-W` | integer | Target width in pixels. If --height is omitted, aspect ratio is preserved. | None |
 | `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
+| `--mode`, `-m` | choice (`stretch` &#x7C; `crop` &#x7C; `pad`) | Resize mode when both width and height are given (default: crop). | None |
+| `--gravity`, `-g` | choice (`center` &#x7C; `top` &#x7C; `bottom` &#x7C; `left` &#x7C; `right` &#x7C; `top-left` &#x7C; `top-right` &#x7C; `bottom-left` &#x7C; `bottom-right`) | Anchor position for crop (part to keep) or pad (where to place image). Default: center. | None |
+| `--fill`, `-f` | choice (`color` &#x7C; `edge` &#x7C; `reflect` &#x7C; `blur`) | Fill strategy for pad mode: color, edge, reflect, or blur (default: color). | None |
+| `--fill-color` | text | Hex color for pad fill when --fill=color (default: #000000). | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |

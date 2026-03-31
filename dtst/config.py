@@ -765,6 +765,14 @@ def load_extract_frames_config(path: str | Path) -> ExtractFramesConfig:
     )
 
 
+FRAME_MODES = ("stretch", "crop", "pad")
+FRAME_GRAVITIES = (
+    "center", "top", "bottom", "left", "right",
+    "top-left", "top-right", "bottom-left", "bottom-right",
+)
+FRAME_FILLS = ("color", "edge", "reflect", "blur")
+
+
 @dataclass
 class FrameConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
@@ -772,6 +780,10 @@ class FrameConfig:
     to: str | None = None
     width: int | None = None
     height: int | None = None
+    mode: str = "crop"
+    gravity: str = "center"
+    fill: str = "color"
+    fill_color: str = "#000000"
 
 
 def load_frame_config(path: str | Path) -> FrameConfig:
@@ -809,12 +821,38 @@ def load_frame_config(path: str | Path) -> FrameConfig:
         if not isinstance(height, int) or height < 1:
             raise click.ClickException("'frame.height' must be a positive integer")
 
+    mode = section.get("mode", "crop")
+    if mode not in FRAME_MODES:
+        raise click.ClickException(
+            f"'frame.mode' must be one of {', '.join(FRAME_MODES)}"
+        )
+
+    gravity = section.get("gravity", "center")
+    if gravity not in FRAME_GRAVITIES:
+        raise click.ClickException(
+            f"'frame.gravity' must be one of {', '.join(FRAME_GRAVITIES)}"
+        )
+
+    fill = section.get("fill", "color")
+    if fill not in FRAME_FILLS:
+        raise click.ClickException(
+            f"'frame.fill' must be one of {', '.join(FRAME_FILLS)}"
+        )
+
+    fill_color = section.get("fill_color", "#000000")
+    if not isinstance(fill_color, str) or not fill_color.strip():
+        raise click.ClickException("'frame.fill_color' must be a non-empty string")
+
     return FrameConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs,
         to=to.strip() if to else None,
         width=width,
         height=height,
+        mode=mode,
+        gravity=gravity,
+        fill=fill,
+        fill_color=fill_color.strip(),
     )
 
 
