@@ -6,7 +6,7 @@ The example uses "crowd" as the subject. Along the way the tutorial shows two pa
 
 ## What you will build
 
-A curated image dataset starting from the search term "crowd". The pipeline goes through 12 steps:
+A curated image dataset starting from the search term "crowd". The pipeline uses 14 tools:
 
 1. **Search** for images across multiple engines
 2. **Fetch** images and videos from the collected URLs
@@ -19,9 +19,11 @@ A curated image dataset starting from the search term "crowd". The pipeline goes
 9. **Filter** out low-quality images
 10. **Review** manually with the web UI
 11. **Dedup** to remove near-duplicates
-12. **Augment**, **upscale**, and resize for the final dataset
+12. **Augment** with transformations to increase diversity
+13. **Upscale** images to higher resolution
+14. **Frame** (resize) for the final dataset
 
-Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and step 12 in [Final preparation](final-preparation.md).
+Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and steps 12–14 in [Final preparation](final-preparation.md).
 
 ## Buckets
 
