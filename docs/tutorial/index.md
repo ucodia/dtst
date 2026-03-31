@@ -19,7 +19,7 @@ A curated image dataset starting from the search term "crowd". The pipeline goes
 9. **Filter** out low-quality images
 10. **Review** manually with the web UI
 11. **Dedup** to remove near-duplicates
-12. **Augment** and resize for the final dataset
+12. **Augment**, **upscale**, and resize for the final dataset
 
 Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and step 12 in [Final preparation](final-preparation.md).
 

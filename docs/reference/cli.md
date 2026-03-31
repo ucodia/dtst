@@ -626,3 +626,54 @@ dtst tag [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be tagged without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst upscale { #dtst-upscale data-toc-label='upscale' }
+
+Upscale images using AI super-resolution models.
+
+Reads images from one or more source folders and writes upscaled
+copies to a destination folder. Uses spandrel to load PyTorch
+super-resolution models (Real-ESRGAN, SwinIR, HAT, etc.).
+
+By default uses a 4x Real-ESRGAN model. Use --scale to choose
+between 2x and 4x upscaling, or --model to provide a custom
+.pth weights file (scale is auto-detected from the model).
+
+Use --denoise to control how much denoising is applied (4x only).
+0.0 preserves the most texture, 1.0 applies full denoising.
+This activates a lighter general-purpose model with controllable
+denoise strength via weight interpolation.
+
+Large images are processed in tiles to avoid GPU memory issues.
+Adjust --tile-size to control memory usage (smaller = less VRAM).
+
+Examples:
+    dtst upscale -d ./project --from faces --to upscaled
+    dtst upscale -d ./project --from faces --to upscaled --scale 2
+    dtst upscale -d ./project --from faces --to upscaled --denoise 0.5
+    dtst upscale -d ./project --from faces --to upscaled --model ./custom.pth
+    dtst upscale config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst upscale [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--scale`, `-s` | choice (`2` &#x7C; `4`) | Upscale factor. Ignored when --model is provided (default: 4). | None |
+| `--model`, `-m` | text | Model preset name or path to a .pth file. Overrides --scale. | None |
+| `--tile-size`, `-t` | integer | Tile size in pixels for processing; 0 disables tiling (default: 512). | None |
+| `--tile-pad` | integer | Overlap padding between tiles in pixels (default: 32). | None |
+| `--format`, `-f` | choice (`jpg` &#x7C; `png` &#x7C; `webp`) | Output image format. Default preserves the source format. | None |
+| `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). | None |
+| `--denoise`, `-n` | float | Denoise strength 0.0-1.0. Lower preserves more texture. Only available at 4x. | None |
+| `--workers`, `-w` | integer | Number of threads for image preloading (default: 4). | None |
+| `--dry-run` | boolean | Preview what would be written without processing. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+

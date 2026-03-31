@@ -1,6 +1,6 @@
 # Final preparation
 
-The last step is to expand the dataset with augmentations and produce resized versions at the dimensions you need for training.
+The last step is to expand the dataset with augmentations, optionally upscale images, and produce resized versions at the dimensions you need for training.
 
 ## Augment
 
@@ -22,6 +22,42 @@ If you only want the transformed images without copying the originals:
 
 ```bash
 dtst augment -d scratch/crowd --from select --to final/1024 --flipX --no-copy
+```
+
+## Upscale
+
+The `upscale` command increases image resolution using AI super-resolution models. This is useful when source images are too small for your target training resolution — for example, face crops that came out at 256px but you need 1024px.
+
+To upscale images 4x (the default):
+
+```bash
+dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled
+```
+
+For 2x upscaling:
+
+```bash
+dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled --scale 2
+```
+
+The default 4x model (Real-ESRGAN) tends to smooth out textures, especially on noisy source images. Use `--denoise` to control how much denoising is applied. Lower values preserve more natural texture, which is particularly important for face datasets:
+
+```bash
+dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled --denoise 0
+```
+
+The `--denoise` option accepts a value between 0.0 and 1.0:
+
+- `0.0` — maximum texture preservation (recommended for faces)
+- `0.5` — balanced
+- `1.0` — full denoising (smoothest result)
+
+Note that `--denoise` is only available with 4x upscaling and activates a different, lighter model (realesr-general-x4v3). It cannot be combined with `--model` or `--scale 2`.
+
+Large images are processed in tiles to avoid GPU memory issues. If you run into out-of-memory errors, reduce the tile size:
+
+```bash
+dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled --tile-size 256
 ```
 
 ## Resize
@@ -59,6 +95,7 @@ scratch/
     select/
     final/
       1024/              <- augmented originals
+      upscaled/          <- AI-upscaled (optional)
       512/               <- resized to 512px
       256/               <- resized to 256px
 ```

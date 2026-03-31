@@ -613,6 +613,101 @@ def load_copy_config(path: str | Path) -> CopyConfig:
     )
 
 
+VALID_UPSCALE_FORMATS = frozenset({"jpg", "png", "webp"})
+VALID_UPSCALE_SCALES = frozenset({2, 4})
+
+
+@dataclass
+class UpscaleConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    scale: int = 4
+    model: str | None = None
+    tile_size: int = 512
+    tile_pad: int = 32
+    format: str | None = None
+    quality: int = 95
+    denoise: float | None = None
+
+
+def load_upscale_config(path: str | Path) -> UpscaleConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("upscale")
+    if not section or not isinstance(section, dict):
+        return UpscaleConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'upscale.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'upscale.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'upscale.to' must be a non-empty string")
+
+    scale = section.get("scale", 4)
+    if not isinstance(scale, int) or scale not in VALID_UPSCALE_SCALES:
+        raise click.ClickException(
+            f"'upscale.scale' must be one of {sorted(VALID_UPSCALE_SCALES)}"
+        )
+
+    model = section.get("model")
+    if model is not None and (not isinstance(model, str) or not model.strip()):
+        raise click.ClickException("'upscale.model' must be a non-empty string")
+
+    tile_size = section.get("tile_size", 512)
+    if not isinstance(tile_size, int) or tile_size < 0:
+        raise click.ClickException("'upscale.tile_size' must be a non-negative integer")
+
+    tile_pad = section.get("tile_pad", 32)
+    if not isinstance(tile_pad, int) or tile_pad < 0:
+        raise click.ClickException("'upscale.tile_pad' must be a non-negative integer")
+
+    fmt = section.get("format")
+    if fmt is not None:
+        fmt = str(fmt).strip().lower()
+        if fmt not in VALID_UPSCALE_FORMATS:
+            raise click.ClickException(
+                f"Invalid upscale format: {fmt!r}; valid: {sorted(VALID_UPSCALE_FORMATS)}"
+            )
+
+    quality = section.get("quality", 95)
+    if not isinstance(quality, int) or quality < 1 or quality > 100:
+        raise click.ClickException("'upscale.quality' must be an integer between 1 and 100")
+
+    denoise = section.get("denoise")
+    if denoise is not None:
+        if not isinstance(denoise, (int, float)):
+            raise click.ClickException("'upscale.denoise' must be a number between 0.0 and 1.0")
+        denoise = float(denoise)
+        if denoise < 0.0 or denoise > 1.0:
+            raise click.ClickException("'upscale.denoise' must be between 0.0 and 1.0")
+
+    return UpscaleConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+        scale=scale,
+        model=model.strip() if model else None,
+        tile_size=tile_size,
+        tile_pad=tile_pad,
+        format=fmt,
+        quality=quality,
+        denoise=denoise,
+    )
+
+
 VALID_FRAME_FORMATS = frozenset({"jpg", "png"})
 
 

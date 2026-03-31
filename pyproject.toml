@@ -22,6 +22,7 @@ dependencies = [
     "requests>=2.32.5",
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
+    "spandrel>=0.4.0",
     "torch>=2.10.0",
     "tqdm>=4.67.3",
     "uvicorn>=0.34.0",
