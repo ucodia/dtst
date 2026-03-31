@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import os
 from pathlib import Path
 
 from PIL import Image
@@ -10,7 +11,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from dtst.files import find_images, move_image
+from dtst.files import IMAGE_EXTENSIONS, find_images, move_image
 from dtst.sidecar import read_sidecar
 
 logger = logging.getLogger(__name__)
@@ -98,7 +99,7 @@ def create_app(
         if src is not None and flt is not None:
             return {
                 "configured": True,
-                "from_dir": src.name,
+                "from_dir": str(src.relative_to(working_dir)),
                 "to": flt.name,
             }
         return {"configured": False, "from_dir": None, "to": None}
@@ -106,13 +107,18 @@ def create_app(
     @app.get("/api/buckets")
     async def list_buckets():
         buckets = []
-        for p in sorted(working_dir.iterdir()):
-            if not p.is_dir() or p.name.startswith("."):
-                continue
-            subdirs = sorted(
-                s.name for s in p.iterdir() if s.is_dir() and not s.name.startswith(".")
+        for dirpath, dirnames, filenames in os.walk(working_dir, followlinks=False):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+            has_img = any(
+                os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
+                for f in filenames
             )
-            buckets.append({"name": p.name, "subdirs": subdirs})
+            if not has_img:
+                continue
+            dp = Path(dirpath)
+            rel = str(dp.relative_to(working_dir))
+            subdirs = [d for d in dirnames]
+            buckets.append({"path": rel, "subdirs": subdirs})
         return {"buckets": buckets}
 
     @app.post("/api/select")

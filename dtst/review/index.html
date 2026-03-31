@@ -760,8 +760,8 @@ async function showPicker() {
     sel.innerHTML = '<option value="" disabled selected>Choose a bucket...</option>';
     pickerBuckets.forEach(function(b) {
         const opt = document.createElement("option");
-        opt.value = b.name;
-        opt.textContent = b.name;
+        opt.value = b.path;
+        opt.textContent = b.path;
         sel.appendChild(opt);
     });
 
@@ -781,7 +781,7 @@ function onPickerFromChange() {
     const fromName = document.getElementById("picker-from").value;
     const toSel = document.getElementById("picker-to");
 
-    const bucket = pickerBuckets.find(function(b) { return b.name === fromName; });
+    const bucket = pickerBuckets.find(function(b) { return b.path === fromName; });
     const subdirs = bucket ? bucket.subdirs : [];
 
     const seen = new Set();
