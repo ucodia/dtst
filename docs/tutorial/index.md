@@ -17,7 +17,7 @@ A curated image dataset starting from the search term "crowd". The pipeline goes
 7. **Analyze** images for metadata (hashes, blur scores)
 8. **Tag** images with CLIP labels
 9. **Filter** out low-quality images
-10. **Curate** manually with the web UI
+10. **Review** manually with the web UI
 11. **Dedup** to remove near-duplicates
 12. **Augment** and resize for the final dataset
 

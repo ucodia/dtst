@@ -68,7 +68,7 @@ filter:
   min_size: 1024
   min_blur: 5
 
-curate:
+review:
   from: select
 
 dedup:
@@ -101,7 +101,7 @@ dtst copy crowd.yaml
 dtst analyze crowd.yaml
 dtst tag crowd.yaml
 dtst filter crowd.yaml
-dtst curate crowd.yaml
+dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml
 dtst frame crowd.yaml

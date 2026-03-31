@@ -195,40 +195,6 @@ dtst copy [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be copied without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst curate { #dtst-curate data-toc-label='curate' }
-
-Launch a web UI for manual image curation.
-
-Opens a local web server with an image grid. Click images to
-select or deselect them, then apply to move filtered images
-into a subfolder. Use the view toggle to switch between source
-and filtered images to restore previously filtered images.
-
-Press Ctrl+C to stop the server.
-
-Examples:
-    dtst curate config.yaml
-    dtst curate -d ./project --from faces
-    dtst curate -d ./project --from faces --to rejected --port 9000
-    dtst curate config.yaml --no-open
-
-**Usage:**
-
-```text
-dtst curate [OPTIONS] [CONFIG]
-```
-
-**Options:**
-
-| Name | Type | Description | Default |
-| ---- | ---- | ----------- | ------- |
-| `--from` | text | Source folder name within working directory. | None |
-| `--to` | text | Subfolder name for filtered images. | None |
-| `--port`, `-p` | integer | Port for the web server. | None |
-| `--no-open` | boolean | Do not open the browser automatically. | `False` |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--help` | boolean | Show this message and exit. | `False` |
-
 ## dtst dedup { #dtst-dedup data-toc-label='dedup' }
 
 Deduplicate images by perceptual hash similarity.
@@ -508,6 +474,40 @@ dtst frame [OPTIONS] [CONFIG]
 | `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
+## dtst review { #dtst-review data-toc-label='review' }
+
+Launch a web UI for manual image review.
+
+Opens a local web server with an image grid. Click images to
+select or deselect them, then apply to move filtered images
+into a subfolder. Use the view toggle to switch between source
+and filtered images to restore previously filtered images.
+
+Press Ctrl+C to stop the server.
+
+Examples:
+    dtst review config.yaml
+    dtst review -d ./project --from faces
+    dtst review -d ./project --from faces --to rejected --port 9000
+    dtst review config.yaml --no-open
+
+**Usage:**
+
+```text
+dtst review [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Source folder name within working directory. | None |
+| `--to` | text | Subfolder name for filtered images. | None |
+| `--port`, `-p` | integer | Port for the web server. | None |
+| `--no-open` | boolean | Do not open the browser automatically. | `False` |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst run { #dtst-run data-toc-label='run' }

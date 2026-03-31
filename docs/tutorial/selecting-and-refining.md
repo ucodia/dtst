@@ -81,12 +81,12 @@ To undo filtering and restore all images:
 dtst filter -d scratch/crowd --from select --clear
 ```
 
-## Curate
+## Review
 
-The `curate` command launches an interactive web UI for manual review of borderline images that automated filters can't catch.
+The `review` command launches an interactive web UI for manual review of borderline images that automated filters can't catch.
 
 ```bash
-dtst curate -d scratch/crowd --from select
+dtst review -d scratch/crowd --from select
 ```
 
 This opens a local web server with an image grid. Click images to select or deselect them, then apply to move filtered images into a subfolder. Use the view toggle to switch between source and filtered images to restore previously filtered ones.
@@ -132,8 +132,8 @@ scratch/
       000/
       001/
       noise/
-    select/               <- curated and deduplicated
+    select/               <- reviewed and deduplicated
       *.json              <- sidecar metadata (phash, blur, tags)
-      filtered/           <- images removed by filter/curate
+      filtered/           <- images removed by filter/review
       duplicated/         <- images removed by dedup
 ```

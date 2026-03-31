@@ -14,7 +14,7 @@ It provides a complete set of independent CLI tools for every stage of dataset p
 - **Tag** images with CLIP zero-shot classification scores
 - **Analyze** images for perceptual hashes and blur scores
 - **Filter** by size, blur, or tag scores — non-destructively
-- **Curate** with an interactive web UI for manual review
+- **Review** with an interactive web UI for manual review
 - **Deduplicate** by perceptual hash similarity
 - **Augment** with flips and **resize** to target dimensions
 - **Run** multi-step workflows from a single config file

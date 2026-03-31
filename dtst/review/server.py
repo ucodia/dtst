@@ -24,7 +24,7 @@ class ApplyRequest(BaseModel):
 
 
 def create_app(source_dir: Path, filtered_dir: Path) -> FastAPI:
-    app = FastAPI(title="dtst curate")
+    app = FastAPI(title="dtst review")
 
     def resolve_dir(view: str) -> Path:
         return filtered_dir if view == "filtered" else source_dir

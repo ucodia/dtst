@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from dtst.config import CurateConfig, load_curate_config
+from dtst.config import ReviewConfig, load_review_config
 
 
 def _resolve_config(
@@ -14,11 +14,11 @@ def _resolve_config(
     from_dir: str | None,
     to: str | None,
     port: int | None,
-) -> CurateConfig:
+) -> ReviewConfig:
     if config is not None:
-        cfg = load_curate_config(config)
+        cfg = load_review_config(config)
     else:
-        cfg = CurateConfig()
+        cfg = ReviewConfig()
 
     if working_dir is not None:
         cfg.working_dir = working_dir
@@ -32,7 +32,7 @@ def _resolve_config(
     return cfg
 
 
-@click.command("curate")
+@click.command("review")
 @click.argument(
     "config",
     type=click.Path(exists=True, path_type=Path),
@@ -75,7 +75,7 @@ def _resolve_config(
     help="Working directory (default: .).",
 )
 def cmd(config, from_dir, to, port, no_open, working_dir):
-    """Launch a web UI for manual image curation.
+    """Launch a web UI for manual image review.
 
     Opens a local web server with an image grid. Click images to
     select or deselect them, then apply to move filtered images
@@ -86,15 +86,15 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
 
     \b
     Examples:
-        dtst curate config.yaml
-        dtst curate -d ./project --from faces
-        dtst curate -d ./project --from faces --to rejected --port 9000
-        dtst curate config.yaml --no-open
+        dtst review config.yaml
+        dtst review -d ./project --from faces
+        dtst review -d ./project --from faces --to rejected --port 9000
+        dtst review config.yaml --no-open
     """
     cfg = _resolve_config(config, working_dir, from_dir, to, port)
 
     if cfg.from_dir is None:
-        raise click.ClickException("--from is required (or set 'curate.from' in config)")
+        raise click.ClickException("--from is required (or set 'review.from' in config)")
 
     working = cfg.working_dir.resolve()
     source_dir = working / cfg.from_dir
@@ -105,12 +105,12 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
 
     import uvicorn
 
-    from dtst.curate.server import create_app
+    from dtst.review.server import create_app
 
     app = create_app(source_dir, filtered_dir)
 
     url = f"http://localhost:{cfg.port}"
-    click.echo(f"Starting curate server at {url}")
+    click.echo(f"Starting review server at {url}")
     click.echo(f"  Source: {source_dir}")
     click.echo(f"  Filtered: {filtered_dir}")
     click.echo("  Press Ctrl+C to stop.\n")
