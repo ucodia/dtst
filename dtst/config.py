@@ -766,10 +766,7 @@ def load_extract_frames_config(path: str | Path) -> ExtractFramesConfig:
 
 
 FRAME_MODES = ("stretch", "crop", "pad")
-FRAME_GRAVITIES = (
-    "center", "top", "bottom", "left", "right",
-    "top-left", "top-right", "bottom-left", "bottom-right",
-)
+FRAME_GRAVITIES = ("center", "top", "bottom", "left", "right")
 FRAME_FILLS = ("color", "edge", "reflect", "blur")
 
 

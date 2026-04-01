@@ -37,13 +37,8 @@ def _gravity_offset(gravity: str, canvas_w: int, canvas_h: int, img_w: int, img_
     gx = {"left": 0, "center": 0.5, "right": 1}
     gy = {"top": 0, "center": 0.5, "bottom": 1}
 
-    parts = gravity.split("-") if "-" in gravity else [gravity]
-    if len(parts) == 2:
-        vy, hx = parts
-    else:
-        p = parts[0]
-        hx = p if p in gx else "center"
-        vy = p if p in gy else "center"
+    hx = gravity if gravity in gx else "center"
+    vy = gravity if gravity in gy else "center"
 
     x = round((canvas_w - img_w) * gx[hx])
     y = round((canvas_h - img_h) * gy[vy])

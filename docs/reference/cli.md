@@ -476,7 +476,7 @@ dtst frame [OPTIONS] [CONFIG]
 | `--width`, `-W` | integer | Target width in pixels. If --height is omitted, aspect ratio is preserved. | None |
 | `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
 | `--mode`, `-m` | choice (`stretch` &#x7C; `crop` &#x7C; `pad`) | Resize mode when both width and height are given (default: crop). | None |
-| `--gravity`, `-g` | choice (`center` &#x7C; `top` &#x7C; `bottom` &#x7C; `left` &#x7C; `right` &#x7C; `top-left` &#x7C; `top-right` &#x7C; `bottom-left` &#x7C; `bottom-right`) | Anchor position for crop (part to keep) or pad (where to place image). Default: center. | None |
+| `--gravity`, `-g` | choice (`center` &#x7C; `top` &#x7C; `bottom` &#x7C; `left` &#x7C; `right`) | Anchor position for crop (part to keep) or pad (where to place image). Default: center. | None |
 | `--fill`, `-f` | choice (`color` &#x7C; `edge` &#x7C; `reflect` &#x7C; `blur`) | Fill strategy for pad mode: color, edge, reflect, or blur (default: color). | None |
 | `--fill-color` | text | Hex color for pad fill when --fill=color (default: #000000). | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
