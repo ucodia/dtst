@@ -19,6 +19,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FetchConfig, load_fetch_config
+from dtst.sidecar import write_sidecar
 from dtst.throttle import DomainThrottler
 from dtst.urls import canonicalize_image_url, clean_image_url
 from dtst.user_agent import get_user_agent
@@ -148,19 +149,19 @@ def _attempt_download(
     return None
 
 
-def _download_url(args: tuple) -> tuple[str, str, str | None]:
+def _download_url(args: tuple) -> tuple[str, str, str | None, Path | None]:
     url, dest_dir, timeout, force, throttler, max_wait = args
     url_hash = hashlib.md5(url.encode()).hexdigest()
     domain = urlparse(url).hostname or "unknown"
 
     try:
         if throttler.is_tripped(domain):
-            return "rate_limited", url, None
+            return "rate_limited", url, None, None
 
         if not force:
             for ext in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS:
                 if (dest_dir / f"{url_hash}{ext}").exists():
-                    return "skipped", url, None
+                    return "skipped", url, None, None
 
         tmp_path = dest_dir / f"{url_hash}.tmp"
 
@@ -168,7 +169,7 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
 
         if response is None:
             throttler.record_429(domain)
-            return "failed", url, "all URL variants returned non-200 or failed"
+            return "failed", url, "all URL variants returned non-200 or failed", None
 
         try:
             with open(tmp_path, "wb") as f:
@@ -189,11 +190,11 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
                     img.verify()
             except Exception:
                 tmp_path.unlink(missing_ok=True)
-                return "failed", url, "downloaded file is not a valid image"
+                return "failed", url, "downloaded file is not a valid image", None
 
             final_path = dest_dir / f"{url_hash}{ext}"
             tmp_path.rename(final_path)
-            return "downloaded", url, None
+            return "downloaded", url, None, final_path
 
         # For non-image content (e.g. direct .mp4 links), keep the file
         # and derive extension from the URL path or Content-Type
@@ -210,19 +211,19 @@ def _download_url(args: tuple) -> tuple[str, str, str | None]:
                 ext = ".jpg"
             except Exception:
                 tmp_path.unlink(missing_ok=True)
-                return "failed", url, f"unknown content type: {mime}"
+                return "failed", url, f"unknown content type: {mime}", None
 
         final_path = dest_dir / f"{url_hash}{ext}"
         tmp_path.rename(final_path)
-        return "downloaded", url, None
+        return "downloaded", url, None, final_path
 
     except Exception as e:
         tmp_path = dest_dir / f"{url_hash}.tmp"
         tmp_path.unlink(missing_ok=True)
-        return "failed", url, str(e)
+        return "failed", url, str(e), None
 
 
-def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str | None]:
+def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str | None, Path | None]:
     """Download a URL using yt-dlp as a subprocess.
 
     When *progress_callback* is provided it is called with
@@ -246,6 +247,7 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
             "-S", "res,vcodec:h264:av01:vp9,br",
             "-o", str(dest_dir / "%(id)s.%(ext)s"),
             "--no-overwrites",
+            "--print", "after_move:filepath",
         ]
 
         if not force and archive_path_s:
@@ -265,8 +267,12 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
         stderr_thread.start()
 
         stdout_chunks: list[str] = []
+        filepath: str | None = None
         for line in proc.stdout:
             stdout_chunks.append(line)
+            stripped = line.strip()
+            if stripped and not stripped.startswith("["):
+                filepath = stripped
             if progress_callback is not None:
                 m = _YTDLP_PROGRESS_RE.search(line)
                 if m:
@@ -278,28 +284,30 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
         stdout_full = "".join(stdout_chunks)
 
         if proc.returncode == 0:
-            return "downloaded", url, None
+            final_path = Path(filepath) if filepath else None
+            return "downloaded", url, None, final_path
 
         # yt-dlp returns 0 even for "already recorded", but some
         # versions may use a non-zero exit code; treat archive
         # hits as skips
         if "has already been recorded" in stderr or "has already been recorded" in stdout_full:
-            return "skipped", url, None
+            return "skipped", url, None, None
 
-        return "failed", url, stderr[-200:] if len(stderr) > 200 else stderr
+        return "failed", url, stderr[-200:] if len(stderr) > 200 else stderr, None
 
     except FileNotFoundError:
-        return "failed", url, "yt-dlp not found (is it installed?)"
+        return "failed", url, "yt-dlp not found (is it installed?)", None
     except Exception as e:
-        return "failed", url, str(e)
+        return "failed", url, str(e), None
 
 
 def _load_urls_from_jsonl(
     results_file: Path,
     min_size: int,
     license_filter: str | None,
-) -> tuple[list[str], int]:
+) -> tuple[list[str], int, dict[str, dict]]:
     urls: list[str] = []
+    sidecar_data: dict[str, dict] = {}
     skipped_unsupported = 0
     with open(results_file) as f:
         for line in f:
@@ -331,22 +339,35 @@ def _load_urls_from_jsonl(
                     skipped_unsupported += 1
                     continue
                 urls.append(url)
-    return sorted(set(urls)), skipped_unsupported
+                sidecar_data[url] = {
+                    "source": r.get("engine", "unknown"),
+                    "origin": url,
+                    "license": r.get("license") or "none",
+                }
+    return sorted(set(urls)), skipped_unsupported, sidecar_data
 
 
-def _load_urls_from_txt(txt_file: Path) -> list[str]:
+def _load_urls_from_txt(txt_file: Path) -> tuple[list[str], dict[str, dict]]:
     """Load URLs from a plain text file, one per line.
 
     Blank lines and lines starting with ``#`` are ignored.
     """
     urls: list[str] = []
+    sidecar_data: dict[str, dict] = {}
     with open(txt_file) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             urls.append(line)
-    return sorted(set(urls))
+            hostname = urlparse(line).hostname or "unknown"
+            source = hostname.replace("www.", "").split(".")[0]
+            sidecar_data[line] = {
+                "source": source,
+                "origin": line,
+                "license": "none",
+            }
+    return sorted(set(urls)), sidecar_data
 
 
 def _resolve_config(
@@ -460,11 +481,12 @@ def cmd(
 
     # Load URLs based on file format
     skipped_unsupported = 0
+    sidecar_lookup: dict[str, dict] = {}
     if input_ext == ".jsonl":
-        urls, skipped_unsupported = _load_urls_from_jsonl(input_path, cfg.min_size, cfg.license)
+        urls, skipped_unsupported, sidecar_lookup = _load_urls_from_jsonl(input_path, cfg.min_size, cfg.license)
         logger.info("Loaded URLs from %s (jsonl mode)", input_path)
     elif input_ext == ".txt":
-        urls = _load_urls_from_txt(input_path)
+        urls, sidecar_lookup = _load_urls_from_txt(input_path)
         logger.info("Loaded URLs from %s (txt mode)", input_path)
     else:
         raise click.ClickException(
@@ -528,9 +550,13 @@ def cmd(
                 with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
                     try:
                         for future in as_completed(futures):
-                            status, url, error = future.result()
+                            status, url, error, final_path = future.result()
                             if status == "downloaded":
                                 downloaded += 1
+                                if final_path is not None:
+                                    meta = sidecar_lookup.get(url)
+                                    if meta:
+                                        write_sidecar(final_path, meta)
                             elif status == "skipped":
                                 skipped += 1
                             elif status == "rate_limited":
@@ -587,9 +613,13 @@ def cmd(
                             newly_done = {f for f in all_futures if f.done()} - done_futures
                             for f in newly_done:
                                 done_futures.add(f)
-                                status, url, error = f.result()
+                                status, url, error, final_path = f.result()
                                 if status == "downloaded":
                                     downloaded += 1
+                                    if final_path is not None:
+                                        meta = sidecar_lookup.get(url)
+                                        if meta:
+                                            write_sidecar(final_path, meta)
                                 elif status == "skipped":
                                     skipped += 1
                                 else:
