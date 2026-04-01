@@ -163,38 +163,6 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst copy { #dtst-copy data-toc-label='copy' }
-
-Copy images from one or more folders to a destination folder.
-
-Duplicates the contents of the source folders into the destination
-without any transformation. Files that already exist in the
-destination (by name) are skipped.
-
-Can be invoked with just a config file, just CLI options, or both.
-When both are provided, CLI options override config file values.
-
-Examples:
-    dtst copy -d ./project --from raw --to backup
-    dtst copy -d ./project --from raw,extra --to combined
-    dtst copy config.yaml --dry-run
-
-**Usage:**
-
-```text
-dtst copy [OPTIONS] [CONFIG]
-```
-
-**Options:**
-
-| Name | Type | Description | Default |
-| ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder name within the working directory. | None |
-| `--dry-run` | boolean | Preview what would be copied without creating files. | `False` |
-| `--help` | boolean | Show this message and exit. | `False` |
-
 ## dtst dedup { #dtst-dedup data-toc-label='dedup' }
 
 Deduplicate images by perceptual hash similarity.
@@ -385,55 +353,6 @@ dtst fetch [OPTIONS] [CONFIG]
 | `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst filter { #dtst-filter data-toc-label='filter' }
-
-Filter images by moving rejects to a subfolder.
-
-Evaluates images in a source folder against filter criteria and
-moves those that fail into a subdirectory within the source
-folder (default: filtered/). Filtered images can be restored
-with --clear.
-
-This is a non-destructive operation: no images are deleted, only
-moved. The file explorer serves as the UI for reviewing what was
-filtered. To undo individual decisions, move files back manually.
-
-Can be invoked with just a config file, just CLI options, or both.
-When both are provided, CLI options override config file values.
-
-Examples:
-    dtst filter -d ./project --from faces --min-size 256
-    dtst filter -d ./project --from faces --min-blur 50
-    dtst filter -d ./project --from faces --min-size 256 --min-blur 50
-    dtst filter -d ./project --from raw --max-tag microphone 0.25
-    dtst filter -d ./project --from raw --max-tag illustration 0.2 --min-tag photograph 0.2
-    dtst filter -d ./project --from faces --to rejects --min-size 256
-    dtst filter config.yaml --min-size 128
-    dtst filter -d ./project --from faces --clear
-    dtst filter -d ./project --from faces --min-size 256 --dry-run
-
-**Usage:**
-
-```text
-dtst filter [OPTIONS] [CONFIG]
-```
-
-**Options:**
-
-| Name | Type | Description | Default |
-| ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--from` | text | Folder name to filter within the working directory. | None |
-| `--to` | text | Subfolder name for rejected images. | None |
-| `--min-size`, `-s` | integer | Minimum image dimension in pixels; images smaller are filtered out. | None |
-| `--min-blur` | float | Minimum blur score (Laplacian variance) to keep; lower-scoring images are filtered as too blurry. | None |
-| `--max-tag` | <text float> | Reject images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25). | `()` |
-| `--min-tag` | <text float> | Reject images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2). | `()` |
-| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
-| `--clear` | boolean | Restore all filtered images back to the source folder. | `False` |
-| `--dry-run` | boolean | Show what would be filtered without moving anything. | `False` |
-| `--help` | boolean | Show this message and exit. | `False` |
-
 ## dtst frame { #dtst-frame data-toc-label='frame' }
 
 Resize images to a target width and/or height.
@@ -593,6 +512,50 @@ dtst search [OPTIONS] [CONFIG]
 | `--retries`, `-r` | integer | Number of retries per request (with exponential backoff). | `3` |
 | `--timeout`, `-t` | float | Request timeout in seconds. | `30` |
 | `--suffix-only` | boolean | Run only queries that include a suffix (e.g. 'term suffix'). Skip bare term queries. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
+## dtst select { #dtst-select data-toc-label='select' }
+
+Select images from source folders into a destination folder.
+
+Copies (or moves with --move) images from one or more source folders
+into a destination folder. When filter criteria are provided, only
+images that pass all criteria are selected. Without criteria, all
+images are selected.
+
+Files that already exist in the destination (by name) are skipped.
+
+Can be invoked with just a config file, just CLI options, or both.
+When both are provided, CLI options override config file values.
+
+Examples:
+    dtst select -d ./project --from raw --to backup
+    dtst select -d ./project --from raw,extra --to combined
+    dtst select -d ./project --from faces --to curated --min-size 256
+    dtst select -d ./project --from faces --to curated --move --min-blur 50
+    dtst select -d ./project --from raw --to clean --max-tag microphone 0.25
+    dtst select config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst select [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--move` | boolean | Move images instead of copying (removes originals). | `False` |
+| `--min-size`, `-s` | integer | Minimum image dimension in pixels; smaller images are excluded. | None |
+| `--min-blur` | float | Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry. | None |
+| `--max-tag` | <text float> | Exclude images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25). | `()` |
+| `--min-tag` | <text float> | Exclude images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2). | `()` |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be selected without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst tag { #dtst-tag data-toc-label='tag' }

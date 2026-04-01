@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from dtst.sidecar import sidecar_path
@@ -72,3 +73,11 @@ def move_image(src: Path, dest: Path) -> None:
     sc = sidecar_path(src)
     if sc.exists():
         sc.rename(sidecar_path(dest))
+
+
+def copy_image(src: Path, dest: Path) -> None:
+    """Copy an image and its sidecar file to a new location."""
+    shutil.copy2(src, dest)
+    sc = sidecar_path(src)
+    if sc.exists():
+        shutil.copy2(sc, sidecar_path(dest))

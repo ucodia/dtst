@@ -45,38 +45,33 @@ cluster:
   top: 10
   clean: true
 
-copy:
+select:
   from:
     - cluster/000
     - cluster/001
     - cluster/003
-  to: select
+  to: curated
 
 analyze:
-  from: select
+  from: curated
   phash: true
   blur: true
 
 tag:
-  from: select
+  from: curated
   labels:
     - cartoon
     - microphone
 
-filter:
-  from: select
-  min_size: 1024
-  min_blur: 5
-
 review:
-  from: select
+  from: curated
 
 dedup:
-  from: select
+  from: curated
   threshold: 8
 
 augment:
-  from: select
+  from: curated
   to: final/1024
   flip_x: true
 
@@ -97,10 +92,9 @@ dtst fetch crowd.yaml
 dtst extract-frames crowd.yaml
 dtst extract-faces crowd.yaml
 dtst cluster crowd.yaml
-dtst copy crowd.yaml
+dtst select crowd.yaml
 dtst analyze crowd.yaml
 dtst tag crowd.yaml
-dtst filter crowd.yaml
 dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml
@@ -119,7 +113,7 @@ dtst extract-faces crowd.yaml --engine dlib
 dtst dedup crowd.yaml --threshold 4
 
 # Preview any command without executing
-dtst filter crowd.yaml --dry-run
+dtst select crowd.yaml --dry-run
 ```
 
 Command-specific keys use underscores (e.g. `extract_faces`, `extract_frames`, `flip_x`), matching Python parameter names. The CLI uses hyphens (e.g. `extract-faces`, `--flip-x`). See the [CLI reference](../reference/cli.md) for the complete list of options per command.

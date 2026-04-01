@@ -24,17 +24,16 @@ extract_faces:
   to: faces
 
 analyze:
-  from: select
+  from: curated
   phash: true
   blur: true
 
-filter:
-  from: select
-  min_size: 1024
-  min_blur: 5
+select:
+  from: faces
+  to: curated
 
 dedup:
-  from: select
+  from: curated
 
 workflows:
   collect:
@@ -43,8 +42,8 @@ workflows:
     - extract-faces
 
   refine:
+    - select
     - analyze
-    - filter
     - dedup
 ```
 

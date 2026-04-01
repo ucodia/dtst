@@ -305,10 +305,11 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
 
 
 @dataclass
-class FilterConfig:
+class SelectConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dir: str | None = None
-    to: str = "filtered"
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    move: bool = False
     min_size: int | None = None
     min_blur: float | None = None
     max_tag: list[tuple[str, float]] | None = None
@@ -316,59 +317,71 @@ class FilterConfig:
 
 
 def _parse_tag_thresholds(
-    section: dict, key: str
+    section: dict, key: str, section_name: str = "select"
 ) -> list[tuple[str, float]] | None:
     raw = section.get(key)
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        raise click.ClickException(f"'filter.{key}' must be a mapping of label to threshold")
+        raise click.ClickException(f"'{section_name}.{key}' must be a mapping of label to threshold")
     result = []
     for label, threshold in raw.items():
         if not isinstance(label, str) or not label.strip():
-            raise click.ClickException(f"'filter.{key}' keys must be non-empty strings")
+            raise click.ClickException(f"'{section_name}.{key}' keys must be non-empty strings")
         if not isinstance(threshold, (int, float)):
-            raise click.ClickException(f"'filter.{key}.{label}' must be a number")
+            raise click.ClickException(f"'{section_name}.{key}.{label}' must be a number")
         result.append((label.strip(), float(threshold)))
     return result if result else None
 
 
-def load_filter_config(path: str | Path) -> FilterConfig:
+def load_select_config(path: str | Path) -> SelectConfig:
     data, config_dir = load_yaml(path)
     resolved_working_dir = _resolve_working_dir(data, config_dir)
 
-    section = data.get("filter")
+    section = data.get("select")
     if not section or not isinstance(section, dict):
-        return FilterConfig(working_dir=resolved_working_dir)
+        return SelectConfig(working_dir=resolved_working_dir)
 
-    from_dir = section.get("from")
-    if from_dir is not None:
-        if not isinstance(from_dir, str) or not from_dir.strip():
-            raise click.ClickException("'filter.from' must be a non-empty string")
-        from_dir = from_dir.strip()
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'select.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'select.from' must contain at least one directory name")
+    else:
+        from_dirs = None
 
-    to = section.get("to", "filtered")
-    if not isinstance(to, str) or not to.strip():
-        raise click.ClickException("'filter.to' must be a non-empty string")
+    to = section.get("to")
+    if to is not None and (not isinstance(to, str) or not to.strip()):
+        raise click.ClickException("'select.to' must be a non-empty string")
+
+    move = section.get("move", False)
+    if not isinstance(move, bool):
+        raise click.ClickException("'select.move' must be a boolean")
 
     min_size = section.get("min_size")
     if min_size is not None:
         if not isinstance(min_size, int) or min_size < 1:
-            raise click.ClickException("'filter.min_size' must be a positive integer")
+            raise click.ClickException("'select.min_size' must be a positive integer")
 
     min_blur = section.get("min_blur")
     if min_blur is not None:
         if not isinstance(min_blur, (int, float)) or min_blur < 0:
-            raise click.ClickException("'filter.min_blur' must be a non-negative number")
+            raise click.ClickException("'select.min_blur' must be a non-negative number")
         min_blur = float(min_blur)
 
     max_tag = _parse_tag_thresholds(section, "max_tag")
     min_tag = _parse_tag_thresholds(section, "min_tag")
 
-    return FilterConfig(
+    return SelectConfig(
         working_dir=resolved_working_dir,
-        from_dir=from_dir,
-        to=to.strip(),
+        from_dirs=from_dirs,
+        to=to.strip() if to else None,
+        move=move,
         min_size=min_size,
         min_blur=min_blur,
         max_tag=max_tag,
@@ -571,45 +584,6 @@ def load_augment_config(path: str | Path) -> AugmentConfig:
         flip_y=flip_y,
         flip_xy=flip_xy,
         no_copy=no_copy,
-    )
-
-
-@dataclass
-class CopyConfig:
-    working_dir: Path = field(default_factory=lambda: Path("."))
-    from_dirs: list[str] | None = None
-    to: str | None = None
-
-
-def load_copy_config(path: str | Path) -> CopyConfig:
-    data, config_dir = load_yaml(path)
-    resolved_working_dir = _resolve_working_dir(data, config_dir)
-
-    section = data.get("copy")
-    if not section or not isinstance(section, dict):
-        return CopyConfig(working_dir=resolved_working_dir)
-
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'copy.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'copy.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'copy.to' must be a non-empty string")
-
-    return CopyConfig(
-        working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
     )
 
 
