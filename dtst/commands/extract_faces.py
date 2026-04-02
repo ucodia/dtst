@@ -12,6 +12,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import ExtractFacesConfig, load_extract_faces_config
 from dtst.files import find_images, resolve_dirs
+from dtst.sidecar import copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,13 @@ def cmd(
                         if status == "ok":
                             ok_count += 1
                             total_faces += face_count
+                            src_path = Path(futures[future][0])
+                            stem = src_path.stem
+                            if face_count == 1:
+                                copy_sidecar(src_path, output_dir / f"{stem}.jpg", exclude={"phash", "blur"})
+                            else:
+                                for i in range(face_count):
+                                    copy_sidecar(src_path, output_dir / f"{stem}_{i + 1:02d}.jpg", exclude={"phash", "blur"})
                         elif status == "no_faces":
                             no_faces_count += 1
                             logger.debug("No faces detected in %s", name)

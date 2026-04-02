@@ -16,6 +16,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import VALID_FRAME_FORMATS, ExtractFramesConfig, load_extract_frames_config
 from dtst.files import find_videos, resolve_dirs
+from dtst.sidecar import copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -313,16 +314,19 @@ def cmd(
                         for f in newly_done:
                             done_futures.add(f)
                             status, name, frame_count, error = f.result()
+                            video_path_s = all_futures[f][0]
                             if status == "ok":
                                 ok_count += 1
                                 total_frames += frame_count
+                                video_path = Path(video_path_s)
+                                stem = video_path.stem
+                                for frame_path in sorted(output_dir.glob(f"{stem}_*.{cfg.format}")):
+                                    copy_sidecar(video_path, frame_path, exclude={"phash", "blur"})
                             elif status == "skipped":
                                 skipped_count += 1
                             else:
                                 failed_count += 1
                                 logger.error("Failed to extract frames from %s: %s", name, error)
-                            # Find the original video path for this future
-                            video_path_s = all_futures[f][0]
                             with _progress_lock:
                                 _progress.pop(video_path_s, None)
                             pbar.update(0)  # force refresh after postfix update

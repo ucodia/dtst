@@ -13,6 +13,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import AugmentConfig, load_augment_config
 from dtst.files import find_images, resolve_dirs
+from dtst.sidecar import copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,9 @@ def cmd(
                         if status == "ok":
                             ok_count += 1
                             total_files += len(created)
+                            src_path = Path(futures[future][0])
+                            for out_name in created:
+                                copy_sidecar(src_path, output_dir / out_name, exclude={"phash", "blur"})
                         else:
                             failed_count += 1
                             total_files += len(created)

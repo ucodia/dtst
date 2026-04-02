@@ -15,7 +15,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from dtst.cache import load_embeddings, save_embeddings
 from dtst.config import ClusterConfig, load_cluster_config
 from dtst.embeddings import VALID_MODELS, detect_device, get_backend
-from dtst.files import find_images, resolve_dirs
+from dtst.files import copy_image, find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +283,7 @@ def cmd(
                     dest_dir = output_dir / "noise"
 
                 dest_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, dest_dir / path.name)
+                copy_image(path, dest_dir / path.name)
                 copied += 1
                 pbar.update(1)
 

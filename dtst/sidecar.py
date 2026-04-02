@@ -23,5 +23,25 @@ def write_sidecar(image_path: Path, data: dict) -> None:
         f.write("\n")
 
 
+def copy_sidecar(src: Path, dest: Path, exclude: set[str] | None = None) -> None:
+    """Copy sidecar data from *src* image to *dest* image.
+
+    When *exclude* is given, those top-level keys are omitted from the
+    copy.  This is useful when a transformation invalidates computed
+    fields (e.g. ``phash``, ``blur``) but provenance should be kept.
+    """
+    data = read_sidecar(src)
+    if not data:
+        return
+    if exclude:
+        data = {k: v for k, v in data.items() if k not in exclude}
+    if not data:
+        return
+    path = sidecar_path(dest)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
 def read_all_sidecars(image_paths: list[Path]) -> dict[Path, dict]:
     return {p: read_sidecar(p) for p in image_paths}

@@ -18,6 +18,7 @@ from dtst.config import (
     load_frame_config,
 )
 from dtst.files import find_images, resolve_dirs
+from dtst.sidecar import copy_sidecar
 
 from PIL import Image
 
@@ -323,6 +324,8 @@ def cmd(
                         status, name, error = future.result()
                         if status == "ok":
                             ok_count += 1
+                            src_path = Path(futures[future][0])
+                            copy_sidecar(src_path, output_dir / name, exclude={"phash", "blur"})
                         else:
                             failed_count += 1
                             logger.error("Failed to resize %s: %s", name, error)
