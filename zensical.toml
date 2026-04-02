@@ -4,6 +4,7 @@ repo_url = "https://github.com/Ucodia/dtst"
 repo_name = "Ucodia/dtst"
 nav = [
   { "Home" = "index.md" },
+  { "Concepts" = "concepts.md" },
   { "Tutorial" = [
     { "Overview" = "tutorial/index.md" },
     { "Collecting images" = "tutorial/collecting-images.md" },
