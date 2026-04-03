@@ -325,7 +325,7 @@ def cmd(
                         if status == "ok":
                             ok_count += 1
                             src_path = Path(futures[future][0])
-                            copy_sidecar(src_path, output_dir / name, exclude={"phash", "blur", "classes"})
+                            copy_sidecar(src_path, output_dir / name, exclude={"metrics", "classes"})
                         else:
                             failed_count += 1
                             logger.error("Failed to resize %s: %s", name, error)

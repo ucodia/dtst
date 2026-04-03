@@ -30,8 +30,8 @@ Different commands write different fields:
 | Command | Fields | Description |
 |---------|--------|-------------|
 | `fetch` | `source`, `origin`, `license` | Where the file came from, its original URL, and license info |
-| `analyze --phash` | `phash.hash` | Perceptual hash for duplicate detection |
-| `analyze --blur` | `blur.score` | Laplacian variance measuring image sharpness |
+| `analyze --phash` | `metrics.phash` | Perceptual hash for duplicate detection |
+| `analyze --blur` | `metrics.blur` | Laplacian variance measuring image sharpness |
 | `detect` | `classes` | Object detection results (score + bounding box per class) |
 
 A sidecar after fetching, detecting and analyzing might look like this:
@@ -41,11 +41,9 @@ A sidecar after fetching, detecting and analyzing might look like this:
   "source": "flickr",
   "origin": "https://live.staticflickr.com/example/photo.jpg",
   "license": "cc-by",
-  "phash": {
-    "hash": "d4c6b8b0b4e1e3c7"
-  },
-  "blur": {
-    "score": 1842.57
+  "metrics": {
+    "phash": "d4c6b8b0b4e1e3c7",
+    "blur": 1842.57
   },
   "classes": {
     "microphone": [],
@@ -62,4 +60,4 @@ Sidecars are automatically carried along when images move between buckets. The e
 
 **Commands that copy images unchanged** (cluster, select, dedup, review) preserve the full sidecar as-is. Every field carries over because nothing about the image has changed.
 
-**Commands that transform images** (augment, extract-faces, extract-frames, frame, upscale) carry over provenance and semantic fields (`source`, `origin`, `license`, `tags`) but drop computed fields (`phash`, `blur`, `classes`). These pixel-dependent values would be invalid after the transformation and need to be recomputed with `analyze` or `detect` if needed.
+**Commands that transform images** (augment, extract-faces, extract-frames, frame, upscale) carry over provenance and semantic fields (`source`, `origin`, `license`, `tags`) but drop computed fields (`metrics`, `classes`). These pixel-dependent values would be invalid after the transformation and need to be recomputed with `analyze` or `detect` if needed.

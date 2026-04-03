@@ -236,8 +236,8 @@ def cmd(
     has_phash: list[Path] = []
     for img in images:
         sc = sidecars.get(img, {})
-        phash_data = sc.get("phash")
-        if phash_data and phash_data.get("hash"):
+        metrics = sc.get("metrics", {})
+        if metrics.get("phash"):
             has_phash.append(img)
         else:
             logger.warning("No phash data for %s, skipping", img.name)
@@ -273,7 +273,7 @@ def cmd(
 
     hashes: list[imagehash.ImageHash] = []
     for img in valid_images:
-        h = imagehash.hex_to_hash(sidecars[img]["phash"]["hash"])
+        h = imagehash.hex_to_hash(sidecars[img]["metrics"]["phash"])
         hashes.append(h)
 
     logger.info("Computing pairwise hamming distances (threshold=%d)", cfg.threshold)
@@ -303,7 +303,7 @@ def cmd(
             w, h, fsize = image_info[p]
             resolution = w * h
             sc = sidecars.get(p, {})
-            blur_score = sc.get("blur", {}).get("score", 0.0)
+            blur_score = sc.get("metrics", {}).get("blur", 0.0)
             return (resolution, fsize, blur_score)
 
         group_paths.sort(key=sort_key, reverse=True)

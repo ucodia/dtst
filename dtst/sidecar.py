@@ -28,7 +28,7 @@ def copy_sidecar(src: Path, dest: Path, exclude: set[str] | None = None) -> None
 
     When *exclude* is given, those top-level keys are omitted from the
     copy.  This is useful when a transformation invalidates computed
-    fields (e.g. ``phash``, ``blur``) but provenance should be kept.
+    fields (e.g. ``metrics``, ``classes``) but provenance should be kept.
     """
     data = read_sidecar(src)
     if not data:

@@ -270,12 +270,13 @@ def cmd(
             remaining = sorted(kept_set)
             for img_path in remaining:
                 sidecar = read_sidecar(img_path)
-                blur_data = sidecar.get("blur")
-                if blur_data is None or blur_data.get("score") is None:
+                metrics = sidecar.get("metrics", {})
+                blur_score = metrics.get("blur")
+                if blur_score is None:
                     rejects[img_path] = "missing blur data"
                     kept_set.discard(img_path)
                     continue
-                score = blur_data["score"]
+                score = blur_score
                 if cfg.min_blur is not None and score < cfg.min_blur:
                     rejects[img_path] = f"too blurry (score={score:.2f})"
                     kept_set.discard(img_path)

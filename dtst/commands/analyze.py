@@ -191,7 +191,8 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
     skipped = 0
     for img in all_images:
         existing = read_sidecar(img) if not force else {}
-        missing = [a for a in analyzers if a not in existing]
+        existing_metrics = existing.get("metrics", {})
+        missing = [a for a in analyzers if a not in existing_metrics]
         if missing:
             needs_work[img] = missing
         else:
@@ -209,7 +210,7 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
 
     logger.info("Analyzing %d images (%d skipped)", len(needs_work), skipped)
 
-    results: dict[Path, dict] = {img: {} for img in needs_work}
+    results: dict[Path, dict[str, dict]] = {img: {} for img in needs_work}
     errors = 0
 
     with logging_redirect_tqdm():
@@ -227,7 +228,7 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
                                 logger.error("phash failed for %s: %s", img_path.name, err)
                                 errors += 1
                             else:
-                                results[img_path]["phash"] = {"hash": hash_val}
+                                results[img_path]["phash"] = hash_val
                             pbar.update(1)
 
         if "blur" in analyzers:
@@ -244,13 +245,16 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
                                 logger.error("blur failed for %s: %s", img_path.name, err)
                                 errors += 1
                             else:
-                                results[img_path]["blur"] = {"score": round(score, 2)}
+                                results[img_path]["blur"] = round(score, 2)
                             pbar.update(1)
 
     written = 0
     for img, data in results.items():
         if data:
-            write_sidecar(img, data)
+            existing = read_sidecar(img)
+            merged_metrics = existing.get("metrics", {})
+            merged_metrics.update(data)
+            write_sidecar(img, {"metrics": merged_metrics})
             written += 1
 
     elapsed = time.time() - t0

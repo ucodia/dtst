@@ -248,10 +248,10 @@ def cmd(
                             src_path = Path(futures[future][0])
                             stem = src_path.stem
                             if face_count == 1:
-                                copy_sidecar(src_path, output_dir / f"{stem}.jpg", exclude={"phash", "blur", "classes"})
+                                copy_sidecar(src_path, output_dir / f"{stem}.jpg", exclude={"metrics", "classes"})
                             else:
                                 for i in range(face_count):
-                                    copy_sidecar(src_path, output_dir / f"{stem}_{i + 1:02d}.jpg", exclude={"phash", "blur", "classes"})
+                                    copy_sidecar(src_path, output_dir / f"{stem}_{i + 1:02d}.jpg", exclude={"metrics", "classes"})
                         elif status == "no_faces":
                             no_faces_count += 1
                             logger.debug("No faces detected in %s", name)
