@@ -47,8 +47,6 @@ def _resolve_config(
     move: bool,
     min_size: int | None,
     min_blur: float | None,
-    max_tag: tuple[tuple[str, float], ...] | None = None,
-    min_tag: tuple[tuple[str, float], ...] | None = None,
     max_detect: tuple[tuple[str, float], ...] | None = None,
     min_detect: tuple[tuple[str, float], ...] | None = None,
 ) -> SelectConfig:
@@ -69,10 +67,6 @@ def _resolve_config(
         cfg.min_size = min_size
     if min_blur is not None:
         cfg.min_blur = min_blur
-    if max_tag:
-        cfg.max_tag = list(max_tag)
-    if min_tag:
-        cfg.min_tag = list(min_tag)
     if max_detect:
         cfg.max_detect = list(max_detect)
     if min_detect:
@@ -94,8 +88,6 @@ def _resolve_config(
 @click.option("--move", is_flag=True, help="Move images instead of copying (removes originals).")
 @click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; smaller images are excluded.")
 @click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry.")
-@click.option("--max-tag", type=(str, float), multiple=True, default=(), help="Exclude images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25).")
-@click.option("--min-tag", type=(str, float), multiple=True, default=(), help="Exclude images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2).")
 @click.option("--max-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).")
 @click.option("--min-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
@@ -108,8 +100,6 @@ def cmd(
     move: bool,
     min_size: int | None,
     min_blur: float | None,
-    max_tag: tuple[tuple[str, float], ...],
-    min_tag: tuple[tuple[str, float], ...],
     max_detect: tuple[tuple[str, float], ...],
     min_detect: tuple[tuple[str, float], ...],
     workers: int | None,
@@ -133,7 +123,6 @@ def cmd(
         dtst select -d ./project --from raw,extra --to combined
         dtst select -d ./project --from faces --to curated --min-size 256
         dtst select -d ./project --from faces --to curated --move --min-blur 50
-        dtst select -d ./project --from raw --to clean --max-tag microphone 0.25
         dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
         dtst select config.yaml --dry-run
     """
@@ -143,7 +132,7 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, move, min_size, min_blur, max_tag, min_tag, max_detect, min_detect)
+    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, move, min_size, min_blur, max_detect, min_detect)
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
@@ -166,7 +155,7 @@ def cmd(
         )
 
     num_workers = workers if workers is not None else cpu_count() or 4
-    has_criteria = cfg.min_size is not None or cfg.min_blur is not None or cfg.max_tag or cfg.min_tag or cfg.max_detect or cfg.min_detect
+    has_criteria = cfg.min_size is not None or cfg.min_blur is not None or cfg.max_detect or cfg.min_detect
     transfer_label = "move" if cfg.move else "copy"
 
     # --- Filter images -------------------------------------------------------
@@ -181,12 +170,6 @@ def cmd(
             criteria_parts.append(f"min_size={cfg.min_size}")
         if cfg.min_blur is not None:
             criteria_parts.append(f"min_blur={cfg.min_blur}")
-        if cfg.max_tag:
-            for label, threshold in cfg.max_tag:
-                criteria_parts.append(f"max_tag({label})={threshold}")
-        if cfg.min_tag:
-            for label, threshold in cfg.min_tag:
-                criteria_parts.append(f"min_tag({label})={threshold}")
         if cfg.max_detect:
             for cls, threshold in cfg.max_detect:
                 criteria_parts.append(f"max_detect({cls})={threshold}")
@@ -233,45 +216,6 @@ def cmd(
                 if score < cfg.min_blur:
                     rejects[img_path] = f"too blurry (score={score:.2f})"
                     kept_set.discard(img_path)
-
-        # Tag check (sidecar lookup)
-        if cfg.max_tag or cfg.min_tag:
-            remaining = sorted(kept_set)
-            for img_path in remaining:
-                sidecar = read_sidecar(img_path)
-                tags_data = sidecar.get("tags")
-                if tags_data is None:
-                    rejects[img_path] = "missing tag data"
-                    kept_set.discard(img_path)
-                    continue
-                scores = tags_data.get("scores", {})
-
-                rejected = False
-                if cfg.max_tag:
-                    for label, threshold in cfg.max_tag:
-                        score = scores.get(label)
-                        if score is None:
-                            rejects[img_path] = f"missing score for tag '{label}'"
-                            kept_set.discard(img_path)
-                            rejected = True
-                            break
-                        if score >= threshold:
-                            rejects[img_path] = f"tag '{label}' score {score:.3f} >= {threshold}"
-                            kept_set.discard(img_path)
-                            rejected = True
-                            break
-
-                if not rejected and cfg.min_tag:
-                    for label, threshold in cfg.min_tag:
-                        score = scores.get(label)
-                        if score is None:
-                            rejects[img_path] = f"missing score for tag '{label}'"
-                            kept_set.discard(img_path)
-                            break
-                        if score < threshold:
-                            rejects[img_path] = f"tag '{label}' score {score:.3f} < {threshold}"
-                            kept_set.discard(img_path)
-                            break
 
         # Detection check (sidecar lookup)
         if cfg.max_detect or cfg.min_detect:

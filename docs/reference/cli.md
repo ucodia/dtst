@@ -571,7 +571,6 @@ Examples:
     dtst select -d ./project --from raw,extra --to combined
     dtst select -d ./project --from faces --to curated --min-size 256
     dtst select -d ./project --from faces --to curated --move --min-blur 50
-    dtst select -d ./project --from raw --to clean --max-tag microphone 0.25
     dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
     dtst select config.yaml --dry-run
 
@@ -591,50 +590,10 @@ dtst select [OPTIONS] [CONFIG]
 | `--move` | boolean | Move images instead of copying (removes originals). | `False` |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; smaller images are excluded. | None |
 | `--min-blur` | float | Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry. | None |
-| `--max-tag` | <text float> | Exclude images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25). | `()` |
-| `--min-tag` | <text float> | Exclude images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2). | `()` |
 | `--max-detect` | <text float> | Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5). | `()` |
 | `--min-detect` | <text float> | Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3). | `()` |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be selected without creating files. | `False` |
-| `--help` | boolean | Show this message and exit. | `False` |
-
-## dtst tag { #dtst-tag data-toc-label='tag' }
-
-Score images against text labels using CLIP zero-shot classification.
-
-Computes a similarity score for each image against each text label
-and writes the results into per-image sidecar JSON files under a
-"tags" key. Scores range from -1 to 1 (higher means stronger match).
-
-Results are incremental — running with different label sets accumulates
-scores in the sidecar. Use --force to recompute all labels.
-
-Examples:
-    dtst tag -d ./project --from raw --labels "microphone,photograph,illustration"
-    dtst tag config.yaml
-    dtst tag -d ./project --from raw --labels "cartoon,screenshot" --force
-    dtst tag -d ./project --from raw --labels "microphone" --dry-run
-    dtst tag -d ./project --from raw --clear
-
-**Usage:**
-
-```text
-dtst tag [OPTIONS] [CONFIG]
-```
-
-**Options:**
-
-| Name | Type | Description | Default |
-| ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
-| `--labels`, `-l` | text | Comma-separated text labels for zero-shot classification. | None |
-| `--batch-size`, `-b` | integer | Images per inference batch. | None |
-| `--force` | boolean | Recompute tags even if sidecar data already exists. | `False` |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--workers`, `-w` | integer | Number of threads for image preloading (default: 4). | None |
-| `--clear` | boolean | Remove all tag data from sidecar files. | `False` |
-| `--dry-run` | boolean | Preview what would be tagged without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst upscale { #dtst-upscale data-toc-label='upscale' }

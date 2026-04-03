@@ -1,6 +1,6 @@
 # Selecting and refining
 
-With your clusters ready, the next phase is selecting which groups to keep and refining their quality. This covers selecting clusters into a working folder, computing metadata, tagging, quality filtering, manual curation, and deduplication.
+With your clusters ready, the next phase is selecting which groups to keep and refining their quality. This covers selecting clusters into a working folder, computing metadata, quality filtering, manual curation, and deduplication.
 
 ## Select clusters
 
@@ -28,7 +28,7 @@ dtst select -d scratch/crowd --from cluster/000 --to curated --dry-run
 
 ## Select with filters
 
-You can combine selection with filter criteria to only select images that pass quality checks. This requires metadata from `analyze` and/or `tag` (see below).
+You can combine selection with filter criteria to only select images that pass quality checks. This requires metadata from `analyze` and/or `detect` (see below).
 
 Select only large, sharp images without microphones:
 
@@ -36,18 +36,10 @@ Select only large, sharp images without microphones:
 dtst select -d scratch/crowd --from faces --to curated \
   --min-size 1024 \
   --min-blur 5 \
-  --max-tag microphone 0.25
+  --max-detect microphone 0.25
 ```
 
-This copies only images that are at least 1024px, have a blur score of 5 or above, and where the "microphone" tag score is below 0.25.
-
-You can combine `--max-tag` (exclude if score is too high) with `--min-tag` (exclude if score is too low):
-
-```bash
-dtst select -d scratch/crowd --from faces --to curated \
-  --max-tag cartoon 0.2 \
-  --min-tag photograph 0.3
-```
+This copies only images that are at least 1024px, have a blur score of 5 or above, and where the "microphone" detection score is below 0.25.
 
 To preview what would be selected:
 
@@ -71,19 +63,9 @@ To force recomputation on images that already have metadata:
 dtst analyze -d scratch/crowd --from curated --phash --blur --force
 ```
 
-## Tag
-
-The `tag` command scores each image against text labels using CLIP zero-shot classification. This is useful for detecting unwanted content (cartoons, microphones, screenshots) that you can then filter out with `select`.
-
-```bash
-dtst tag -d scratch/crowd --from curated --labels "cartoon,microphone"
-```
-
-Scores are written to the same sidecar JSON files under a `tags` key. Scores range from -1 to 1 (higher means stronger match). Running with different label sets accumulates scores.
-
 ## Detect
 
-The `detect` command finds specific objects in images using OWL-ViT 2 open-vocabulary object detection. Unlike `tag` which scores the whole image, `detect` localizes objects and returns a confidence score and bounding box.
+The `detect` command finds specific objects in images using OWL-ViT 2 open-vocabulary object detection. It localizes objects and returns a confidence score and bounding box.
 
 ```bash
 dtst detect -d scratch/crowd --from curated --classes "microphone,chair"
@@ -149,7 +131,7 @@ scratch/
       001/
       noise/
     curated/              <- selected, reviewed and deduplicated
-      *.json              <- sidecar metadata (phash, blur, tags)
+      *.json              <- sidecar metadata (phash, blur, detections)
       rejected/           <- images removed by review
       duplicated/         <- images removed by dedup
 ```

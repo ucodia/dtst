@@ -32,10 +32,9 @@ Different commands write different fields:
 | `fetch` | `source`, `origin`, `license` | Where the file came from, its original URL, and license info |
 | `analyze --phash` | `phash.hash` | Perceptual hash for duplicate detection |
 | `analyze --blur` | `blur.score` | Laplacian variance measuring image sharpness |
-| `tag` | `tags.labels`, `tags.scores` | CLIP zero-shot classification labels and scores |
 | `detect` | `classes` | Object detection results (score + bounding box per class) |
 
-A sidecar after fetching, tagging and analyzing might look like this:
+A sidecar after fetching, detecting and analyzing might look like this:
 
 ```json
 {
@@ -47,14 +46,6 @@ A sidecar after fetching, tagging and analyzing might look like this:
   },
   "blur": {
     "score": 1842.57
-  },
-  "tags": {
-    "labels": ["indoor", "outdoor", "portrait"],
-    "scores": {
-      "indoor": -0.23,
-      "outdoor": 0.41,
-      "portrait": 0.67
-    }
   },
   "classes": {
     "microphone": [],

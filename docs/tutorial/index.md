@@ -15,8 +15,7 @@ A curated image dataset starting from the search term "crowd". The pipeline uses
 5. **Cluster** by similarity (ArcFace for faces, CLIP for general images)
 6. **Copy** selected clusters into a curation folder
 7. **Analyze** images for metadata (hashes, blur scores)
-8. **Tag** images with CLIP labels
-9. **Filter** out low-quality images
+8. **Filter** out low-quality images
 10. **Review** manually with the web UI
 11. **Dedup** to remove near-duplicates
 12. **Augment** with transformations to increase diversity

@@ -57,12 +57,6 @@ analyze:
   phash: true
   blur: true
 
-tag:
-  from: curated
-  labels:
-    - cartoon
-    - microphone
-
 detect:
   from: curated
   classes:
@@ -101,7 +95,6 @@ dtst extract-faces crowd.yaml
 dtst cluster crowd.yaml
 dtst select crowd.yaml
 dtst analyze crowd.yaml
-dtst tag crowd.yaml
 dtst detect crowd.yaml
 dtst review crowd.yaml
 dtst dedup crowd.yaml

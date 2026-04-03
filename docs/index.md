@@ -11,9 +11,8 @@ It provides a complete set of independent CLI tools for every stage of dataset p
 - **Extract frames** from videos as high-quality keyframes
 - **Extract faces** with aligned cropping using MediaPipe or dlib
 - **Cluster** images by visual similarity (ArcFace for faces, CLIP for general images)
-- **Tag** images with CLIP zero-shot classification scores
 - **Analyze** images for perceptual hashes and blur scores
-- **Filter** by size, blur, or tag scores — non-destructively
+- **Filter** by size, blur, or detection scores — non-destructively
 - **Review** with an interactive web UI for manual review
 - **Deduplicate** by perceptual hash similarity
 - **Augment** with flips and **resize** to target dimensions
