@@ -30,7 +30,7 @@ dtst search -d scratch/crowd \
 Once you have a `results.jsonl`, the `fetch` command downloads each image into a folder inside your working directory.
 
 ```bash
-dtst fetch -d scratch/crowd --to images/search1
+dtst fetch -d scratch/crowd --to images/search1 --input results.jsonl
 ```
 
 After this runs, `scratch/crowd/images/search1/` contains all the successfully downloaded images. Files are named by a hash of their source URL, so re-running fetch is safe — already-downloaded images are skipped.
@@ -38,7 +38,7 @@ After this runs, `scratch/crowd/images/search1/` contains all the successfully d
 You can filter downloads by minimum image size or license:
 
 ```bash
-dtst fetch -d scratch/crowd --to images/search1 --min-size 1024 --license cc
+dtst fetch -d scratch/crowd --to images/search1 --input results.jsonl --min-size 1024 --license cc
 ```
 
 ### Running a second search
@@ -51,7 +51,7 @@ dtst search -d scratch/crowd \
   --suffixes "photo,wide angle" \
   --engines flickr,brave
 
-dtst fetch -d scratch/crowd --to images/search2
+dtst fetch -d scratch/crowd --to images/search2 --input results.jsonl
 ```
 
 Keeping separate folders per search round makes it easy to track where images came from.

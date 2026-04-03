@@ -325,11 +325,11 @@ When both are provided, CLI options override config file values.
 Examples:
 
     dtst fetch config.yaml
-    dtst fetch -d ./chanterelle --to raw
+    dtst fetch -d ./chanterelle --to raw --input results.jsonl
     dtst fetch -d ./project --to videos --input urls.txt
     dtst fetch config.yaml --workers 16 --timeout 60
     dtst fetch config.yaml --force
-    dtst fetch -d ./chanterelle --to raw --no-wait --license cc
+    dtst fetch -d ./chanterelle --to raw --input results.jsonl --no-wait --license cc
 
 **Usage:**
 

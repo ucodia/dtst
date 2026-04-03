@@ -456,11 +456,11 @@ def cmd(
     Examples:
 
         dtst fetch config.yaml
-        dtst fetch -d ./chanterelle --to raw
+        dtst fetch -d ./chanterelle --to raw --input results.jsonl
         dtst fetch -d ./project --to videos --input urls.txt
         dtst fetch config.yaml --workers 16 --timeout 60
         dtst fetch config.yaml --force
-        dtst fetch -d ./chanterelle --to raw --no-wait --license cc
+        dtst fetch -d ./chanterelle --to raw --input results.jsonl --no-wait --license cc
     """
     if no_wait and max_wait is not None:
         raise click.ClickException("--no-wait and --max-wait are mutually exclusive")
