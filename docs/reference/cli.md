@@ -203,6 +203,44 @@ dtst dedup [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Show what would be deduplicated without moving anything. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst detect { #dtst-detect data-toc-label='detect' }
+
+Detect objects in images using OWL-ViT 2.
+
+Uses open-vocabulary object detection to find specific objects in images
+and writes the results into per-image sidecar JSON files under a
+"classes" key. Each class gets all detections (score + bounding box)
+sorted by confidence, or null if not found.
+
+Each run replaces the entire "classes" key in the sidecar.
+
+Examples:
+    dtst detect -d ./project --from raw --classes "microphone,chair,table"
+    dtst detect config.yaml
+    dtst detect -d ./project --from raw --classes "microphone" --threshold 0.4
+    dtst detect -d ./project --from raw --classes "microphone" --dry-run
+    dtst detect -d ./project --from raw --clear
+
+**Usage:**
+
+```text
+dtst detect [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
+| `--classes`, `-c` | text | Comma-separated object classes to detect (e.g. 'microphone,chair'). | None |
+| `--threshold` | float | Minimum detection confidence. | None |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--workers`, `-w` | integer | Number of threads for image preloading (default: 4). | None |
+| `--max-instances` | integer | Maximum detections per class per image. | None |
+| `--clear` | boolean | Remove all detection data from sidecar files. | `False` |
+| `--dry-run` | boolean | Preview what would be detected without writing sidecars. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst extract-faces { #dtst-extract-faces data-toc-label='extract-faces' }
 
 Extract aligned face crops from images.
@@ -534,6 +572,7 @@ Examples:
     dtst select -d ./project --from faces --to curated --min-size 256
     dtst select -d ./project --from faces --to curated --move --min-blur 50
     dtst select -d ./project --from raw --to clean --max-tag microphone 0.25
+    dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
     dtst select config.yaml --dry-run
 
 **Usage:**
@@ -554,6 +593,8 @@ dtst select [OPTIONS] [CONFIG]
 | `--min-blur` | float | Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry. | None |
 | `--max-tag` | <text float> | Exclude images where TAG score >= THRESHOLD (e.g. --max-tag microphone 0.25). | `()` |
 | `--min-tag` | <text float> | Exclude images where TAG score < THRESHOLD (e.g. --min-tag photograph 0.2). | `()` |
+| `--max-detect` | <text float> | Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5). | `()` |
+| `--min-detect` | <text float> | Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3). | `()` |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be selected without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |

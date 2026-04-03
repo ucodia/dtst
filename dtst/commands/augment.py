@@ -257,7 +257,7 @@ def cmd(
                             total_files += len(created)
                             src_path = Path(futures[future][0])
                             for out_name in created:
-                                copy_sidecar(src_path, output_dir / out_name, exclude={"phash", "blur"})
+                                copy_sidecar(src_path, output_dir / out_name, exclude={"phash", "blur", "classes"})
                         else:
                             failed_count += 1
                             total_files += len(created)

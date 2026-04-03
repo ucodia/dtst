@@ -81,6 +81,22 @@ dtst tag -d scratch/crowd --from curated --labels "cartoon,microphone"
 
 Scores are written to the same sidecar JSON files under a `tags` key. Scores range from -1 to 1 (higher means stronger match). Running with different label sets accumulates scores.
 
+## Detect
+
+The `detect` command finds specific objects in images using OWL-ViT 2 open-vocabulary object detection. Unlike `tag` which scores the whole image, `detect` localizes objects and returns a confidence score and bounding box.
+
+```bash
+dtst detect -d scratch/crowd --from curated --classes "microphone,chair"
+```
+
+Results are written to sidecar files under a `classes` key. Each class gets a list of detections (score + bounding box) sorted by confidence, or an empty list if not found. You can filter with `select`:
+
+```bash
+dtst select -d scratch/crowd --from curated --to clean --max-detect microphone 0.5
+```
+
+This excludes images where a microphone was detected with confidence >= 0.5.
+
 ## Review
 
 The `review` command launches an interactive web UI for manual review of borderline images that automated filters can't catch.

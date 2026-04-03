@@ -63,6 +63,13 @@ tag:
     - cartoon
     - microphone
 
+detect:
+  from: curated
+  classes:
+    - microphone
+    - chair
+  threshold: 0.2
+
 review:
   from: curated
 
@@ -95,6 +102,7 @@ dtst cluster crowd.yaml
 dtst select crowd.yaml
 dtst analyze crowd.yaml
 dtst tag crowd.yaml
+dtst detect crowd.yaml
 dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml

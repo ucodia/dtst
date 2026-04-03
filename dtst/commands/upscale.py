@@ -411,7 +411,7 @@ def cmd(
 
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()
-                        copy_sidecar(img_path, output_dir / out_name, exclude={"phash", "blur"})
+                        copy_sidecar(img_path, output_dir / out_name, exclude={"phash", "blur", "classes"})
                         ok_count += 1
 
                     except torch.cuda.OutOfMemoryError:

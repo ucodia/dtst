@@ -33,6 +33,7 @@ Different commands write different fields:
 | `analyze --phash` | `phash.hash` | Perceptual hash for duplicate detection |
 | `analyze --blur` | `blur.score` | Laplacian variance measuring image sharpness |
 | `tag` | `tags.labels`, `tags.scores` | CLIP zero-shot classification labels and scores |
+| `detect` | `classes` | Object detection results (score + bounding box per class) |
 
 A sidecar after fetching, tagging and analyzing might look like this:
 
@@ -54,6 +55,12 @@ A sidecar after fetching, tagging and analyzing might look like this:
       "outdoor": 0.41,
       "portrait": 0.67
     }
+  },
+  "classes": {
+    "microphone": [],
+    "chair": [
+      { "score": 0.87, "box": [10, 200, 250, 480] }
+    ]
   }
 }
 ```
@@ -64,4 +71,4 @@ Sidecars are automatically carried along when images move between buckets. The e
 
 **Commands that copy images unchanged** (cluster, select, dedup, review) preserve the full sidecar as-is. Every field carries over because nothing about the image has changed.
 
-**Commands that transform images** (augment, extract-faces, extract-frames, frame, upscale) carry over provenance and semantic fields (`source`, `origin`, `license`, `tags`) but drop computed fields (`phash`, `blur`). These pixel-dependent values would be invalid after the transformation and need to be recomputed with `analyze` if needed.
+**Commands that transform images** (augment, extract-faces, extract-frames, frame, upscale) carry over provenance and semantic fields (`source`, `origin`, `license`, `tags`) but drop computed fields (`phash`, `blur`, `classes`). These pixel-dependent values would be invalid after the transformation and need to be recomputed with `analyze` or `detect` if needed.

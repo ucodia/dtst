@@ -321,7 +321,7 @@ def cmd(
                                 video_path = Path(video_path_s)
                                 stem = video_path.stem
                                 for frame_path in sorted(output_dir.glob(f"{stem}_*.{cfg.format}")):
-                                    copy_sidecar(video_path, frame_path, exclude={"phash", "blur"})
+                                    copy_sidecar(video_path, frame_path, exclude={"phash", "blur", "classes"})
                             elif status == "skipped":
                                 skipped_count += 1
                             else:

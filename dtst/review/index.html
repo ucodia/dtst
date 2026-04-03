@@ -263,12 +263,9 @@ body.lightbox-open { overflow: hidden; }
     cursor: pointer;
 }
 
-.lightbox .lb-content img {
-    max-width: 100%;
+.lightbox .lb-content .lb-img-wrapper {
+    max-width: 90vw;
     max-height: calc(100vh - var(--header-height, 49px) - 20px);
-    object-fit: contain;
-    border-radius: 4px;
-    display: block;
 }
 
 .lightbox .close-btn {
@@ -405,9 +402,57 @@ body.lightbox-open { overflow: hidden; }
     background: #333;
     color: #e0e0e0;
 }
+
+.bbox-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #999;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.bbox-toggle input { accent-color: #4a9eff; cursor: pointer; }
+
+.bbox-box {
+    position: absolute;
+    border: 2px solid #4aff6e;
+    pointer-events: none;
+    display: none;
+}
+
+.bbox-label {
+    position: absolute;
+    top: -18px;
+    left: -2px;
+    background: #4aff6e;
+    color: #000;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 4px;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+body.show-bboxes .bbox-box { display: block; }
+
+.lb-img-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.lb-img-wrapper img {
+    max-width: 100%;
+    max-height: calc(100vh - var(--header-height, 49px) - 20px);
+    object-fit: contain;
+    border-radius: 4px;
+    display: block;
+}
 </style>
 </head>
-<body>
+<body class="show-bboxes">
 
 <div class="header">
     <div class="header-title">dtst review</div>
@@ -434,6 +479,10 @@ body.lightbox-open { overflow: hidden; }
         <label for="size-slider">Size</label>
         <input type="range" id="size-slider" min="80" max="400" value="240" oninput="updateGridSize(this.value)">
     </div>
+    <label class="bbox-toggle">
+        <input type="checkbox" id="bbox-check" checked onchange="toggleBboxes(this.checked)">
+        Boxes
+    </label>
     <div class="header-actions">
         <button class="btn" onclick="selectAll()">Select all</button>
         <button class="btn" onclick="unselectAll()">Unselect all</button>
@@ -448,7 +497,9 @@ body.lightbox-open { overflow: hidden; }
     <button class="nav-btn nav-prev" onclick="navLightbox(-1)">&#8249;</button>
     <button class="nav-btn nav-next" onclick="navLightbox(1)">&#8250;</button>
     <div class="lb-content" id="lb-content">
-        <img id="lb-img" src="" alt="">
+        <div class="lb-img-wrapper" id="lb-img-wrapper">
+            <img id="lb-img" src="" alt="">
+        </div>
         <div class="meta-overlay" id="lb-meta"></div>
     </div>
 </div>
@@ -582,6 +633,26 @@ function renderMeta(sidecar, img) {
             rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(entry[0]) + '</span><span class="meta-val">' + entry[1].toFixed(3) + '</span></div>';
         });
     }
+    if (sidecar && sidecar.classes) {
+        var classes = sidecar.classes;
+        var entries = Object.entries(classes).sort(function(a, b) {
+            var sa = a[1].length ? a[1][0].score : -1;
+            var sb = b[1].length ? b[1][0].score : -1;
+            return sb - sa;
+        });
+        entries.forEach(function(entry) {
+            var cls = entry[0];
+            var dets = entry[1];
+            if (dets.length) {
+                var count = dets.length;
+                var best = dets[0].score.toFixed(3);
+                var label = count > 1 ? best + ' (\u00d7' + count + ')' : best;
+                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">' + label + '</span></div>';
+            } else {
+                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">-</span></div>';
+            }
+        });
+    }
     return rows;
 }
 
@@ -670,8 +741,16 @@ async function applyFilter() {
 function openLightbox(index) {
     state.lightboxIndex = index;
     const img = state.images[index];
-    document.getElementById("lb-img").src = img.url;
+    var lbImg = document.getElementById("lb-img");
+    lbImg.src = img.url;
     document.getElementById("lb-meta").innerHTML = renderMeta(img.sidecar, img);
+    // Remove old bboxes from lightbox
+    var wrapper = document.getElementById("lb-img-wrapper");
+    wrapper.querySelectorAll(".bbox-box").forEach(function(el) { el.remove(); });
+    // Add bboxes once image loads (need actual rendered size)
+    lbImg.onload = function() {
+        updateLightboxBboxes(img);
+    };
     document.getElementById("lightbox").classList.add("open");
     document.body.classList.add("lightbox-open");
     updateLightboxSelection();
@@ -715,6 +794,40 @@ document.getElementById("lb-content").addEventListener("click", function() {
     toggleSelect(img.filename);
     updateLightboxSelection();
 });
+
+function toggleBboxes(on) {
+    document.body.classList.toggle("show-bboxes", on);
+}
+
+function updateLightboxBboxes(img) {
+    var wrapper = document.getElementById("lb-img-wrapper");
+    wrapper.querySelectorAll(".bbox-box").forEach(function(el) { el.remove(); });
+    if (!img.sidecar || !img.sidecar.classes || !img.width || !img.height) return;
+    var lbImg = document.getElementById("lb-img");
+    var renderedW = lbImg.clientWidth;
+    var renderedH = lbImg.clientHeight;
+    var entries = Object.entries(img.sidecar.classes);
+    entries.forEach(function(entry) {
+        var cls = entry[0];
+        var dets = entry[1];
+        if (!dets || !dets.length) return;
+        dets.forEach(function(det) {
+            var box = det.box;
+            var left = (box[0] / img.width * renderedW);
+            var top = (box[1] / img.height * renderedH);
+            var w = ((box[2] - box[0]) / img.width * renderedW);
+            var h = ((box[3] - box[1]) / img.height * renderedH);
+            var div = document.createElement("div");
+            div.className = "bbox-box";
+            div.style.left = left + "px";
+            div.style.top = top + "px";
+            div.style.width = w + "px";
+            div.style.height = h + "px";
+            div.innerHTML = '<span class="bbox-label">' + escapeHtml(cls) + ' ' + det.score.toFixed(2) + '</span>';
+            wrapper.appendChild(div);
+        });
+    });
+}
 
 function escapeHtml(str) {
     const d = document.createElement("div");

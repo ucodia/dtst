@@ -314,6 +314,8 @@ class SelectConfig:
     min_blur: float | None = None
     max_tag: list[tuple[str, float]] | None = None
     min_tag: list[tuple[str, float]] | None = None
+    max_detect: list[tuple[str, float]] | None = None
+    min_detect: list[tuple[str, float]] | None = None
 
 
 def _parse_tag_thresholds(
@@ -376,6 +378,8 @@ def load_select_config(path: str | Path) -> SelectConfig:
 
     max_tag = _parse_tag_thresholds(section, "max_tag")
     min_tag = _parse_tag_thresholds(section, "min_tag")
+    max_detect = _parse_tag_thresholds(section, "max_detect")
+    min_detect = _parse_tag_thresholds(section, "min_detect")
 
     return SelectConfig(
         working_dir=resolved_working_dir,
@@ -386,6 +390,8 @@ def load_select_config(path: str | Path) -> SelectConfig:
         min_blur=min_blur,
         max_tag=max_tag,
         min_tag=min_tag,
+        max_detect=max_detect,
+        min_detect=min_detect,
     )
 
 
@@ -440,6 +446,66 @@ def load_tag_config(path: str | Path) -> TagConfig:
         from_dirs=from_dirs,
         labels=labels,
         batch_size=batch_size,
+    )
+
+
+@dataclass
+class DetectConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    classes: list[str] | None = None
+    threshold: float = 0.2
+    max_instances: int = 1
+
+
+def load_detect_config(path: str | Path) -> DetectConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("detect")
+    if not section or not isinstance(section, dict):
+        return DetectConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'detect.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'detect.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    classes_raw = section.get("classes")
+    if classes_raw is not None:
+        if isinstance(classes_raw, list):
+            classes = [str(c).strip() for c in classes_raw if str(c).strip()]
+        elif isinstance(classes_raw, str):
+            classes = [c.strip() for c in classes_raw.split(",") if c.strip()]
+        else:
+            raise click.ClickException("'detect.classes' must be a string or list of strings")
+        if not classes:
+            raise click.ClickException("'detect.classes' must contain at least one class")
+    else:
+        classes = None
+
+    threshold = section.get("threshold", 0.2)
+    if not isinstance(threshold, (int, float)) or threshold < 0:
+        raise click.ClickException("'detect.threshold' must be a non-negative number")
+
+    max_instances = section.get("max_instances", 1)
+    if not isinstance(max_instances, int) or max_instances < 1:
+        raise click.ClickException("'detect.max_instances' must be a positive integer")
+
+    return DetectConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        classes=classes,
+        threshold=float(threshold),
+        max_instances=max_instances,
     )
 
 
