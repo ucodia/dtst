@@ -16,12 +16,13 @@ from dtst.sidecar import read_sidecar
 logger = logging.getLogger(__name__)
 
 
-def _check_image_size(args: tuple) -> tuple[str, str, int, int, str | None]:
-    """Check image dimensions. Returns (status, filename, width, height, error).
+def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None]:
+    """Check image dimensions against all criteria.
 
+    Returns (status, filename, width, height, reject_reason_or_error).
     Must be a top-level function for ProcessPoolExecutor.
     """
-    input_path_s, min_size = args
+    input_path_s, min_side, max_side, min_width, max_width, min_height, max_height = args
     input_path = Path(input_path_s)
     name = input_path.name
 
@@ -31,8 +32,19 @@ def _check_image_size(args: tuple) -> tuple[str, str, int, int, str | None]:
         with Image.open(input_path) as img:
             w, h = img.size
 
-        if max(w, h) < min_size:
-            return "reject", name, w, h, None
+        largest = max(w, h)
+        if min_side is not None and largest < min_side:
+            return "reject", name, w, h, f"side too small ({w}x{h}, min_side={min_side})"
+        if max_side is not None and largest > max_side:
+            return "reject", name, w, h, f"side too large ({w}x{h}, max_side={max_side})"
+        if min_width is not None and w < min_width:
+            return "reject", name, w, h, f"width too small ({w}, min_width={min_width})"
+        if max_width is not None and w > max_width:
+            return "reject", name, w, h, f"width too large ({w}, max_width={max_width})"
+        if min_height is not None and h < min_height:
+            return "reject", name, w, h, f"height too small ({h}, min_height={min_height})"
+        if max_height is not None and h > max_height:
+            return "reject", name, w, h, f"height too large ({h}, max_height={max_height})"
         return "keep", name, w, h, None
 
     except Exception as e:
@@ -45,8 +57,14 @@ def _resolve_config(
     from_dirs: list[str] | None,
     to: str | None,
     move: bool,
-    min_size: int | None,
+    min_side: int | None,
+    max_side: int | None,
+    min_width: int | None,
+    max_width: int | None,
+    min_height: int | None,
+    max_height: int | None,
     min_blur: float | None,
+    max_blur: float | None,
     max_detect: tuple[tuple[str, float], ...] | None = None,
     min_detect: tuple[tuple[str, float], ...] | None = None,
 ) -> SelectConfig:
@@ -63,10 +81,22 @@ def _resolve_config(
         cfg.to = to
     if move:
         cfg.move = True
-    if min_size is not None:
-        cfg.min_size = min_size
+    if min_side is not None:
+        cfg.min_side = min_side
+    if max_side is not None:
+        cfg.max_side = max_side
+    if min_width is not None:
+        cfg.min_width = min_width
+    if max_width is not None:
+        cfg.max_width = max_width
+    if min_height is not None:
+        cfg.min_height = min_height
+    if max_height is not None:
+        cfg.max_height = max_height
     if min_blur is not None:
         cfg.min_blur = min_blur
+    if max_blur is not None:
+        cfg.max_blur = max_blur
     if max_detect:
         cfg.max_detect = list(max_detect)
     if min_detect:
@@ -86,8 +116,14 @@ def _resolve_config(
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--move", is_flag=True, help="Move images instead of copying (removes originals).")
-@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; smaller images are excluded.")
+@click.option("--min-side", "-s", type=int, default=None, help="Minimum largest side in pixels; images with max(w,h) below this are excluded.")
+@click.option("--max-side", type=int, default=None, help="Maximum largest side in pixels; images with max(w,h) above this are excluded.")
+@click.option("--min-width", type=int, default=None, help="Minimum width in pixels; narrower images are excluded.")
+@click.option("--max-width", type=int, default=None, help="Maximum width in pixels; wider images are excluded.")
+@click.option("--min-height", type=int, default=None, help="Minimum height in pixels; shorter images are excluded.")
+@click.option("--max-height", type=int, default=None, help="Maximum height in pixels; taller images are excluded.")
 @click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry.")
+@click.option("--max-blur", type=float, default=None, help="Maximum blur score (Laplacian variance); higher-scoring images are excluded.")
 @click.option("--max-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).")
 @click.option("--min-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
@@ -98,8 +134,14 @@ def cmd(
     from_dirs: str | None,
     to: str | None,
     move: bool,
-    min_size: int | None,
+    min_side: int | None,
+    max_side: int | None,
+    min_width: int | None,
+    max_width: int | None,
+    min_height: int | None,
+    max_height: int | None,
     min_blur: float | None,
+    max_blur: float | None,
     max_detect: tuple[tuple[str, float], ...],
     min_detect: tuple[tuple[str, float], ...],
     workers: int | None,
@@ -121,7 +163,9 @@ def cmd(
     Examples:
         dtst select -d ./project --from raw --to backup
         dtst select -d ./project --from raw,extra --to combined
-        dtst select -d ./project --from faces --to curated --min-size 256
+        dtst select -d ./project --from faces --to curated --min-side 256
+        dtst select -d ./project --from faces --to curated --max-side 2048
+        dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
         dtst select -d ./project --from faces --to curated --move --min-blur 50
         dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
         dtst select config.yaml --dry-run
@@ -132,7 +176,11 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, move, min_size, min_blur, max_detect, min_detect)
+    cfg = _resolve_config(
+        config, working_dir, parsed_from_dirs, to, move,
+        min_side, max_side, min_width, max_width, min_height, max_height,
+        min_blur, max_blur, max_detect, min_detect,
+    )
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
@@ -155,7 +203,11 @@ def cmd(
         )
 
     num_workers = workers if workers is not None else cpu_count() or 4
-    has_criteria = cfg.min_size is not None or cfg.min_blur is not None or cfg.max_detect or cfg.min_detect
+    has_dimension_criteria = any(v is not None for v in (
+        cfg.min_side, cfg.max_side, cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height,
+    ))
+    has_blur_criteria = cfg.min_blur is not None or cfg.max_blur is not None
+    has_criteria = has_dimension_criteria or has_blur_criteria or cfg.max_detect or cfg.min_detect
     transfer_label = "move" if cfg.move else "copy"
 
     # --- Filter images -------------------------------------------------------
@@ -166,10 +218,17 @@ def cmd(
 
     if has_criteria:
         criteria_parts = []
-        if cfg.min_size is not None:
-            criteria_parts.append(f"min_size={cfg.min_size}")
+        for name, val in [
+            ("min_side", cfg.min_side), ("max_side", cfg.max_side),
+            ("min_width", cfg.min_width), ("max_width", cfg.max_width),
+            ("min_height", cfg.min_height), ("max_height", cfg.max_height),
+        ]:
+            if val is not None:
+                criteria_parts.append(f"{name}={val}")
         if cfg.min_blur is not None:
             criteria_parts.append(f"min_blur={cfg.min_blur}")
+        if cfg.max_blur is not None:
+            criteria_parts.append(f"max_blur={cfg.max_blur}")
         if cfg.max_detect:
             for cls, threshold in cfg.max_detect:
                 criteria_parts.append(f"max_detect({cls})={threshold}")
@@ -178,32 +237,36 @@ def cmd(
                 criteria_parts.append(f"min_detect({cls})={threshold}")
         logger.info("Filtering %d images (%s)", len(images), ", ".join(criteria_parts))
 
-        # Size check (parallel, CPU-bound)
-        if cfg.min_size is not None:
+        # Dimension check (parallel, CPU-bound)
+        if has_dimension_criteria:
             from concurrent.futures import ProcessPoolExecutor, as_completed
 
-            work = [(str(p), cfg.min_size) for p in images]
+            work = [
+                (str(p), cfg.min_side, cfg.max_side,
+                 cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height)
+                for p in images
+            ]
             with logging_redirect_tqdm():
                 with ProcessPoolExecutor(max_workers=num_workers) as executor:
-                    futures = {executor.submit(_check_image_size, w): w for w in work}
-                    with tqdm(total=len(futures), desc="Checking size", unit="image") as pbar:
+                    futures = {executor.submit(_check_image_dimensions, w): w for w in work}
+                    with tqdm(total=len(futures), desc="Checking dimensions", unit="image") as pbar:
                         try:
                             for future in as_completed(futures):
-                                status, name, w, h, error = future.result()
+                                status, name, w, h, reason = future.result()
                                 if status == "reject":
                                     original_path = Path(futures[future][0])
-                                    rejects[original_path] = f"too small ({w}x{h})"
+                                    rejects[original_path] = reason
                                     kept_set.discard(original_path)
                                 elif status == "failed":
                                     failed += 1
-                                    logger.error("Failed to check %s: %s", name, error)
+                                    logger.error("Failed to check %s: %s", name, reason)
                                 pbar.update(1)
                         except KeyboardInterrupt:
                             executor.shutdown(wait=False, cancel_futures=True)
                             raise
 
         # Blur check (sidecar lookup)
-        if cfg.min_blur is not None:
+        if has_blur_criteria:
             remaining = sorted(kept_set)
             for img_path in remaining:
                 sidecar = read_sidecar(img_path)
@@ -213,8 +276,12 @@ def cmd(
                     kept_set.discard(img_path)
                     continue
                 score = blur_data["score"]
-                if score < cfg.min_blur:
+                if cfg.min_blur is not None and score < cfg.min_blur:
                     rejects[img_path] = f"too blurry (score={score:.2f})"
+                    kept_set.discard(img_path)
+                    continue
+                if cfg.max_blur is not None and score > cfg.max_blur:
+                    rejects[img_path] = f"too sharp (score={score:.2f})"
                     kept_set.discard(img_path)
 
         # Detection check (sidecar lookup)

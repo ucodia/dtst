@@ -310,8 +310,14 @@ class SelectConfig:
     from_dirs: list[str] | None = None
     to: str | None = None
     move: bool = False
-    min_size: int | None = None
+    min_side: int | None = None
+    max_side: int | None = None
+    min_width: int | None = None
+    max_width: int | None = None
+    min_height: int | None = None
+    max_height: int | None = None
     min_blur: float | None = None
+    max_blur: float | None = None
     max_detect: list[tuple[str, float]] | None = None
     min_detect: list[tuple[str, float]] | None = None
 
@@ -363,16 +369,27 @@ def load_select_config(path: str | Path) -> SelectConfig:
     if not isinstance(move, bool):
         raise click.ClickException("'select.move' must be a boolean")
 
-    min_size = section.get("min_size")
-    if min_size is not None:
-        if not isinstance(min_size, int) or min_size < 1:
-            raise click.ClickException("'select.min_size' must be a positive integer")
+    dim_fields = {}
+    for field_name in ("min_side", "max_side", "min_width", "max_width", "min_height", "max_height"):
+        value = section.get(field_name)
+        if value is None and field_name == "min_side":
+            value = section.get("min_size")
+        if value is not None:
+            if not isinstance(value, int) or value < 1:
+                raise click.ClickException(f"'select.{field_name}' must be a positive integer")
+        dim_fields[field_name] = value
 
     min_blur = section.get("min_blur")
     if min_blur is not None:
         if not isinstance(min_blur, (int, float)) or min_blur < 0:
             raise click.ClickException("'select.min_blur' must be a non-negative number")
         min_blur = float(min_blur)
+
+    max_blur = section.get("max_blur")
+    if max_blur is not None:
+        if not isinstance(max_blur, (int, float)) or max_blur < 0:
+            raise click.ClickException("'select.max_blur' must be a non-negative number")
+        max_blur = float(max_blur)
 
     max_detect = _parse_tag_thresholds(section, "max_detect")
     min_detect = _parse_tag_thresholds(section, "min_detect")
@@ -382,8 +399,14 @@ def load_select_config(path: str | Path) -> SelectConfig:
         from_dirs=from_dirs,
         to=to.strip() if to else None,
         move=move,
-        min_size=min_size,
+        min_side=dim_fields["min_side"],
+        max_side=dim_fields["max_side"],
+        min_width=dim_fields["min_width"],
+        max_width=dim_fields["max_width"],
+        min_height=dim_fields["min_height"],
+        max_height=dim_fields["max_height"],
         min_blur=min_blur,
+        max_blur=max_blur,
         max_detect=max_detect,
         min_detect=min_detect,
     )

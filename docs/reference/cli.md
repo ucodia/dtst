@@ -569,7 +569,9 @@ When both are provided, CLI options override config file values.
 Examples:
     dtst select -d ./project --from raw --to backup
     dtst select -d ./project --from raw,extra --to combined
-    dtst select -d ./project --from faces --to curated --min-size 256
+    dtst select -d ./project --from faces --to curated --min-side 256
+    dtst select -d ./project --from faces --to curated --max-side 2048
+    dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
     dtst select -d ./project --from faces --to curated --move --min-blur 50
     dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
     dtst select config.yaml --dry-run
@@ -588,8 +590,14 @@ dtst select [OPTIONS] [CONFIG]
 | `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--move` | boolean | Move images instead of copying (removes originals). | `False` |
-| `--min-size`, `-s` | integer | Minimum image dimension in pixels; smaller images are excluded. | None |
+| `--min-side`, `-s` | integer | Minimum largest side in pixels; images with max(w,h) below this are excluded. | None |
+| `--max-side` | integer | Maximum largest side in pixels; images with max(w,h) above this are excluded. | None |
+| `--min-width` | integer | Minimum width in pixels; narrower images are excluded. | None |
+| `--max-width` | integer | Maximum width in pixels; wider images are excluded. | None |
+| `--min-height` | integer | Minimum height in pixels; shorter images are excluded. | None |
+| `--max-height` | integer | Maximum height in pixels; taller images are excluded. | None |
 | `--min-blur` | float | Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry. | None |
+| `--max-blur` | float | Maximum blur score (Laplacian variance); higher-scoring images are excluded. | None |
 | `--max-detect` | <text float> | Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5). | `()` |
 | `--min-detect` | <text float> | Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3). | `()` |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
