@@ -55,6 +55,44 @@ dtst analyze [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst annotate { #dtst-annotate data-toc-label='annotate' }
+
+Write source and license metadata into image sidecars.
+
+Annotates all images in the given folders with provenance metadata
+(source, license, origin). Useful for manually imported images that
+were not fetched through the pipeline. Sidecars are merged
+incrementally — existing fields are preserved unless --overwrite
+is used.
+
+At least one of --source, --license, or --origin is required.
+
+Examples:
+    dtst annotate --from extra --source "unsplash" --license "cc0" -d ./my-dataset
+    dtst annotate config.yaml
+    dtst annotate --from raw,extra --source "personal" --license "all-rights-reserved"
+    dtst annotate --from extra --source "flickr" --overwrite -d ./my-dataset
+    dtst annotate --from extra --source "personal" --dry-run
+
+**Usage:**
+
+```text
+dtst annotate [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
+| `--source`, `-s` | text | Source name to write (e.g. 'unsplash', 'personal'). | None |
+| `--license`, `-l` | text | License string to write (e.g. 'cc-by', 'cc0', 'all-rights-reserved'). | None |
+| `--origin`, `-o` | text | Origin URL to write (applied to all images). | None |
+| `--overwrite` | boolean | Overwrite existing source/license/origin values in sidecars. | `False` |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--dry-run` | boolean | Preview what would be annotated without writing sidecars. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst augment { #dtst-augment data-toc-label='augment' }
 
 Augment a dataset by applying image transformations.
