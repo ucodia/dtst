@@ -612,6 +612,8 @@ Examples:
     dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
     dtst select -d ./project --from faces --to curated --move --min-blur 50
     dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
+    dtst select -d ./project --from raw --to licensed --source serper,flickr
+    dtst select -d ./project --from raw --to licensed --license cc-by,cc-by-sa
     dtst select config.yaml --dry-run
 
 **Usage:**
@@ -638,6 +640,8 @@ dtst select [OPTIONS] [CONFIG]
 | `--max-blur` | float | Maximum blur score (Laplacian variance); higher-scoring images are excluded. | None |
 | `--max-detect` | <text float> | Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5). | `()` |
 | `--min-detect` | <text float> | Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3). | `()` |
+| `--source` | text | Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field. | None |
+| `--license` | text | Comma-separated list of licenses to include (e.g. 'cc-by,none'); checked against sidecar 'license' field. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be selected without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
