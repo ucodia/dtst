@@ -320,6 +320,8 @@ class SelectConfig:
     max_blur: float | None = None
     max_detect: list[tuple[str, float]] | None = None
     min_detect: list[tuple[str, float]] | None = None
+    source: list[str] | None = None
+    license: list[str] | None = None
 
 
 def _parse_tag_thresholds(
@@ -394,6 +396,28 @@ def load_select_config(path: str | Path) -> SelectConfig:
     max_detect = _parse_tag_thresholds(section, "max_detect")
     min_detect = _parse_tag_thresholds(section, "min_detect")
 
+    source = section.get("source")
+    if source is not None:
+        if isinstance(source, list):
+            source = [str(s).strip().lower() for s in source if str(s).strip()]
+        elif isinstance(source, str):
+            source = [s.strip().lower() for s in source.split(",") if s.strip()]
+        else:
+            raise click.ClickException("'select.source' must be a string or list of strings")
+        if not source:
+            source = None
+
+    license_ = section.get("license")
+    if license_ is not None:
+        if isinstance(license_, list):
+            license_ = [str(l).strip().lower() for l in license_ if str(l).strip()]
+        elif isinstance(license_, str):
+            license_ = [l.strip().lower() for l in license_.split(",") if l.strip()]
+        else:
+            raise click.ClickException("'select.license' must be a string or list of strings")
+        if not license_:
+            license_ = None
+
     return SelectConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs,
@@ -409,6 +433,8 @@ def load_select_config(path: str | Path) -> SelectConfig:
         max_blur=max_blur,
         max_detect=max_detect,
         min_detect=min_detect,
+        source=source,
+        license=license_,
     )
 
 

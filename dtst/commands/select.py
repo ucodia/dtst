@@ -67,6 +67,8 @@ def _resolve_config(
     max_blur: float | None,
     max_detect: tuple[tuple[str, float], ...] | None = None,
     min_detect: tuple[tuple[str, float], ...] | None = None,
+    source: list[str] | None = None,
+    license: list[str] | None = None,
 ) -> SelectConfig:
     if config is not None:
         cfg = load_select_config(config)
@@ -101,6 +103,10 @@ def _resolve_config(
         cfg.max_detect = list(max_detect)
     if min_detect:
         cfg.min_detect = list(min_detect)
+    if source is not None:
+        cfg.source = source
+    if license is not None:
+        cfg.license = license
 
     if cfg.from_dirs is None:
         raise click.ClickException("--from is required (or set 'select.from' in config)")
@@ -126,6 +132,8 @@ def _resolve_config(
 @click.option("--max-blur", type=float, default=None, help="Maximum blur score (Laplacian variance); higher-scoring images are excluded.")
 @click.option("--max-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).")
 @click.option("--min-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).")
+@click.option("--source", type=str, default=None, help="Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field.")
+@click.option("--license", "license_filter", type=str, default=None, help="Comma-separated list of licenses to include (e.g. 'cc-by,none'); checked against sidecar 'license' field.")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be selected without creating files.")
 def cmd(
@@ -144,6 +152,8 @@ def cmd(
     max_blur: float | None,
     max_detect: tuple[tuple[str, float], ...],
     min_detect: tuple[tuple[str, float], ...],
+    source: str | None,
+    license_filter: str | None,
     workers: int | None,
     dry_run: bool,
 ) -> None:
@@ -168,6 +178,8 @@ def cmd(
         dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
         dtst select -d ./project --from faces --to curated --move --min-blur 50
         dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
+        dtst select -d ./project --from raw --to licensed --source serper,flickr
+        dtst select -d ./project --from raw --to licensed --license cc-by,cc-by-sa
         dtst select config.yaml --dry-run
     """
     parsed_from_dirs: list[str] | None = None
@@ -176,10 +188,23 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
+    parsed_source: list[str] | None = None
+    if source is not None:
+        parsed_source = [s.strip().lower() for s in source.split(",") if s.strip()]
+        if not parsed_source:
+            raise click.ClickException("--source must contain at least one value")
+
+    parsed_license: list[str] | None = None
+    if license_filter is not None:
+        parsed_license = [l.strip().lower() for l in license_filter.split(",") if l.strip()]
+        if not parsed_license:
+            raise click.ClickException("--license must contain at least one value")
+
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, move,
         min_side, max_side, min_width, max_width, min_height, max_height,
         min_blur, max_blur, max_detect, min_detect,
+        parsed_source, parsed_license,
     )
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
@@ -207,7 +232,8 @@ def cmd(
         cfg.min_side, cfg.max_side, cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height,
     ))
     has_blur_criteria = cfg.min_blur is not None or cfg.max_blur is not None
-    has_criteria = has_dimension_criteria or has_blur_criteria or cfg.max_detect or cfg.min_detect
+    has_sidecar_criteria = cfg.source is not None or cfg.license is not None
+    has_criteria = has_dimension_criteria or has_blur_criteria or cfg.max_detect or cfg.min_detect or has_sidecar_criteria
     transfer_label = "move" if cfg.move else "copy"
 
     # --- Filter images -------------------------------------------------------
@@ -235,6 +261,10 @@ def cmd(
         if cfg.min_detect:
             for cls, threshold in cfg.min_detect:
                 criteria_parts.append(f"min_detect({cls})={threshold}")
+        if cfg.source:
+            criteria_parts.append(f"source={','.join(cfg.source)}")
+        if cfg.license:
+            criteria_parts.append(f"license={','.join(cfg.license)}")
         logger.info("Filtering %d images (%s)", len(images), ", ".join(criteria_parts))
 
         # Dimension check (parallel, CPU-bound)
@@ -321,6 +351,34 @@ def cmd(
                             rejects[img_path] = f"detection '{cls}' score {score:.3f} < {threshold}"
                             kept_set.discard(img_path)
                             break
+
+        # Source / license check (sidecar lookup)
+        if has_sidecar_criteria:
+            remaining = sorted(kept_set)
+            for img_path in remaining:
+                sidecar = read_sidecar(img_path)
+
+                if cfg.source is not None:
+                    img_source = sidecar.get("source")
+                    if img_source is None:
+                        rejects[img_path] = "missing source data"
+                        kept_set.discard(img_path)
+                        continue
+                    if str(img_source).lower() not in cfg.source:
+                        rejects[img_path] = f"source '{img_source}' not in {cfg.source}"
+                        kept_set.discard(img_path)
+                        continue
+
+                if cfg.license is not None:
+                    img_license = sidecar.get("license")
+                    if img_license is None:
+                        rejects[img_path] = "missing license data"
+                        kept_set.discard(img_path)
+                        continue
+                    if str(img_license).lower() not in cfg.license:
+                        rejects[img_path] = f"license '{img_license}' not in {cfg.license}"
+                        kept_set.discard(img_path)
+                        continue
 
     selected = sorted(kept_set)
 
