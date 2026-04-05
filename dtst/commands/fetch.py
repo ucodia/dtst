@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"})
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v"})
 
-UNSUPPORTED_EXTENSIONS = frozenset({".djvu"})
+UNSUPPORTED_EXTENSIONS = frozenset({".djvu", ".svg", ".gif"})
 
 CONTENT_TYPE_TO_EXT: dict[str, str] = {
     "image/jpeg": ".jpg",
