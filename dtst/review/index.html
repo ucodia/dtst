@@ -1057,7 +1057,7 @@ async function init() {
     var urlSize = params.get("size");
     if (urlSize) {
         var sizeVal = parseInt(urlSize, 10);
-        if (sizeVal >= 80 && sizeVal <= 400) {
+        if (sizeVal >= 60 && sizeVal <= 640) {
             document.getElementById("size-slider").value = sizeVal;
             updateGridSize(sizeVal, true);
         }
@@ -1107,21 +1107,33 @@ async function showPicker() {
     const overlay = document.getElementById("picker-overlay");
     overlay.classList.remove("hidden");
 
+    var params = getUrlParams();
+    var currentFrom = document.getElementById("picker-from").value || params.get("from") || "";
+    var currentTo = document.getElementById("picker-to").value || params.get("to") || "";
+
     const resp = await fetch("/api/buckets");
     const data = await resp.json();
     pickerBuckets = data.buckets;
 
     const sel = document.getElementById("picker-from");
-    sel.innerHTML = '<option value="" disabled selected>Choose a bucket...</option>';
+    sel.innerHTML = '<option value="" disabled>Choose a bucket...</option>';
     pickerBuckets.forEach(function(b) {
         const opt = document.createElement("option");
         opt.value = b.path;
         opt.textContent = b.path;
+        if (b.path === currentFrom) opt.selected = true;
         sel.appendChild(opt);
     });
+    if (!currentFrom) sel.querySelector("option[disabled]").selected = true;
 
-    document.getElementById("picker-to").innerHTML = '<option value="rejected" selected>rejected</option>';
-    document.getElementById("picker-start").disabled = true;
+    if (currentFrom) {
+        onPickerFromChange();
+        if (currentTo) document.getElementById("picker-to").value = currentTo;
+    } else {
+        document.getElementById("picker-to").innerHTML = '<option value="rejected" selected>rejected</option>';
+    }
+
+    document.getElementById("picker-start").disabled = !sel.value;
 }
 
 function hidePicker() {
