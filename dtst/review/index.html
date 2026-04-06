@@ -566,6 +566,50 @@ const state = {
     sortKeys: [],
 };
 
+function getUrlParams() {
+    return new URLSearchParams(window.location.search);
+}
+
+function updateUrlParams() {
+    var params = new URLSearchParams();
+    var info = document.getElementById("bucket-info");
+    if (info.style.display !== "none") {
+        var label = document.getElementById("bucket-label").textContent;
+        var parts = label.split(" \u203a ");
+        if (parts.length === 2) {
+            params.set("from", parts[0]);
+            params.set("to", parts[1]);
+        }
+    }
+    if (state.sortKeys.length > 0) {
+        var sortStr = state.sortKeys.map(function(s) {
+            return s.key + ":" + (s.asc ? "asc" : "desc");
+        }).join(",");
+        params.set("sort", sortStr);
+    }
+    var slider = document.getElementById("size-slider");
+    if (slider.value !== "240") {
+        params.set("size", slider.value);
+    }
+    var qs = params.toString();
+    var newUrl = window.location.pathname + (qs ? "?" + qs : "");
+    history.replaceState(null, "", newUrl);
+}
+
+function parseSortParams(sortStr) {
+    var keys = [];
+    sortStr.split(",").forEach(function(part) {
+        var pieces = part.split(":");
+        var key = pieces[0];
+        var dir = pieces.length > 1 ? pieces[1] : null;
+        if (["name", "resolution", "size", "blur", "scale"].indexOf(key) !== -1) {
+            var asc = dir === "asc" ? true : dir === "desc" ? false : (defaultSortAsc[key] !== undefined ? defaultSortAsc[key] : true);
+            keys.push({ key: key, asc: asc });
+        }
+    });
+    return keys;
+}
+
 async function loadImages(view) {
     const loading = document.getElementById("loading");
     const grid = document.getElementById("grid");
@@ -657,6 +701,7 @@ function setSort(key) {
     renderSortButtons();
     sortImages();
     renderGrid();
+    updateUrlParams();
 }
 
 function removeSort(key) {
@@ -664,6 +709,7 @@ function removeSort(key) {
     renderSortButtons();
     sortImages();
     renderGrid();
+    updateUrlParams();
 }
 
 function renderSortButtons() {
@@ -827,8 +873,9 @@ function updateViewToggle() {
     document.getElementById("btn-filtered").classList.toggle("active", state.view === "filtered");
 }
 
-function updateGridSize(size) {
+function updateGridSize(size, skipUrl) {
     document.getElementById("grid").style.gridTemplateColumns = "repeat(auto-fill, minmax(" + size + "px, 1fr))";
+    if (!skipUrl) updateUrlParams();
 }
 
 async function switchView(view) {
@@ -1001,11 +1048,49 @@ function escapeAttr(str) {
 let pickerBuckets = [];
 
 async function init() {
+    var params = getUrlParams();
+
+    var urlSort = params.get("sort");
+    if (urlSort) {
+        state.sortKeys = parseSortParams(urlSort);
+        renderSortButtons();
+    }
+
+    var urlSize = params.get("size");
+    if (urlSize) {
+        var sizeVal = parseInt(urlSize, 10);
+        if (sizeVal >= 80 && sizeVal <= 400) {
+            document.getElementById("size-slider").value = sizeVal;
+            updateGridSize(sizeVal, true);
+        }
+    }
+
+    var urlFrom = params.get("from");
+    var urlTo = params.get("to");
+
+    if (urlFrom) {
+        var to = urlTo || "rejected";
+        var selectResp = await fetch("/api/select", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({from_dir: urlFrom, to: to}),
+        });
+        var selectResult = await selectResp.json();
+        if (!selectResult.error) {
+            updateBucketInfo(urlFrom, to);
+            hidePicker();
+            updateUrlParams();
+            await loadImages("source");
+            return;
+        }
+    }
+
     const resp = await fetch("/api/config");
     const cfg = await resp.json();
     if (cfg.configured) {
         updateBucketInfo(cfg.from_dir, cfg.to);
         hidePicker();
+        updateUrlParams();
         loadImages("source");
     } else {
         showPicker();
@@ -1106,6 +1191,7 @@ async function confirmPicker() {
 
     updateBucketInfo(fromDir, to);
     hidePicker();
+    updateUrlParams();
     await loadImages("source");
 }
 
@@ -1116,7 +1202,7 @@ function measureHeader() {
 measureHeader();
 window.addEventListener("resize", measureHeader);
 
-updateGridSize(240);
+updateGridSize(240, true);
 init();
 </script>
 </body>
