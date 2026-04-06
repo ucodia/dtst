@@ -43,5 +43,16 @@ def copy_sidecar(src: Path, dest: Path, exclude: set[str] | None = None) -> None
         f.write("\n")
 
 
+def scale_classes(classes: dict, factor: float) -> dict:
+    """Scale bounding-box coordinates by *factor*, preserving scores."""
+    scaled = {}
+    for cls, detections in classes.items():
+        scaled[cls] = [
+            {"score": d["score"], "box": [int(c * factor) for c in d["box"]]}
+            for d in detections
+        ]
+    return scaled
+
+
 def read_all_sidecars(image_paths: list[Path]) -> dict[Path, dict]:
     return {p: read_sidecar(p) for p in image_paths}
