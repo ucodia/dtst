@@ -26,7 +26,11 @@ def _build_cli_args(step, config_path, working_dir, workflow_working_dir):
             if value:
                 args.append(flag)
         elif isinstance(value, list):
-            args.extend([flag, ",".join(str(v) for v in value)])
+            if all(isinstance(v, str) for v in value):
+                args.extend([flag, ",".join(value)])
+            else:
+                args.append(flag)
+                args.extend(str(v) for v in value)
         else:
             args.extend([flag, str(value)])
 
