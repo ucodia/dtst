@@ -505,7 +505,7 @@ body.show-bboxes .bbox-box { display: block; }
     </div>
     <div class="slider-group">
         <label for="size-slider">Size</label>
-        <input type="range" id="size-slider" min="80" max="400" value="240" oninput="updateGridSize(this.value)">
+        <input type="range" id="size-slider" min="60" max="640" step="20" value="240" oninput="updateGridSize(this.value)">
     </div>
     <label class="bbox-toggle">
         <input type="checkbox" id="bbox-check" checked onchange="toggleBboxes(this.checked)">
@@ -588,9 +588,7 @@ function updateUrlParams() {
         params.set("sort", sortStr);
     }
     var slider = document.getElementById("size-slider");
-    if (slider.value !== "240") {
-        params.set("size", slider.value);
-    }
+    params.set("size", slider.value);
     var qs = params.toString();
     var newUrl = window.location.pathname + (qs ? "?" + qs : "");
     history.replaceState(null, "", newUrl);
