@@ -15,7 +15,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from dtst.config import UpscaleConfig, load_upscale_config
 from dtst.embeddings.base import detect_device
 from dtst.files import find_images, resolve_dirs
-from dtst.sidecar import copy_sidecar
+from dtst.sidecar import copy_sidecar, write_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -412,6 +412,7 @@ def cmd(
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()
                         copy_sidecar(img_path, output_dir / out_name, exclude={"metrics", "classes"})
+                        write_sidecar(output_dir / out_name, {"upscale": actual_scale})
                         ok_count += 1
 
                     except torch.cuda.OutOfMemoryError:
