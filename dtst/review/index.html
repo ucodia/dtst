@@ -616,6 +616,38 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+function formatMetaVal(v) {
+    if (typeof v === 'number') {
+        return Number.isInteger(v) ? String(v) : v.toFixed(3);
+    }
+    if (typeof v === 'string') {
+        return escapeHtml(v);
+    }
+    return escapeHtml(JSON.stringify(v));
+}
+
+function renderMetaClasses(classes) {
+    var rows = '';
+    var entries = Object.entries(classes).sort(function(a, b) {
+        var sa = a[1].length ? a[1][0].score : -1;
+        var sb = b[1].length ? b[1][0].score : -1;
+        return sb - sa;
+    });
+    entries.forEach(function(entry) {
+        var cls = entry[0];
+        var dets = entry[1];
+        if (dets.length) {
+            var count = dets.length;
+            var best = dets[0].score.toFixed(3);
+            var label = count > 1 ? best + ' (\u00d7' + count + ')' : best;
+            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">' + label + '</span></div>';
+        } else {
+            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">-</span></div>';
+        }
+    });
+    return rows;
+}
+
 function renderMeta(sidecar, img) {
     let rows = '<div class="meta-row"><span class="meta-key">file</span><span class="meta-val">' + escapeHtml(img.filename) + '</span></div>';
 
@@ -625,39 +657,20 @@ function renderMeta(sidecar, img) {
     if (img.file_size) {
         rows += '<div class="meta-row"><span class="meta-key">file size</span><span class="meta-val">' + formatFileSize(img.file_size) + '</span></div>';
     }
-    if (sidecar && sidecar.blur) {
-        rows += '<div class="meta-row"><span class="meta-key">blur</span><span class="meta-val">' + sidecar.blur.score + '</span></div>';
-    }
-    if (sidecar && sidecar.phash) {
-        rows += '<div class="meta-row"><span class="meta-key">phash</span><span class="meta-val">' + escapeHtml(sidecar.phash.hash) + '</span></div>';
-    }
-    if (sidecar && sidecar.tags && sidecar.tags.scores) {
-        const scores = sidecar.tags.scores;
-        const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-        sorted.forEach(function(entry) {
-            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(entry[0]) + '</span><span class="meta-val">' + entry[1].toFixed(3) + '</span></div>';
-        });
-    }
-    if (sidecar && sidecar.classes) {
-        var classes = sidecar.classes;
-        var entries = Object.entries(classes).sort(function(a, b) {
-            var sa = a[1].length ? a[1][0].score : -1;
-            var sb = b[1].length ? b[1][0].score : -1;
-            return sb - sa;
-        });
-        entries.forEach(function(entry) {
-            var cls = entry[0];
-            var dets = entry[1];
-            if (dets.length) {
-                var count = dets.length;
-                var best = dets[0].score.toFixed(3);
-                var label = count > 1 ? best + ' (\u00d7' + count + ')' : best;
-                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">' + label + '</span></div>';
-            } else {
-                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(cls) + '</span><span class="meta-val">-</span></div>';
-            }
-        });
-    }
+    if (!sidecar) return rows;
+
+    Object.keys(sidecar).forEach(function(key) {
+        var val = sidecar[key];
+        if (key === 'classes') {
+            rows += renderMetaClasses(val);
+        } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+            Object.keys(val).forEach(function(prop) {
+                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(prop) + '</span><span class="meta-val">' + formatMetaVal(val[prop]) + '</span></div>';
+            });
+        } else {
+            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(key) + '</span><span class="meta-val">' + formatMetaVal(val) + '</span></div>';
+        }
+    });
     return rows;
 }
 
