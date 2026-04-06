@@ -668,11 +668,14 @@ function formatFileSize(bytes) {
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function formatMetaVal(v) {
+function formatMetaVal(v, key) {
     if (typeof v === 'number') {
         return Number.isInteger(v) ? String(v) : v.toFixed(3);
     }
     if (typeof v === 'string') {
+        if (key === 'origin' && (v.startsWith('http://') || v.startsWith('https://'))) {
+            return '<a href="' + escapeAttr(v) + '" target="_blank" rel="noopener" style="color:#4a9eff;text-decoration:none" onclick="event.stopPropagation()">' + escapeHtml(v) + '</a>';
+        }
         return escapeHtml(v);
     }
     return escapeHtml(JSON.stringify(v));
@@ -717,10 +720,10 @@ function renderMeta(sidecar, img) {
             rows += renderMetaClasses(val);
         } else if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
             Object.keys(val).forEach(function(prop) {
-                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(prop) + '</span><span class="meta-val">' + formatMetaVal(val[prop]) + '</span></div>';
+                rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(prop) + '</span><span class="meta-val">' + formatMetaVal(val[prop], prop) + '</span></div>';
             });
         } else {
-            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(key) + '</span><span class="meta-val">' + formatMetaVal(val) + '</span></div>';
+            rows += '<div class="meta-row"><span class="meta-key">' + escapeHtml(key) + '</span><span class="meta-val">' + formatMetaVal(val, key) + '</span></div>';
         }
     });
     return rows;
