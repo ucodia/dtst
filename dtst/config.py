@@ -506,6 +506,7 @@ class DedupConfig:
     from_dir: str | None = None
     to: str = "duplicated"
     threshold: int = 8
+    prefer_upscaled: bool = False
 
 
 def load_dedup_config(path: str | Path) -> DedupConfig:
@@ -528,11 +529,16 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
     if not isinstance(threshold, int) or threshold < 0:
         raise click.ClickException("'dedup.threshold' must be a non-negative integer")
 
+    prefer_upscaled = section.get("prefer_upscaled", False)
+    if not isinstance(prefer_upscaled, bool):
+        raise click.ClickException("'dedup.prefer_upscaled' must be a boolean")
+
     return DedupConfig(
         working_dir=resolved_working_dir,
         from_dir=from_dir.strip() if from_dir else None,
         to=to.strip(),
         threshold=threshold,
+        prefer_upscaled=prefer_upscaled,
     )
 
 

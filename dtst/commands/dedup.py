@@ -66,6 +66,7 @@ def _resolve_config(
     from_dir: str | None,
     to: str | None,
     threshold: int | None,
+    prefer_upscaled: bool = False,
 ) -> DedupConfig:
     if config is not None:
         cfg = load_dedup_config(config)
@@ -80,6 +81,8 @@ def _resolve_config(
         cfg.to = to
     if threshold is not None:
         cfg.threshold = threshold
+    if prefer_upscaled:
+        cfg.prefer_upscaled = prefer_upscaled
 
     if cfg.from_dir is None:
         raise click.ClickException("--from is required (or set 'dedup.from' in config)")
@@ -140,6 +143,11 @@ def _resolve_config(
     is_flag=True,
     help="Show what would be deduplicated without moving anything.",
 )
+@click.option(
+    "--prefer-upscaled",
+    is_flag=True,
+    help="Prefer upscaled images over originals when deduplicating.",
+)
 def cmd(
     config: Path | None,
     working_dir: Path | None,
@@ -149,11 +157,14 @@ def cmd(
     workers: int | None,
     clear: bool,
     dry_run: bool,
+    prefer_upscaled: bool,
 ) -> None:
     """Deduplicate images by perceptual hash similarity.
 
     Groups images by phash hamming distance and keeps the best image
-    from each duplicate group. The winner is chosen by resolution
+    from each duplicate group. By default, original (non-upscaled)
+    images are preferred; use --prefer-upscaled to reverse this. Within
+    each preference tier, the winner is chosen by resolution
     (width x height), then file size, then blur sharpness. Losers are
     moved to a duplicated/ subdirectory within the source folder
     (configurable with --to).
@@ -172,7 +183,7 @@ def cmd(
     """
     t0 = time.time()
 
-    cfg = _resolve_config(config, working_dir, from_dir, to, threshold)
+    cfg = _resolve_config(config, working_dir, from_dir, to, threshold, prefer_upscaled)
     source_dir = cfg.working_dir.resolve() / cfg.from_dir
     duplicated_dir = source_dir / cfg.to
 
@@ -299,12 +310,14 @@ def cmd(
     for members in dup_groups.values():
         group_paths = [valid_images[i] for i in members]
 
-        def sort_key(p: Path) -> tuple[int, int, float]:
+        def sort_key(p: Path) -> tuple[int, int, int, float]:
             w, h, fsize = image_info[p]
             resolution = w * h
             sc = sidecars.get(p, {})
             blur_score = sc.get("metrics", {}).get("blur", 0.0)
-            return (resolution, fsize, blur_score)
+            is_upscaled = 1 if sc.get("upscale") else 0
+            preference = is_upscaled if cfg.prefer_upscaled else (1 - is_upscaled)
+            return (preference, resolution, fsize, blur_score)
 
         group_paths.sort(key=sort_key, reverse=True)
         winner = group_paths[0]

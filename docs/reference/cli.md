@@ -206,7 +206,9 @@ dtst cluster [OPTIONS] [CONFIG]
 Deduplicate images by perceptual hash similarity.
 
 Groups images by phash hamming distance and keeps the best image
-from each duplicate group. The winner is chosen by resolution
+from each duplicate group. By default, original (non-upscaled)
+images are preferred; use --prefer-upscaled to reverse this. Within
+each preference tier, the winner is chosen by resolution
 (width x height), then file size, then blur sharpness. Losers are
 moved to a duplicated/ subdirectory within the source folder
 (configurable with --to).
@@ -239,6 +241,7 @@ dtst dedup [OPTIONS] [CONFIG]
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |
 | `--dry-run` | boolean | Show what would be deduplicated without moving anything. | `False` |
+| `--prefer-upscaled` | boolean | Prefer upscaled images over originals when deduplicating. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst detect { #dtst-detect data-toc-label='detect' }
