@@ -100,6 +100,11 @@ body {
     color: #fff;
 }
 
+.sort-arrow {
+    font-size: 10px;
+    margin-left: 2px;
+}
+
 .slider-group {
     display: flex;
     align-items: center;
@@ -472,9 +477,11 @@ body.show-bboxes .bbox-box { display: block; }
     </div>
     <div class="sort-group">
         <label>Sort</label>
-        <button class="btn btn-sort active" data-sort="name" onclick="setSort('name')">Name</button>
+        <button class="btn btn-sort active" data-sort="name" onclick="setSort('name')">Name <span class="sort-arrow">▲</span></button>
         <button class="btn btn-sort" data-sort="resolution" onclick="setSort('resolution')">Resolution</button>
         <button class="btn btn-sort" data-sort="size" onclick="setSort('size')">Size</button>
+        <button class="btn btn-sort" data-sort="blur" onclick="setSort('blur')">Blur</button>
+        <button class="btn btn-sort" data-sort="scale" onclick="setSort('scale')">Scale</button>
     </div>
     <div class="slider-group">
         <label for="size-slider">Size</label>
@@ -537,6 +544,7 @@ const state = {
     sourceCount: 0,
     lightboxIndex: -1,
     sort: "name",
+    sortAsc: true,
 };
 
 async function loadImages(view) {
@@ -565,23 +573,67 @@ async function loadImages(view) {
     loading.style.display = "none";
 }
 
+function getSidecarVal(img, path) {
+    var s = img.sidecar;
+    if (!s) return null;
+    var parts = path.split(".");
+    for (var i = 0; i < parts.length; i++) {
+        if (s == null || typeof s !== "object") return null;
+        s = s[parts[i]];
+    }
+    return typeof s === "number" ? s : null;
+}
+
 function sortImages() {
-    const key = state.sort;
+    var key = state.sort;
+    var dir = state.sortAsc ? 1 : -1;
     state.images.sort(function(a, b) {
         if (key === "resolution") {
-            return (b.width * b.height) - (a.width * a.height);
+            return dir * ((a.width * a.height) - (b.width * b.height));
         }
         if (key === "size") {
-            return (b.file_size || 0) - (a.file_size || 0);
+            return dir * ((a.file_size || 0) - (b.file_size || 0));
         }
-        return a.filename.localeCompare(b.filename);
+        if (key === "blur") {
+            var ba = getSidecarVal(a, "metrics.blur");
+            var bb = getSidecarVal(b, "metrics.blur");
+            if (ba === null && bb === null) return 0;
+            if (ba === null) return 1;
+            if (bb === null) return -1;
+            return dir * (ba - bb);
+        }
+        if (key === "scale") {
+            var sa = getSidecarVal(a, "upscale") || 1;
+            var sb = getSidecarVal(b, "upscale") || 1;
+            return dir * (sa - sb);
+        }
+        return dir * a.filename.localeCompare(b.filename);
     });
 }
 
+var defaultSortAsc = { name: true, resolution: false, size: false, blur: false, scale: false };
+
 function setSort(key) {
-    state.sort = key;
+    if (state.sort === key) {
+        state.sortAsc = !state.sortAsc;
+    } else {
+        state.sort = key;
+        state.sortAsc = defaultSortAsc[key] !== undefined ? defaultSortAsc[key] : true;
+    }
     document.querySelectorAll(".btn-sort").forEach(function(btn) {
-        btn.classList.toggle("active", btn.dataset.sort === key);
+        var isActive = btn.dataset.sort === key;
+        btn.classList.toggle("active", isActive);
+        var arrow = btn.querySelector(".sort-arrow");
+        if (isActive) {
+            if (!arrow) {
+                arrow = document.createElement("span");
+                arrow.className = "sort-arrow";
+                btn.appendChild(arrow);
+            }
+            arrow.innerHTML = state.sortAsc ? "▲" : "▼";
+        } else if (arrow) {
+            arrow.remove();
+        }
     });
     sortImages();
     renderGrid();
