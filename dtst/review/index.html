@@ -92,12 +92,32 @@ body {
 .btn-sort {
     padding: 4px 10px;
     font-size: 12px;
+    position: relative;
 }
 
 .btn-sort.active {
     background: #4a9eff;
     border-color: #4a9eff;
     color: #fff;
+}
+
+.sort-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    font-size: 10px;
+    font-weight: 700;
+    margin-right: 3px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.sort-badge:hover {
+    background: rgba(255,80,80,0.6);
 }
 
 .sort-arrow {
@@ -477,7 +497,7 @@ body.show-bboxes .bbox-box { display: block; }
     </div>
     <div class="sort-group">
         <label>Sort</label>
-        <button class="btn btn-sort active" data-sort="name" onclick="setSort('name')">Name <span class="sort-arrow">▲</span></button>
+        <button class="btn btn-sort" data-sort="name" onclick="setSort('name')">Name</button>
         <button class="btn btn-sort" data-sort="resolution" onclick="setSort('resolution')">Resolution</button>
         <button class="btn btn-sort" data-sort="size" onclick="setSort('size')">Size</button>
         <button class="btn btn-sort" data-sort="blur" onclick="setSort('blur')">Blur</button>
@@ -543,8 +563,7 @@ const state = {
     filteredCount: 0,
     sourceCount: 0,
     lightboxIndex: -1,
-    sort: "name",
-    sortAsc: true,
+    sortKeys: [],
 };
 
 async function loadImages(view) {
@@ -584,59 +603,89 @@ function getSidecarVal(img, path) {
     return typeof s === "number" ? s : null;
 }
 
+var defaultSortAsc = { name: true, resolution: false, size: false, blur: false, scale: false };
+
+function compareByKey(a, b, key) {
+    if (key === "resolution") {
+        return (a.width * a.height) - (b.width * b.height);
+    }
+    if (key === "size") {
+        return (a.file_size || 0) - (b.file_size || 0);
+    }
+    if (key === "blur") {
+        var ba = getSidecarVal(a, "metrics.blur");
+        var bb = getSidecarVal(b, "metrics.blur");
+        if (ba === null && bb === null) return 0;
+        if (ba === null) return 1;
+        if (bb === null) return -1;
+        return ba - bb;
+    }
+    if (key === "scale") {
+        return (getSidecarVal(a, "upscale") || 1) - (getSidecarVal(b, "upscale") || 1);
+    }
+    return a.filename.localeCompare(b.filename);
+}
+
 function sortImages() {
-    var key = state.sort;
-    var dir = state.sortAsc ? 1 : -1;
+    var keys = state.sortKeys;
+    if (keys.length === 0) return;
     state.images.sort(function(a, b) {
-        if (key === "resolution") {
-            return dir * ((a.width * a.height) - (b.width * b.height));
+        for (var i = 0; i < keys.length; i++) {
+            var dir = keys[i].asc ? 1 : -1;
+            var cmp = compareByKey(a, b, keys[i].key);
+            if (cmp !== 0) return dir * cmp;
         }
-        if (key === "size") {
-            return dir * ((a.file_size || 0) - (b.file_size || 0));
-        }
-        if (key === "blur") {
-            var ba = getSidecarVal(a, "metrics.blur");
-            var bb = getSidecarVal(b, "metrics.blur");
-            if (ba === null && bb === null) return 0;
-            if (ba === null) return 1;
-            if (bb === null) return -1;
-            return dir * (ba - bb);
-        }
-        if (key === "scale") {
-            var sa = getSidecarVal(a, "upscale") || 1;
-            var sb = getSidecarVal(b, "upscale") || 1;
-            return dir * (sa - sb);
-        }
-        return dir * a.filename.localeCompare(b.filename);
+        return 0;
     });
 }
 
-var defaultSortAsc = { name: true, resolution: false, size: false, blur: false, scale: false };
+function findSortIndex(key) {
+    for (var i = 0; i < state.sortKeys.length; i++) {
+        if (state.sortKeys[i].key === key) return i;
+    }
+    return -1;
+}
 
 function setSort(key) {
-    if (state.sort === key) {
-        state.sortAsc = !state.sortAsc;
+    var idx = findSortIndex(key);
+    if (idx === -1) {
+        var asc = defaultSortAsc[key] !== undefined ? defaultSortAsc[key] : true;
+        state.sortKeys.push({ key: key, asc: asc });
     } else {
-        state.sort = key;
-        state.sortAsc = defaultSortAsc[key] !== undefined ? defaultSortAsc[key] : true;
+        state.sortKeys[idx].asc = !state.sortKeys[idx].asc;
     }
-    document.querySelectorAll(".btn-sort").forEach(function(btn) {
-        var isActive = btn.dataset.sort === key;
-        btn.classList.toggle("active", isActive);
-        var arrow = btn.querySelector(".sort-arrow");
-        if (isActive) {
-            if (!arrow) {
-                arrow = document.createElement("span");
-                arrow.className = "sort-arrow";
-                btn.appendChild(arrow);
-            }
-            arrow.innerHTML = state.sortAsc ? "▲" : "▼";
-        } else if (arrow) {
-            arrow.remove();
-        }
-    });
+    renderSortButtons();
     sortImages();
     renderGrid();
+}
+
+function removeSort(key) {
+    state.sortKeys = state.sortKeys.filter(function(s) { return s.key !== key; });
+    renderSortButtons();
+    sortImages();
+    renderGrid();
+}
+
+function renderSortButtons() {
+    document.querySelectorAll(".btn-sort").forEach(function(btn) {
+        var key = btn.dataset.sort;
+        var idx = findSortIndex(key);
+        var isActive = idx !== -1;
+        btn.classList.toggle("active", isActive);
+
+        var badge = btn.querySelector(".sort-badge");
+        var arrow = btn.querySelector(".sort-arrow");
+        var label = btn.dataset.label || (btn.dataset.label = btn.textContent.trim());
+
+        if (isActive) {
+            var entry = state.sortKeys[idx];
+            var badgeHtml = '<span class="sort-badge" onclick="event.stopPropagation(); removeSort(\'' + key + '\')">' + (idx + 1) + '</span>';
+            var arrowHtml = '<span class="sort-arrow">' + (entry.asc ? '▲' : '▼') + '</span>';
+            btn.innerHTML = badgeHtml + label + ' ' + arrowHtml;
+        } else {
+            btn.innerHTML = label;
+        }
+    });
 }
 
 function renderGrid() {
