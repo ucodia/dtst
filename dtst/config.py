@@ -1114,6 +1114,45 @@ def load_rename_config(path: str | Path) -> RenameConfig:
     )
 
 
+@dataclass
+class ValidateConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    square: bool = False
+
+
+def load_validate_config(path: str | Path) -> ValidateConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("validate")
+    if not section or not isinstance(section, dict):
+        return ValidateConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'validate.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'validate.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    square = section.get("square", False)
+    if not isinstance(square, bool):
+        raise click.ClickException("'validate.square' must be a boolean")
+
+    return ValidateConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        square=square,
+    )
+
+
 VALID_FORMAT_CHANNELS = frozenset({"rgb", "grayscale"})
 
 

@@ -1,6 +1,6 @@
 # Final preparation
 
-The last steps are to expand the dataset with augmentations, optionally upscale images, rename files with clean sequential names, normalize image formats and channels, and produce resized versions at the dimensions you need for training.
+The last steps are to expand the dataset with augmentations, optionally upscale images, rename files with clean sequential names, normalize image formats and channels, produce resized versions at the dimensions you need for training, and validate the result.
 
 ## Augment
 
@@ -132,6 +132,35 @@ When only one dimension is given, the other is computed proportionally to preser
 ```bash
 dtst frame -d scratch/crowd --from final/formatted --to final/512 --width 512
 ```
+
+## Validate
+
+The `validate` command checks that every image in a folder shares the same dimensions and channel mode. Run it against your final outputs to catch inconsistencies before training:
+
+```bash
+dtst validate -d scratch/crowd --from final/512
+```
+
+If your training target requires square images (e.g. StyleGAN), add `--square`:
+
+```bash
+dtst validate -d scratch/crowd --from final/512 --square
+```
+
+The command also warns if any PNG files use compression above level 0, which slows down data loading during training.
+
+If everything passes you will see output like:
+
+```
+Validated 1,204 images (0m 3s)
+
+  Dimensions: PASS (all 512x512)
+  Channels:   PASS (all RGB)
+  Square:     PASS
+  PNG comp:   OK (all 1,204 PNGs at compression level 0)
+```
+
+If any check fails, `validate` exits with code 1 so you can use it in scripts or workflows.
 
 ## Final directory
 

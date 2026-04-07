@@ -774,3 +774,32 @@ dtst upscale [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without processing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst validate { #dtst-validate data-toc-label='validate' }
+
+Validate that all images in a folder are consistent.
+
+Checks that every image shares the same dimensions and channel mode.
+Optionally checks that images are square. Warns if any PNG files use
+compression (which slows down loading).
+
+Examples:
+    dtst validate --from faces -d ./my-dataset
+    dtst validate --from faces --square -d ./my-dataset
+    dtst validate config.yaml
+
+**Usage:**
+
+```text
+dtst validate [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--square` | boolean | Check that all images are square (width == height). | `False` |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--help` | boolean | Show this message and exit. | `False` |
+

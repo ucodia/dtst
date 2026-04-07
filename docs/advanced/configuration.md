@@ -94,6 +94,10 @@ frame:
   to: final/512
   width: 512
   height: 512
+
+validate:
+  from: final/512
+  square: true
 ```
 
 ## Running with a config file
@@ -115,6 +119,7 @@ dtst augment crowd.yaml
 dtst rename crowd.yaml
 dtst format crowd.yaml
 dtst frame crowd.yaml
+dtst validate crowd.yaml
 ```
 
 ## CLI overrides
