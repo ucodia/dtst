@@ -17,7 +17,7 @@ from dtst.config import (
     FrameConfig,
     load_frame_config,
 )
-from dtst.files import find_images, resolve_dirs
+from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
 from PIL import Image
@@ -67,7 +67,7 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
     Returns ``(status, filename, error_message)``.
     Status is one of ``"ok"`` or ``"failed"``.
     """
-    input_path_s, output_dir_s, target_width, target_height, mode, gravity, fill, fill_color = args
+    input_path_s, output_dir_s, target_width, target_height, mode, gravity, fill, fill_color, quality, compress_level = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
     name = input_path.name
@@ -75,6 +75,7 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
     try:
         img = Image.open(input_path)
         orig_w, orig_h = img.size
+        save_kw = build_save_kwargs(input_path, quality=quality, compress_level=compress_level)
 
         # Single-dimension: proportional resize (mode irrelevant)
         if target_width is None or target_height is None:
@@ -86,10 +87,10 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
                 new_w, new_h = round(orig_w * ratio), target_height
 
             if new_w == orig_w and new_h == orig_h:
-                img.save(output_dir / name, quality=95)
+                img.save(output_dir / name, **save_kw)
             else:
                 resized = img.resize((new_w, new_h), Image.LANCZOS)
-                resized.save(output_dir / name, quality=95)
+                resized.save(output_dir / name, **save_kw)
                 resized.close()
             img.close()
             return "ok", name, None
@@ -98,7 +99,7 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
         tw, th = target_width, target_height
 
         if orig_w == tw and orig_h == th:
-            img.save(output_dir / name, quality=95)
+            img.save(output_dir / name, **save_kw)
             img.close()
             return "ok", name, None
 
@@ -139,7 +140,7 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
                 result = canvas
             resized.close()
 
-        result.save(output_dir / name, quality=95)
+        result.save(output_dir / name, **save_kw)
         result.close()
         img.close()
         return "ok", name, None
@@ -159,6 +160,8 @@ def _resolve_config(
     gravity: str | None,
     fill: str | None,
     fill_color: str | None,
+    quality: int | None,
+    compress_level: int | None,
 ) -> FrameConfig:
     if config is not None:
         cfg = load_frame_config(config)
@@ -183,6 +186,10 @@ def _resolve_config(
         cfg.fill = fill
     if fill_color is not None:
         cfg.fill_color = fill_color
+    if quality is not None:
+        cfg.quality = quality
+    if compress_level is not None:
+        cfg.compress_level = compress_level
 
     if cfg.from_dirs is None:
         raise click.ClickException("--from is required (or set 'frame.from' in config)")
@@ -207,6 +214,8 @@ def _resolve_config(
 @click.option("--gravity", "-g", type=click.Choice(FRAME_GRAVITIES, case_sensitive=False), default=None, help="Anchor position for crop (part to keep) or pad (where to place image). Default: center.")
 @click.option("--fill", "-f", type=click.Choice(FRAME_FILLS, case_sensitive=False), default=None, help="Fill strategy for pad mode: color, edge, reflect, or blur (default: color).")
 @click.option("--fill-color", type=str, default=None, help="Hex color for pad fill when --fill=color (default: #000000).")
+@click.option("--quality", "-q", type=int, default=None, help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.")
+@click.option("--compress-level", type=int, default=None, help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.")
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
 def cmd(
@@ -220,6 +229,8 @@ def cmd(
     gravity: str | None,
     fill: str | None,
     fill_color: str | None,
+    quality: int | None,
+    compress_level: int | None,
     workers: int | None,
     dry_run: bool,
 ) -> None:
@@ -255,7 +266,7 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, width, height, mode, gravity, fill, fill_color)
+    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, width, height, mode, gravity, fill, fill_color, quality, compress_level)
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
@@ -307,7 +318,7 @@ def cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), cfg.width, cfg.height, cfg.mode, cfg.gravity, cfg.fill, cfg.fill_color)
+        (str(img_path), str(output_dir), cfg.width, cfg.height, cfg.mode, cfg.gravity, cfg.fill, cfg.fill_color, cfg.quality, cfg.compress_level)
         for img_path in images
     ]
 

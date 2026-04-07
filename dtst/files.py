@@ -67,6 +67,23 @@ def find_videos(directory: Path, recursive: bool = False) -> list[Path]:
     )
 
 
+def build_save_kwargs(
+    path: Path, *, quality: int = 95, compress_level: int = 6
+) -> dict:
+    """Build format-appropriate save kwargs for :meth:`PIL.Image.save`.
+
+    Returns ``quality`` for JPEG/WebP and ``compress_level`` for PNG.
+    """
+    suffix = path.suffix.lower()
+    if suffix in (".jpg", ".jpeg"):
+        return {"quality": quality}
+    elif suffix == ".webp":
+        return {"quality": quality}
+    elif suffix == ".png":
+        return {"compress_level": compress_level}
+    return {}
+
+
 def move_image(src: Path, dest: Path) -> None:
     """Move an image and its sidecar file to a new location."""
     src.rename(dest)

@@ -14,7 +14,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import UpscaleConfig, load_upscale_config
 from dtst.embeddings.base import detect_device
-from dtst.files import find_images, resolve_dirs
+from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar, read_sidecar, scale_classes, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -400,14 +400,7 @@ def cmd(
                         else:
                             out_name = name
 
-                        save_kwargs: dict = {}
-                        out_ext = Path(out_name).suffix.lower()
-                        if out_ext in (".jpg", ".jpeg"):
-                            save_kwargs["quality"] = cfg.quality
-                        elif out_ext == ".webp":
-                            save_kwargs["quality"] = cfg.quality
-                        elif out_ext == ".png":
-                            save_kwargs["compress_level"] = 6
+                        save_kwargs = build_save_kwargs(Path(out_name), quality=cfg.quality)
 
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()

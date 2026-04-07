@@ -869,6 +869,8 @@ class FrameConfig:
     gravity: str = "center"
     fill: str = "color"
     fill_color: str = "#000000"
+    quality: int = 95
+    compress_level: int = 0
 
 
 def load_frame_config(path: str | Path) -> FrameConfig:
@@ -928,6 +930,14 @@ def load_frame_config(path: str | Path) -> FrameConfig:
     if not isinstance(fill_color, str) or not fill_color.strip():
         raise click.ClickException("'frame.fill_color' must be a non-empty string")
 
+    quality = section.get("quality", 95)
+    if not isinstance(quality, int) or not 1 <= quality <= 100:
+        raise click.ClickException("'frame.quality' must be an integer between 1 and 100")
+
+    compress_level = section.get("compress_level", 0)
+    if not isinstance(compress_level, int) or not 0 <= compress_level <= 9:
+        raise click.ClickException("'frame.compress_level' must be an integer between 0 and 9")
+
     return FrameConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs,
@@ -938,6 +948,8 @@ def load_frame_config(path: str | Path) -> FrameConfig:
         gravity=gravity,
         fill=fill,
         fill_color=fill_color.strip(),
+        quality=quality,
+        compress_level=compress_level,
     )
 
 
@@ -1112,6 +1124,7 @@ class FormatConfig:
     to: str | None = None
     format: str | None = None
     quality: int = 95
+    compress_level: int = 0
     strip_metadata: bool = False
     channels: str | None = None
     background: str = "white"
@@ -1153,6 +1166,10 @@ def load_format_config(path: str | Path) -> FormatConfig:
     if not isinstance(quality, int) or not 1 <= quality <= 100:
         raise click.ClickException("'format.quality' must be an integer between 1 and 100")
 
+    compress_level = section.get("compress_level", 0)
+    if not isinstance(compress_level, int) or not 0 <= compress_level <= 9:
+        raise click.ClickException("'format.compress_level' must be an integer between 0 and 9")
+
     strip_metadata = section.get("strip_metadata", False)
     if not isinstance(strip_metadata, bool):
         raise click.ClickException("'format.strip_metadata' must be a boolean")
@@ -1172,6 +1189,7 @@ def load_format_config(path: str | Path) -> FormatConfig:
         to=to,
         format=fmt,
         quality=quality,
+        compress_level=compress_level,
         strip_metadata=strip_metadata,
         channels=channels,
         background=background.strip(),

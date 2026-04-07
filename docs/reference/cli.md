@@ -464,6 +464,7 @@ dtst format [OPTIONS] [CONFIG]
 | `--to` | text | Destination folder name within the working directory. | None |
 | `--format`, `-f` | choice (`jpg` &#x7C; `png` &#x7C; `webp`) | Output image format. When omitted the source format is preserved. | None |
 | `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG. | None |
+| `--compress-level` | integer | PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP. | None |
 | `--strip-metadata` | boolean | Remove EXIF data and embedded ICC profiles from output images. | `False` |
 | `--channels`, `-c` | choice (`rgb` &#x7C; `grayscale`) | Enforce channel mode. 'rgb' converts to 3-channel RGB (drops alpha). 'grayscale' converts to single-channel. | None |
 | `--background` | text | Background color for alpha compositing (default: white). Accepts named colors or hex codes. | None |
@@ -516,6 +517,8 @@ dtst frame [OPTIONS] [CONFIG]
 | `--gravity`, `-g` | choice (`center` &#x7C; `top` &#x7C; `bottom` &#x7C; `left` &#x7C; `right`) | Anchor position for crop (part to keep) or pad (where to place image). Default: center. | None |
 | `--fill`, `-f` | choice (`color` &#x7C; `edge` &#x7C; `reflect` &#x7C; `blur`) | Fill strategy for pad mode: color, edge, reflect, or blur (default: color). | None |
 | `--fill-color` | text | Hex color for pad fill when --fill=color (default: #000000). | None |
+| `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG. | None |
+| `--compress-level` | integer | PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |

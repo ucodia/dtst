@@ -12,7 +12,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import AugmentConfig, load_augment_config
-from dtst.files import find_images, resolve_dirs
+from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
         from PIL import Image
 
         img = Image.open(input_path)
+        save_kw = build_save_kwargs(input_path)
 
         if copy_original:
             dest = output_dir / name
@@ -53,19 +54,19 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
         if flip_x:
             flipped = img.transpose(Image.FLIP_LEFT_RIGHT)
             out_name = f"{stem}_flipX{ext}"
-            flipped.save(output_dir / out_name, quality=95)
+            flipped.save(output_dir / out_name, **save_kw)
             created.append(out_name)
 
         if flip_y:
             flipped = img.transpose(Image.FLIP_TOP_BOTTOM)
             out_name = f"{stem}_flipY{ext}"
-            flipped.save(output_dir / out_name, quality=95)
+            flipped.save(output_dir / out_name, **save_kw)
             created.append(out_name)
 
         if flip_xy:
             flipped = img.transpose(Image.ROTATE_180)
             out_name = f"{stem}_flipXY{ext}"
-            flipped.save(output_dir / out_name, quality=95)
+            flipped.save(output_dir / out_name, **save_kw)
             created.append(out_name)
 
         img.close()

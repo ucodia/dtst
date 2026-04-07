@@ -10,7 +10,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import FormatConfig, load_format_config
-from dtst.files import find_images, resolve_dirs
+from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
 
     Returns (status, output_filename, error_message).
     """
-    (input_path_s, output_dir_s, fmt, quality,
+    (input_path_s, output_dir_s, fmt, quality, compress_level,
      strip_metadata, channels, background) = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
@@ -71,12 +71,9 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
             if icc:
                 save_kwargs["icc_profile"] = icc
 
-        if out_suffix in (".jpg", ".jpeg"):
-            save_kwargs["quality"] = quality
-        elif out_suffix == ".webp":
-            save_kwargs["quality"] = quality
-        elif out_suffix == ".png":
-            save_kwargs["compress_level"] = 6
+        save_kwargs.update(
+            build_save_kwargs(Path(out_name), quality=quality, compress_level=compress_level)
+        )
 
         if fmt is not None:
             pil_format = "JPEG" if fmt == "jpg" else fmt.upper()
@@ -97,6 +94,7 @@ def _resolve_config(
     to: str | None,
     fmt: str | None,
     quality: int | None,
+    compress_level: int | None,
     strip_metadata: bool,
     channels: str | None,
     background: str | None,
@@ -116,6 +114,8 @@ def _resolve_config(
         cfg.format = fmt
     if quality is not None:
         cfg.quality = quality
+    if compress_level is not None:
+        cfg.compress_level = compress_level
     if strip_metadata:
         cfg.strip_metadata = True
     if channels is not None:
@@ -138,6 +138,7 @@ def _resolve_config(
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--format", "-f", "fmt", type=click.Choice(["jpg", "png", "webp"]), default=None, help="Output image format. When omitted the source format is preserved.")
 @click.option("--quality", "-q", type=int, default=None, help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.")
+@click.option("--compress-level", type=int, default=None, help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.")
 @click.option("--strip-metadata", is_flag=True, default=False, help="Remove EXIF data and embedded ICC profiles from output images.")
 @click.option("--channels", "-c", type=click.Choice(["rgb", "grayscale"]), default=None, help="Enforce channel mode. 'rgb' converts to 3-channel RGB (drops alpha). 'grayscale' converts to single-channel.")
 @click.option("--background", type=str, default=None, help="Background color for alpha compositing (default: white). Accepts named colors or hex codes.")
@@ -150,6 +151,7 @@ def cmd(
     to: str | None,
     fmt: str | None,
     quality: int | None,
+    compress_level: int | None,
     strip_metadata: bool,
     channels: str | None,
     background: str | None,
@@ -178,7 +180,7 @@ def cmd(
         if not parsed_from_dirs:
             raise click.ClickException("--from must contain at least one folder name")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, fmt, quality, strip_metadata, channels, background)
+    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, fmt, quality, compress_level, strip_metadata, channels, background)
 
     input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
     output_dir = cfg.working_dir / cfg.to
@@ -227,13 +229,15 @@ def cmd(
             click.echo(f"  Strip metadata: yes")
         if cfg.format in ("jpg", "webp"):
             click.echo(f"  Quality: {cfg.quality}")
+        if cfg.format == "png" or cfg.format is None:
+            click.echo(f"  Compress level: {cfg.compress_level}")
         click.echo(f"  Output: {output_dir}")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), cfg.format, cfg.quality,
+        (str(img_path), str(output_dir), cfg.format, cfg.quality, cfg.compress_level,
          cfg.strip_metadata, cfg.channels, cfg.background)
         for img_path in images
     ]
