@@ -1,6 +1,6 @@
 # Final preparation
 
-The last steps are to expand the dataset with augmentations, optionally upscale images, normalize image formats and channels, produce resized versions at the dimensions you need for training, and rename files with clean sequential names.
+The last steps are to expand the dataset with augmentations, optionally upscale images, rename files with clean sequential names, normalize image formats and channels, and produce resized versions at the dimensions you need for training.
 
 ## Augment
 
@@ -60,6 +60,30 @@ Large images are processed in tiles to avoid GPU memory issues. If you run into 
 dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled --tile-size 256
 ```
 
+## Rename
+
+The `rename` command gives images clean, sequential filenames with a consistent prefix. Renaming early — before format and resize — means every downstream folder inherits the clean names automatically. It operates in-place — there is no `--to` option.
+
+To rename all images in `final/1024` with a "crowd_" prefix:
+
+```bash
+dtst rename -d scratch/crowd --from final/1024 --prefix "crowd_"
+```
+
+This produces `crowd_1.jpg`, `crowd_2.jpg`, etc. The number of zero-padded digits is computed automatically from the total count — 5 images get single digits, 100 images get 3 digits. To set it explicitly:
+
+```bash
+dtst rename -d scratch/crowd --from final/1024 --prefix "crowd_" --digits 5
+```
+
+This produces `crowd_00001.jpg`, `crowd_00002.jpg`, etc. Sidecar JSON files are renamed along with their images.
+
+Preview what would happen before committing:
+
+```bash
+dtst rename -d scratch/crowd --from final/1024 --prefix "crowd_" --dry-run
+```
+
 ## Format
 
 The `format` command normalizes image formats, channels, and metadata before the final resize. This is useful when your sources contain a mix of PNG and JPEG files, images with alpha channels, or embedded EXIF data you want to strip before training.
@@ -96,41 +120,17 @@ dtst format -d scratch/crowd --from final/1024 --to final/formatted --channels g
 
 ## Resize
 
-The `frame` command resizes images to a target width and/or height using Lanczos resampling. Use it to produce smaller versions of the augmented dataset:
+The `frame` command resizes images to a target width and/or height using Lanczos resampling. Use it to produce sized versions of the formatted dataset:
 
 ```bash
-dtst frame -d scratch/crowd --from final/1024 --to final/512 --width 512 --height 512
-dtst frame -d scratch/crowd --from final/1024 --to final/256 --width 256 --height 256
+dtst frame -d scratch/crowd --from final/formatted --to final/512 --width 512 --height 512
+dtst frame -d scratch/crowd --from final/formatted --to final/256 --width 256 --height 256
 ```
 
 When only one dimension is given, the other is computed proportionally to preserve the aspect ratio:
 
 ```bash
-dtst frame -d scratch/crowd --from final/1024 --to final/512 --width 512
-```
-
-## Rename
-
-The `rename` command gives images clean, sequential filenames with a consistent prefix. This is useful when training pipelines expect predictable naming, or when you want to strip the original filenames before sharing a dataset. It operates in-place — there is no `--to` option.
-
-To rename all images in `final/512` with a "crowd_" prefix:
-
-```bash
-dtst rename -d scratch/crowd --from final/512 --prefix "crowd_"
-```
-
-This produces `crowd_1.jpg`, `crowd_2.jpg`, etc. The number of zero-padded digits is computed automatically from the total count — 5 images get single digits, 100 images get 3 digits. To set it explicitly:
-
-```bash
-dtst rename -d scratch/crowd --from final/512 --prefix "crowd_" --digits 5
-```
-
-This produces `crowd_00001.jpg`, `crowd_00002.jpg`, etc. Sidecar JSON files are renamed along with their images.
-
-Preview what would happen before committing:
-
-```bash
-dtst rename -d scratch/crowd --from final/512 --prefix "crowd_" --dry-run
+dtst frame -d scratch/crowd --from final/formatted --to final/512 --width 512
 ```
 
 ## Final directory
@@ -152,10 +152,10 @@ scratch/
       noise/
     select/
     final/
-      1024/              <- augmented originals
       upscaled/          <- AI-upscaled (optional)
-      formatted/         <- normalized format/channels (optional)
-      512/               <- resized and renamed
-      256/               <- resized and renamed
+      formatted/         <- normalized format/channels
+      1024/              <- framed (resized)
+      512/               <- framed (resized)
+      256/               <- framed (resized)
 ```
 

@@ -20,9 +20,9 @@ A curated image dataset starting from the search term "crowd". The pipeline uses
 11. **Dedup** to remove near-duplicates
 12. **Augment** with transformations to increase diversity
 13. **Upscale** images to higher resolution
-14. **Format** (normalize) image formats, channels, and metadata
-15. **Frame** (resize) for the final dataset
-16. **Rename** images with sequential, prefixed filenames
+14. **Rename** images with sequential, prefixed filenames
+15. **Format** (normalize) image formats, channels, and metadata
+16. **Frame** (resize) for the final dataset
 
 Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and steps 12–16 in [Final preparation](final-preparation.md).
 
@@ -52,6 +52,7 @@ scratch/
       rejected/
       duplicated/
     final/
+      formatted/
       1024/
       512/
       256/

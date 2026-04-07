@@ -76,6 +76,11 @@ augment:
   to: final/1024
   flip_x: true
 
+rename:
+  from: final/1024
+  prefix: crowd_
+  digits: 4
+
 format:
   from: final/1024
   to: final/formatted
@@ -89,11 +94,6 @@ frame:
   to: final/512
   width: 512
   height: 512
-
-rename:
-  from: final/512
-  prefix: crowd_
-  digits: 4
 ```
 
 ## Running with a config file
@@ -112,9 +112,9 @@ dtst detect crowd.yaml
 dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml
+dtst rename crowd.yaml
 dtst format crowd.yaml
 dtst frame crowd.yaml
-dtst rename crowd.yaml
 ```
 
 ## CLI overrides
