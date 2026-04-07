@@ -432,6 +432,45 @@ dtst fetch [OPTIONS] [CONFIG]
 | `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst format { #dtst-format data-toc-label='format' }
+
+Convert and normalize image formats, channels, and metadata.
+
+Reads images from source folders and writes converted copies to a
+destination folder.  Can change format (jpg/png/webp), enforce
+channel mode (rgb/grayscale), and strip EXIF metadata.
+
+When --format is omitted the source format is preserved, but other
+transformations (--channels, --strip-metadata) still apply.
+
+Examples:
+    dtst format -d ./project --from raw --to formatted -f jpg -q 90
+    dtst format -d ./project --from raw --to clean --strip-metadata --channels rgb
+    dtst format -d ./project --from raw --to gray --channels grayscale
+    dtst format config.yaml --dry-run
+
+**Usage:**
+
+```text
+dtst format [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs). | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--format`, `-f` | choice (`jpg` &#x7C; `png` &#x7C; `webp`) | Output image format. When omitted the source format is preserved. | None |
+| `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG. | None |
+| `--strip-metadata` | boolean | Remove EXIF data and embedded ICC profiles from output images. | `False` |
+| `--channels`, `-c` | choice (`rgb` &#x7C; `grayscale`) | Enforce channel mode. 'rgb' converts to 3-channel RGB (drops alpha). 'grayscale' converts to single-channel. | None |
+| `--background` | text | Background color for alpha compositing (default: white). Accepts named colors or hex codes. | None |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst frame { #dtst-frame data-toc-label='frame' }
 
 Resize images to a target width and/or height.

@@ -1,6 +1,6 @@
 # Final preparation
 
-The last steps are to expand the dataset with augmentations, optionally upscale images, produce resized versions at the dimensions you need for training, and rename files with clean sequential names.
+The last steps are to expand the dataset with augmentations, optionally upscale images, normalize image formats and channels, produce resized versions at the dimensions you need for training, and rename files with clean sequential names.
 
 ## Augment
 
@@ -58,6 +58,40 @@ Large images are processed in tiles to avoid GPU memory issues. If you run into 
 
 ```bash
 dtst upscale -d scratch/crowd --from final/1024 --to final/upscaled --tile-size 256
+```
+
+## Format
+
+The `format` command normalizes image formats, channels, and metadata before the final resize. This is useful when your sources contain a mix of PNG and JPEG files, images with alpha channels, or embedded EXIF data you want to strip before training.
+
+To convert everything to JPEG and enforce RGB channels:
+
+```bash
+dtst format -d scratch/crowd --from final/1024 --to final/formatted -f jpg --channels rgb
+```
+
+To strip all EXIF metadata and ICC profiles while preserving the source format:
+
+```bash
+dtst format -d scratch/crowd --from final/1024 --to final/formatted --strip-metadata
+```
+
+You can combine multiple normalizations in a single pass — convert to WebP, enforce RGB, and strip metadata:
+
+```bash
+dtst format -d scratch/crowd --from final/1024 --to final/formatted -f webp --channels rgb --strip-metadata
+```
+
+When converting images with transparency to a format that requires a background (like JPEG), or when using `--channels rgb`, alpha channels are composited onto white by default. Use `--background` to change this:
+
+```bash
+dtst format -d scratch/crowd --from final/1024 --to final/formatted -f jpg --channels rgb --background black
+```
+
+For grayscale datasets:
+
+```bash
+dtst format -d scratch/crowd --from final/1024 --to final/formatted --channels grayscale
 ```
 
 ## Resize
@@ -120,6 +154,7 @@ scratch/
     final/
       1024/              <- augmented originals
       upscaled/          <- AI-upscaled (optional)
+      formatted/         <- normalized format/channels (optional)
       512/               <- resized and renamed
       256/               <- resized and renamed
 ```

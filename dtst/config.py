@@ -1100,3 +1100,79 @@ def load_rename_config(path: str | Path) -> RenameConfig:
         prefix=prefix,
         digits=digits,
     )
+
+
+VALID_FORMAT_CHANNELS = frozenset({"rgb", "grayscale"})
+
+
+@dataclass
+class FormatConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    to: str | None = None
+    format: str | None = None
+    quality: int = 95
+    strip_metadata: bool = False
+    channels: str | None = None
+    background: str = "white"
+
+
+def load_format_config(path: str | Path) -> FormatConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("format")
+    if not section or not isinstance(section, dict):
+        return FormatConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'format.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'format.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    to = section.get("to")
+    if to is not None:
+        if not isinstance(to, str) or not to.strip():
+            raise click.ClickException("'format.to' must be a non-empty string")
+        to = to.strip()
+
+    fmt = section.get("format")
+    if fmt is not None:
+        if fmt not in ("jpg", "png", "webp"):
+            raise click.ClickException("'format.format' must be one of: jpg, png, webp")
+
+    quality = section.get("quality", 95)
+    if not isinstance(quality, int) or not 1 <= quality <= 100:
+        raise click.ClickException("'format.quality' must be an integer between 1 and 100")
+
+    strip_metadata = section.get("strip_metadata", False)
+    if not isinstance(strip_metadata, bool):
+        raise click.ClickException("'format.strip_metadata' must be a boolean")
+
+    channels = section.get("channels")
+    if channels is not None:
+        if channels not in VALID_FORMAT_CHANNELS:
+            raise click.ClickException(f"'format.channels' must be one of: {', '.join(sorted(VALID_FORMAT_CHANNELS))}")
+
+    background = section.get("background", "white")
+    if not isinstance(background, str) or not background.strip():
+        raise click.ClickException("'format.background' must be a non-empty string")
+
+    return FormatConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        to=to,
+        format=fmt,
+        quality=quality,
+        strip_metadata=strip_metadata,
+        channels=channels,
+        background=background.strip(),
+    )

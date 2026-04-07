@@ -76,8 +76,16 @@ augment:
   to: final/1024
   flip_x: true
 
-frame:
+format:
   from: final/1024
+  to: final/formatted
+  format: jpg
+  channels: rgb
+  strip_metadata: true
+  quality: 95
+
+frame:
+  from: final/formatted
   to: final/512
   width: 512
   height: 512
@@ -104,6 +112,7 @@ dtst detect crowd.yaml
 dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml
+dtst format crowd.yaml
 dtst frame crowd.yaml
 dtst rename crowd.yaml
 ```
