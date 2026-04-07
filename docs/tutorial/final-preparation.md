@@ -1,6 +1,6 @@
 # Final preparation
 
-The last step is to expand the dataset with augmentations, optionally upscale images, and produce resized versions at the dimensions you need for training.
+The last steps are to expand the dataset with augmentations, optionally upscale images, produce resized versions at the dimensions you need for training, and rename files with clean sequential names.
 
 ## Augment
 
@@ -75,6 +75,30 @@ When only one dimension is given, the other is computed proportionally to preser
 dtst frame -d scratch/crowd --from final/1024 --to final/512 --width 512
 ```
 
+## Rename
+
+The `rename` command gives images clean, sequential filenames with a consistent prefix. This is useful when training pipelines expect predictable naming, or when you want to strip the original filenames before sharing a dataset. It operates in-place — there is no `--to` option.
+
+To rename all images in `final/512` with a "crowd_" prefix:
+
+```bash
+dtst rename -d scratch/crowd --from final/512 --prefix "crowd_"
+```
+
+This produces `crowd_1.jpg`, `crowd_2.jpg`, etc. The number of zero-padded digits is computed automatically from the total count — 5 images get single digits, 100 images get 3 digits. To set it explicitly:
+
+```bash
+dtst rename -d scratch/crowd --from final/512 --prefix "crowd_" --digits 5
+```
+
+This produces `crowd_00001.jpg`, `crowd_00002.jpg`, etc. Sidecar JSON files are renamed along with their images.
+
+Preview what would happen before committing:
+
+```bash
+dtst rename -d scratch/crowd --from final/512 --prefix "crowd_" --dry-run
+```
+
 ## Final directory
 
 ```
@@ -96,7 +120,7 @@ scratch/
     final/
       1024/              <- augmented originals
       upscaled/          <- AI-upscaled (optional)
-      512/               <- resized to 512px
-      256/               <- resized to 256px
+      512/               <- resized and renamed
+      256/               <- resized and renamed
 ```
 

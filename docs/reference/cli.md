@@ -481,6 +481,38 @@ dtst frame [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst rename { #dtst-rename data-toc-label='rename' }
+
+Sequentially rename images in-place with a prefix and zero-padded number.
+
+Renames all images in the given folders to {prefix}{number}.{ext},
+where the number is zero-padded to the specified number of digits.
+Sidecar JSON files are moved along with their images. Operates
+in-place — there is no --to option.
+
+Examples:
+    dtst rename --from raw --prefix "img_" -d ./my-dataset
+    dtst rename --from raw --prefix "photo_" --digits 5 -d ./my-dataset
+    dtst rename config.yaml --dry-run
+    dtst rename --from faces --prefix "face_" -n 4
+
+**Usage:**
+
+```text
+dtst rename [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
+| `--prefix`, `-p` | text | Filename prefix for renamed files (default: ''). | None |
+| `--digits`, `-n` | integer | Number of zero-padded digits (default: auto based on total count). | None |
+| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--dry-run` | boolean | Preview renames without executing. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst review { #dtst-review data-toc-label='review' }
 
 Launch a web UI for manual image review.

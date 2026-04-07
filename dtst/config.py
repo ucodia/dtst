@@ -1054,3 +1054,49 @@ def load_workflow_config(path: str | Path, workflow_name: str) -> WorkflowConfig
             )
 
     return WorkflowConfig(working_dir=resolved_working_dir, steps=steps)
+
+
+@dataclass
+class RenameConfig:
+    working_dir: Path = field(default_factory=lambda: Path("."))
+    from_dirs: list[str] | None = None
+    prefix: str = ""
+    digits: int | None = None
+
+
+def load_rename_config(path: str | Path) -> RenameConfig:
+    data, config_dir = load_yaml(path)
+    resolved_working_dir = _resolve_working_dir(data, config_dir)
+
+    section = data.get("rename")
+    if not section or not isinstance(section, dict):
+        return RenameConfig(working_dir=resolved_working_dir)
+
+    from_raw = section.get("from")
+    if from_raw is not None:
+        if isinstance(from_raw, list):
+            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
+        elif isinstance(from_raw, str):
+            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
+        else:
+            raise click.ClickException("'rename.from' must be a string or list of strings")
+        if not from_dirs:
+            raise click.ClickException("'rename.from' must contain at least one directory name")
+    else:
+        from_dirs = None
+
+    prefix = section.get("prefix", "")
+    if not isinstance(prefix, str):
+        raise click.ClickException("'rename.prefix' must be a string")
+
+    digits = section.get("digits")
+    if digits is not None:
+        if not isinstance(digits, int) or digits < 1:
+            raise click.ClickException("'rename.digits' must be a positive integer")
+
+    return RenameConfig(
+        working_dir=resolved_working_dir,
+        from_dirs=from_dirs,
+        prefix=prefix,
+        digits=digits,
+    )

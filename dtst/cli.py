@@ -3,7 +3,7 @@ import logging
 import click
 from dotenv import load_dotenv
 
-from dtst.commands import analyze, annotate, augment, cluster, dedup, detect, extract_faces, extract_frames, fetch, frame, review, run, search, select, upscale
+from dtst.commands import analyze, annotate, augment, cluster, dedup, detect, extract_faces, extract_frames, fetch, frame, rename, review, run, search, select, upscale
 
 
 @click.group()
@@ -28,6 +28,7 @@ cli.add_command(extract_faces.cmd, "extract-faces")
 cli.add_command(extract_frames.cmd, "extract-frames")
 cli.add_command(fetch.cmd, "fetch")
 cli.add_command(frame.cmd, "frame")
+cli.add_command(rename.cmd, "rename")
 cli.add_command(run.cmd, "run")
 cli.add_command(search.cmd, "search")
 cli.add_command(select.cmd, "select")

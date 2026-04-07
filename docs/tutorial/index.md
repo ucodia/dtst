@@ -6,7 +6,7 @@ The example uses "crowd" as the subject. Along the way the tutorial shows two pa
 
 ## What you will build
 
-A curated image dataset starting from the search term "crowd". The pipeline uses 14 tools:
+A curated image dataset starting from the search term "crowd". The pipeline uses 15 tools:
 
 1. **Search** for images across multiple engines
 2. **Fetch** images and videos from the collected URLs
@@ -21,8 +21,9 @@ A curated image dataset starting from the search term "crowd". The pipeline uses
 12. **Augment** with transformations to increase diversity
 13. **Upscale** images to higher resolution
 14. **Frame** (resize) for the final dataset
+15. **Rename** images with sequential, prefixed filenames
 
-Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and steps 12–14 in [Final preparation](final-preparation.md).
+Steps 1–3 are covered in [Collecting images](collecting-images.md), steps 4–5 in [Extracting features](extracting-features.md), steps 6–11 in [Selecting and refining](selecting-and-refining.md), and steps 12–15 in [Final preparation](final-preparation.md).
 
 Every `dtst` command reads from and writes to **buckets** and tracks metadata in **sidecars**. See [Concepts](../concepts.md) for details on both.
 

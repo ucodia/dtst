@@ -81,6 +81,11 @@ frame:
   to: final/512
   width: 512
   height: 512
+
+rename:
+  from: final/512
+  prefix: crowd_
+  digits: 4
 ```
 
 ## Running with a config file
@@ -100,6 +105,7 @@ dtst review crowd.yaml
 dtst dedup crowd.yaml
 dtst augment crowd.yaml
 dtst frame crowd.yaml
+dtst rename crowd.yaml
 ```
 
 ## CLI overrides

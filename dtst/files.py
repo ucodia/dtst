@@ -27,7 +27,7 @@ def resolve_dirs(working_dir: Path, names: list[str]) -> list[Path]:
                 if p.is_dir():
                     dirs[p] = None
         else:
-            dirs[working_dir / name] = None
+            dirs[(working_dir / name).resolve()] = None
     return list(dirs)
 
 
