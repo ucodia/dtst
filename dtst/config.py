@@ -49,25 +49,116 @@ def _resolve_working_dir(data: dict, config_dir: Path) -> Path:
     return config_dir / working_dir.strip()
 
 
+def _parse_str_list(
+    section: dict, key: str, section_name: str, *, lower: bool = False, required: bool = True
+) -> list[str] | None:
+    raw = section.get(key)
+    if raw is None:
+        return None
+    if isinstance(raw, list):
+        items = [str(d).strip() for d in raw if str(d).strip()]
+    elif isinstance(raw, str):
+        items = [d.strip() for d in raw.split(",") if d.strip()]
+    else:
+        raise click.ClickException(f"'{section_name}.{key}' must be a string or list of strings")
+    if not items:
+        if required:
+            raise click.ClickException(f"'{section_name}.{key}' must contain at least one entry")
+        return None
+    if lower:
+        items = [i.lower() for i in items]
+    return items
+
+
+def _parse_optional_str(section: dict, key: str, section_name: str) -> str | None:
+    val = section.get(key)
+    if val is None:
+        return None
+    if not isinstance(val, str) or not val.strip():
+        raise click.ClickException(f"'{section_name}.{key}' must be a non-empty string")
+    return val.strip()
+
+
+def _parse_bool(section: dict, key: str, default: bool, section_name: str) -> bool:
+    val = section.get(key, default)
+    if not isinstance(val, bool):
+        raise click.ClickException(f"'{section_name}.{key}' must be a boolean")
+    return val
+
+
+def _parse_int(
+    section: dict,
+    key: str,
+    section_name: str,
+    *,
+    default: int | None = None,
+    min_val: int | None = None,
+    max_val: int | None = None,
+) -> int | None:
+    val = section.get(key, default)
+    if val is None:
+        return None
+    if not isinstance(val, int) or isinstance(val, bool):
+        raise click.ClickException(f"'{section_name}.{key}' must be an integer")
+    if min_val is not None and val < min_val:
+        if max_val is not None:
+            raise click.ClickException(
+                f"'{section_name}.{key}' must be an integer between {min_val} and {max_val}"
+            )
+        raise click.ClickException(f"'{section_name}.{key}' must be an integer >= {min_val}")
+    if max_val is not None and val > max_val:
+        raise click.ClickException(
+            f"'{section_name}.{key}' must be an integer between {min_val} and {max_val}"
+        )
+    return val
+
+
+def _parse_float(
+    section: dict,
+    key: str,
+    section_name: str,
+    *,
+    default: float | None = None,
+    min_val: float | None = None,
+    max_val: float | None = None,
+) -> float | None:
+    val = section.get(key, default)
+    if val is None:
+        return None
+    if not isinstance(val, (int, float)) or isinstance(val, bool):
+        raise click.ClickException(f"'{section_name}.{key}' must be a number")
+    val = float(val)
+    if min_val is not None and val < min_val:
+        raise click.ClickException(
+            f"'{section_name}.{key}' must be >= {min_val}"
+        )
+    if max_val is not None and val > max_val:
+        raise click.ClickException(
+            f"'{section_name}.{key}' must be <= {max_val}"
+        )
+    return val
+
+
 def load_search_config(path: str | Path) -> SearchConfig:
     data, config_dir = load_yaml(path)
     section = data.get("search")
     if not section or not isinstance(section, dict):
         raise click.ClickException("Config must have a 'search' section")
 
+    s = "search"
     terms = section.get("terms")
     if terms is not None and not isinstance(terms, list):
-        raise click.ClickException("'search.terms' must be a list of strings")
+        raise click.ClickException(f"'{s}.terms' must be a list of strings")
     terms = [str(t) for t in terms] if terms else []
 
     suffixes = section.get("suffixes")
     if suffixes is not None and not isinstance(suffixes, list):
-        raise click.ClickException("'search.suffixes' must be a list of strings")
-    suffixes = [str(s) for s in suffixes] if suffixes else []
+        raise click.ClickException(f"'{s}.suffixes' must be a list of strings")
+    suffixes = [str(sf) for sf in suffixes] if suffixes else []
 
     engines = section.get("engines")
     if engines is not None and not isinstance(engines, list):
-        raise click.ClickException("'search.engines' must be a list of strings")
+        raise click.ClickException(f"'{s}.engines' must be a list of strings")
     if engines:
         engines = [str(e).strip().lower() for e in engines]
         invalid = set(engines) - VALID_SEARCH_ENGINES
@@ -78,20 +169,16 @@ def load_search_config(path: str | Path) -> SearchConfig:
     else:
         engines = []
 
-    min_size = section.get("min_size", 512)
-    if not isinstance(min_size, int) or min_size < 0:
-        raise click.ClickException("'search.min_size' must be a non-negative integer")
-
     output = section.get("output", "results.jsonl")
     if not isinstance(output, str) or not output.strip():
-        raise click.ClickException("'search.output' must be a non-empty string")
+        raise click.ClickException(f"'{s}.output' must be a non-empty string")
 
     return SearchConfig(
         terms=terms,
         suffixes=suffixes,
         engines=engines,
         working_dir=_resolve_working_dir(data, config_dir),
-        min_size=min_size,
+        min_size=_parse_int(section, "min_size", s, default=512, min_val=0),
         output=output.strip(),
     )
 
@@ -113,32 +200,13 @@ def load_fetch_config(path: str | Path) -> FetchConfig:
     if not section or not isinstance(section, dict):
         return FetchConfig(working_dir=resolved_working_dir)
 
-    min_size = section.get("min_size", 512)
-    if not isinstance(min_size, int) or min_size < 0:
-        raise click.ClickException("'fetch.min_size' must be a non-negative integer")
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'fetch.to' must be a non-empty string")
-
-    input_file = section.get("input")
-    if input_file is not None:
-        if not isinstance(input_file, str) or not input_file.strip():
-            raise click.ClickException("'fetch.input' must be a non-empty string")
-        input_file = input_file.strip()
-
-    license_filter = section.get("license")
-    if license_filter is not None:
-        if not isinstance(license_filter, str) or not license_filter.strip():
-            raise click.ClickException("'fetch.license' must be a non-empty string")
-        license_filter = license_filter.strip()
-
+    s = "fetch"
     return FetchConfig(
         working_dir=resolved_working_dir,
-        to=to.strip() if to else None,
-        input=input_file,
-        min_size=min_size,
-        license=license_filter,
+        to=_parse_optional_str(section, "to", s),
+        input=_parse_optional_str(section, "input", s),
+        min_size=_parse_int(section, "min_size", s, default=512, min_val=0),
+        license=_parse_optional_str(section, "license", s),
     )
 
 
@@ -164,64 +232,24 @@ def load_extract_faces_config(path: str | Path) -> ExtractFacesConfig:
     if not section or not isinstance(section, dict):
         return ExtractFacesConfig(working_dir=resolved_working_dir)
 
-    max_size = section.get("max_size")
-    if max_size is not None and (not isinstance(max_size, int) or max_size < 1):
-        raise click.ClickException("'extract_faces.max_size' must be a positive integer")
-
+    s = "extract_faces"
     engine = str(section.get("engine", "mediapipe")).strip().lower()
     if engine not in VALID_FACE_ENGINES:
         raise click.ClickException(
             f"Invalid face engine: {engine!r}; valid: {sorted(VALID_FACE_ENGINES)}"
         )
 
-    max_faces = section.get("max_faces", 1)
-    if not isinstance(max_faces, int) or max_faces < 1:
-        raise click.ClickException("'extract_faces.max_faces' must be a positive integer")
-
-    padding = section.get("padding", True)
-    if not isinstance(padding, bool):
-        raise click.ClickException("'extract_faces.padding' must be a boolean")
-
-    skip_partial = section.get("skip_partial", False)
-    if not isinstance(skip_partial, bool):
-        raise click.ClickException("'extract_faces.skip_partial' must be a boolean")
-
-    refine_landmarks = section.get("refine_landmarks", False)
-    if not isinstance(refine_landmarks, bool):
-        raise click.ClickException("'extract_faces.refine_landmarks' must be a boolean")
-
-    debug = section.get("debug", False)
-    if not isinstance(debug, bool):
-        raise click.ClickException("'extract_faces.debug' must be a boolean")
-
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'extract_faces.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'extract_faces.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'extract_faces.to' must be a non-empty string")
-
     return ExtractFacesConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
-        max_size=max_size,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
+        max_size=_parse_int(section, "max_size", s, min_val=1),
         engine=engine,
-        max_faces=max_faces,
-        padding=padding,
-        skip_partial=skip_partial,
-        refine_landmarks=refine_landmarks,
-        debug=debug,
+        max_faces=_parse_int(section, "max_faces", s, default=1, min_val=1),
+        padding=_parse_bool(section, "padding", True, s),
+        skip_partial=_parse_bool(section, "skip_partial", False, s),
+        refine_landmarks=_parse_bool(section, "refine_landmarks", False, s),
+        debug=_parse_bool(section, "debug", False, s),
     )
 
 
@@ -247,60 +275,23 @@ def load_cluster_config(path: str | Path) -> ClusterConfig:
     if not section or not isinstance(section, dict):
         return ClusterConfig(working_dir=resolved_working_dir)
 
+    s = "cluster"
     model = str(section.get("model", "arcface")).strip().lower()
     if model not in VALID_EMBEDDING_MODELS:
         raise click.ClickException(
             f"Invalid embedding model: {model!r}; valid: {sorted(VALID_EMBEDDING_MODELS)}"
         )
 
-    top = section.get("top")
-    if top is not None:
-        if not isinstance(top, int) or top < 1:
-            raise click.ClickException("'cluster.top' must be a positive integer")
-
-    min_cluster_size = section.get("min_cluster_size", 5)
-    if not isinstance(min_cluster_size, int) or min_cluster_size < 2:
-        raise click.ClickException("'cluster.min_cluster_size' must be an integer >= 2")
-
-    min_samples = section.get("min_samples", 2)
-    if not isinstance(min_samples, int) or min_samples < 1:
-        raise click.ClickException("'cluster.min_samples' must be a positive integer")
-
-    batch_size = section.get("batch_size", 32)
-    if not isinstance(batch_size, int) or batch_size < 1:
-        raise click.ClickException("'cluster.batch_size' must be a positive integer")
-
-    clean = section.get("clean", False)
-    if not isinstance(clean, bool):
-        raise click.ClickException("'cluster.clean' must be a boolean")
-
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'cluster.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'cluster.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'cluster.to' must be a non-empty string")
-
     return ClusterConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
         model=model,
-        top=top,
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
-        batch_size=batch_size,
-        clean=clean,
+        top=_parse_int(section, "top", s, min_val=1),
+        min_cluster_size=_parse_int(section, "min_cluster_size", s, default=5, min_val=2),
+        min_samples=_parse_int(section, "min_samples", s, default=2, min_val=1),
+        batch_size=_parse_int(section, "batch_size", s, default=32, min_val=1),
+        clean=_parse_bool(section, "clean", False, s),
     )
 
 
@@ -350,27 +341,7 @@ def load_select_config(path: str | Path) -> SelectConfig:
     if not section or not isinstance(section, dict):
         return SelectConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'select.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'select.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'select.to' must be a non-empty string")
-
-    move = section.get("move", False)
-    if not isinstance(move, bool):
-        raise click.ClickException("'select.move' must be a boolean")
-
+    s = "select"
     dim_fields = {}
     for field_name in ("min_side", "max_side", "min_width", "max_width", "min_height", "max_height"):
         value = section.get(field_name)
@@ -378,54 +349,26 @@ def load_select_config(path: str | Path) -> SelectConfig:
             value = section.get("min_size")
         if value is not None:
             if not isinstance(value, int) or value < 1:
-                raise click.ClickException(f"'select.{field_name}' must be a positive integer")
+                raise click.ClickException(f"'{s}.{field_name}' must be a positive integer")
         dim_fields[field_name] = value
-
-    min_metric = _parse_tag_thresholds(section, "min_metric")
-    max_metric = _parse_tag_thresholds(section, "max_metric")
-
-    max_detect = _parse_tag_thresholds(section, "max_detect")
-    min_detect = _parse_tag_thresholds(section, "min_detect")
-
-    source = section.get("source")
-    if source is not None:
-        if isinstance(source, list):
-            source = [str(s).strip().lower() for s in source if str(s).strip()]
-        elif isinstance(source, str):
-            source = [s.strip().lower() for s in source.split(",") if s.strip()]
-        else:
-            raise click.ClickException("'select.source' must be a string or list of strings")
-        if not source:
-            source = None
-
-    license_ = section.get("license")
-    if license_ is not None:
-        if isinstance(license_, list):
-            license_ = [str(l).strip().lower() for l in license_ if str(l).strip()]
-        elif isinstance(license_, str):
-            license_ = [l.strip().lower() for l in license_.split(",") if l.strip()]
-        else:
-            raise click.ClickException("'select.license' must be a string or list of strings")
-        if not license_:
-            license_ = None
 
     return SelectConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
-        move=move,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
+        move=_parse_bool(section, "move", False, s),
         min_side=dim_fields["min_side"],
         max_side=dim_fields["max_side"],
         min_width=dim_fields["min_width"],
         max_width=dim_fields["max_width"],
         min_height=dim_fields["min_height"],
         max_height=dim_fields["max_height"],
-        min_metric=min_metric,
-        max_metric=max_metric,
-        max_detect=max_detect,
-        min_detect=min_detect,
-        source=source,
-        license=license_,
+        min_metric=_parse_tag_thresholds(section, "min_metric"),
+        max_metric=_parse_tag_thresholds(section, "max_metric"),
+        max_detect=_parse_tag_thresholds(section, "max_detect"),
+        min_detect=_parse_tag_thresholds(section, "min_detect"),
+        source=_parse_str_list(section, "source", s, lower=True, required=False),
+        license=_parse_str_list(section, "license", s, lower=True, required=False),
     )
 
 
@@ -448,46 +391,13 @@ def load_detect_config(path: str | Path) -> DetectConfig:
     if not section or not isinstance(section, dict):
         return DetectConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'detect.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'detect.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    classes_raw = section.get("classes")
-    if classes_raw is not None:
-        if isinstance(classes_raw, list):
-            classes = [str(c).strip() for c in classes_raw if str(c).strip()]
-        elif isinstance(classes_raw, str):
-            classes = [c.strip() for c in classes_raw.split(",") if c.strip()]
-        else:
-            raise click.ClickException("'detect.classes' must be a string or list of strings")
-        if not classes:
-            raise click.ClickException("'detect.classes' must contain at least one class")
-    else:
-        classes = None
-
-    threshold = section.get("threshold", 0.2)
-    if not isinstance(threshold, (int, float)) or threshold < 0:
-        raise click.ClickException("'detect.threshold' must be a non-negative number")
-
-    max_instances = section.get("max_instances", 1)
-    if not isinstance(max_instances, int) or max_instances < 1:
-        raise click.ClickException("'detect.max_instances' must be a positive integer")
-
+    s = "detect"
     return DetectConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        classes=classes,
-        threshold=float(threshold),
-        max_instances=max_instances,
+        from_dirs=_parse_str_list(section, "from", s),
+        classes=_parse_str_list(section, "classes", s),
+        threshold=_parse_float(section, "threshold", s, default=0.2, min_val=0.0),
+        max_instances=_parse_int(section, "max_instances", s, default=1, min_val=1),
     )
 
 
@@ -508,28 +418,17 @@ def load_dedup_config(path: str | Path) -> DedupConfig:
     if not section or not isinstance(section, dict):
         return DedupConfig(working_dir=resolved_working_dir)
 
-    from_dir = section.get("from")
-    if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
-        raise click.ClickException("'dedup.from' must be a non-empty string")
-
+    s = "dedup"
     to = section.get("to", "duplicated")
     if not isinstance(to, str) or not to.strip():
-        raise click.ClickException("'dedup.to' must be a non-empty string")
-
-    threshold = section.get("threshold", 8)
-    if not isinstance(threshold, int) or threshold < 0:
-        raise click.ClickException("'dedup.threshold' must be a non-negative integer")
-
-    prefer_upscaled = section.get("prefer_upscaled", False)
-    if not isinstance(prefer_upscaled, bool):
-        raise click.ClickException("'dedup.prefer_upscaled' must be a boolean")
+        raise click.ClickException(f"'{s}.to' must be a non-empty string")
 
     return DedupConfig(
         working_dir=resolved_working_dir,
-        from_dir=from_dir.strip() if from_dir else None,
+        from_dir=_parse_optional_str(section, "from", s),
         to=to.strip(),
-        threshold=threshold,
-        prefer_upscaled=prefer_upscaled,
+        threshold=_parse_int(section, "threshold", s, default=8, min_val=0),
+        prefer_upscaled=_parse_bool(section, "prefer_upscaled", False, s),
     )
 
 
@@ -550,37 +449,13 @@ def load_annotate_config(path: str | Path) -> AnnotateConfig:
     if not section or not isinstance(section, dict):
         return AnnotateConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'annotate.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'annotate.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    source = section.get("source")
-    if source is not None and (not isinstance(source, str) or not source.strip()):
-        raise click.ClickException("'annotate.source' must be a non-empty string")
-
-    license_ = section.get("license")
-    if license_ is not None and (not isinstance(license_, str) or not license_.strip()):
-        raise click.ClickException("'annotate.license' must be a non-empty string")
-
-    origin = section.get("origin")
-    if origin is not None and (not isinstance(origin, str) or not origin.strip()):
-        raise click.ClickException("'annotate.origin' must be a non-empty string")
-
+    s = "annotate"
     return AnnotateConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        source=source.strip() if source else None,
-        license=license_.strip() if license_ else None,
-        origin=origin.strip() if origin else None,
+        from_dirs=_parse_str_list(section, "from", s),
+        source=_parse_optional_str(section, "source", s),
+        license=_parse_optional_str(section, "license", s),
+        origin=_parse_optional_str(section, "origin", s),
     )
 
 
@@ -599,30 +474,18 @@ def load_analyze_config(path: str | Path) -> AnalyzeConfig:
     if not section or not isinstance(section, dict):
         return AnalyzeConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'analyze.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'analyze.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
+    s = "analyze"
     metrics_raw = section.get("metrics", [])
     if isinstance(metrics_raw, list):
         metrics = [str(m).strip() for m in metrics_raw if str(m).strip()]
     elif isinstance(metrics_raw, str):
         metrics = [m.strip() for m in metrics_raw.split(",") if m.strip()]
     else:
-        raise click.ClickException("'analyze.metrics' must be a list or comma-separated string")
+        raise click.ClickException(f"'{s}.metrics' must be a list or comma-separated string")
 
     return AnalyzeConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs if from_dirs else None,
+        from_dirs=_parse_str_list(section, "from", s),
         metrics=metrics,
     )
 
@@ -646,47 +509,15 @@ def load_augment_config(path: str | Path) -> AugmentConfig:
     if not section or not isinstance(section, dict):
         return AugmentConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'augment.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'augment.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'augment.to' must be a non-empty string")
-
-    flip_x = section.get("flip_x", False)
-    if not isinstance(flip_x, bool):
-        raise click.ClickException("'augment.flip_x' must be a boolean")
-
-    flip_y = section.get("flip_y", False)
-    if not isinstance(flip_y, bool):
-        raise click.ClickException("'augment.flip_y' must be a boolean")
-
-    flip_xy = section.get("flip_xy", False)
-    if not isinstance(flip_xy, bool):
-        raise click.ClickException("'augment.flip_xy' must be a boolean")
-
-    no_copy = section.get("no_copy", False)
-    if not isinstance(no_copy, bool):
-        raise click.ClickException("'augment.no_copy' must be a boolean")
-
+    s = "augment"
     return AugmentConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
-        flip_x=flip_x,
-        flip_y=flip_y,
-        flip_xy=flip_xy,
-        no_copy=no_copy,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
+        flip_x=_parse_bool(section, "flip_x", False, s),
+        flip_y=_parse_bool(section, "flip_y", False, s),
+        flip_xy=_parse_bool(section, "flip_xy", False, s),
+        no_copy=_parse_bool(section, "no_copy", False, s),
     )
 
 
@@ -716,40 +547,12 @@ def load_upscale_config(path: str | Path) -> UpscaleConfig:
     if not section or not isinstance(section, dict):
         return UpscaleConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'upscale.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'upscale.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'upscale.to' must be a non-empty string")
-
+    s = "upscale"
     scale = section.get("scale", 4)
     if not isinstance(scale, int) or scale not in VALID_UPSCALE_SCALES:
         raise click.ClickException(
-            f"'upscale.scale' must be one of {sorted(VALID_UPSCALE_SCALES)}"
+            f"'{s}.scale' must be one of {sorted(VALID_UPSCALE_SCALES)}"
         )
-
-    model = section.get("model")
-    if model is not None and (not isinstance(model, str) or not model.strip()):
-        raise click.ClickException("'upscale.model' must be a non-empty string")
-
-    tile_size = section.get("tile_size", 512)
-    if not isinstance(tile_size, int) or tile_size < 0:
-        raise click.ClickException("'upscale.tile_size' must be a non-negative integer")
-
-    tile_pad = section.get("tile_pad", 32)
-    if not isinstance(tile_pad, int) or tile_pad < 0:
-        raise click.ClickException("'upscale.tile_pad' must be a non-negative integer")
 
     fmt = section.get("format")
     if fmt is not None:
@@ -759,29 +562,17 @@ def load_upscale_config(path: str | Path) -> UpscaleConfig:
                 f"Invalid upscale format: {fmt!r}; valid: {sorted(VALID_UPSCALE_FORMATS)}"
             )
 
-    quality = section.get("quality", 95)
-    if not isinstance(quality, int) or quality < 1 or quality > 100:
-        raise click.ClickException("'upscale.quality' must be an integer between 1 and 100")
-
-    denoise = section.get("denoise")
-    if denoise is not None:
-        if not isinstance(denoise, (int, float)):
-            raise click.ClickException("'upscale.denoise' must be a number between 0.0 and 1.0")
-        denoise = float(denoise)
-        if denoise < 0.0 or denoise > 1.0:
-            raise click.ClickException("'upscale.denoise' must be between 0.0 and 1.0")
-
     return UpscaleConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
         scale=scale,
-        model=model.strip() if model else None,
-        tile_size=tile_size,
-        tile_pad=tile_pad,
+        model=_parse_optional_str(section, "model", s),
+        tile_size=_parse_int(section, "tile_size", s, default=512, min_val=0),
+        tile_pad=_parse_int(section, "tile_pad", s, default=32, min_val=0),
         format=fmt,
-        quality=quality,
-        denoise=denoise,
+        quality=_parse_int(section, "quality", s, default=95, min_val=1, max_val=100),
+        denoise=_parse_float(section, "denoise", s, min_val=0.0, max_val=1.0),
     )
 
 
@@ -805,28 +596,7 @@ def load_extract_frames_config(path: str | Path) -> ExtractFramesConfig:
     if not section or not isinstance(section, dict):
         return ExtractFramesConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'extract_frames.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'extract_frames.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'extract_frames.to' must be a non-empty string")
-
-    keyframes = section.get("keyframes", 10.0)
-    if not isinstance(keyframes, (int, float)) or keyframes <= 0:
-        raise click.ClickException("'extract_frames.keyframes' must be a positive number")
-    keyframes = float(keyframes)
-
+    s = "extract_frames"
     fmt = str(section.get("format", "jpg")).strip().lower()
     if fmt not in VALID_FRAME_FORMATS:
         raise click.ClickException(
@@ -835,9 +605,9 @@ def load_extract_frames_config(path: str | Path) -> ExtractFramesConfig:
 
     return ExtractFramesConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
-        keyframes=keyframes,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
+        keyframes=_parse_float(section, "keyframes", s, default=10.0, min_val=0.0),
         format=fmt,
     )
 
@@ -870,75 +640,41 @@ def load_frame_config(path: str | Path) -> FrameConfig:
     if not section or not isinstance(section, dict):
         return FrameConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'frame.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'frame.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None and (not isinstance(to, str) or not to.strip()):
-        raise click.ClickException("'frame.to' must be a non-empty string")
-
-    width = section.get("width")
-    if width is not None:
-        if not isinstance(width, int) or width < 1:
-            raise click.ClickException("'frame.width' must be a positive integer")
-
-    height = section.get("height")
-    if height is not None:
-        if not isinstance(height, int) or height < 1:
-            raise click.ClickException("'frame.height' must be a positive integer")
-
+    s = "frame"
     mode = section.get("mode", "crop")
     if mode not in FRAME_MODES:
         raise click.ClickException(
-            f"'frame.mode' must be one of {', '.join(FRAME_MODES)}"
+            f"'{s}.mode' must be one of {', '.join(FRAME_MODES)}"
         )
 
     gravity = section.get("gravity", "center")
     if gravity not in FRAME_GRAVITIES:
         raise click.ClickException(
-            f"'frame.gravity' must be one of {', '.join(FRAME_GRAVITIES)}"
+            f"'{s}.gravity' must be one of {', '.join(FRAME_GRAVITIES)}"
         )
 
     fill = section.get("fill", "color")
     if fill not in FRAME_FILLS:
         raise click.ClickException(
-            f"'frame.fill' must be one of {', '.join(FRAME_FILLS)}"
+            f"'{s}.fill' must be one of {', '.join(FRAME_FILLS)}"
         )
 
     fill_color = section.get("fill_color", "#000000")
     if not isinstance(fill_color, str) or not fill_color.strip():
-        raise click.ClickException("'frame.fill_color' must be a non-empty string")
-
-    quality = section.get("quality", 95)
-    if not isinstance(quality, int) or not 1 <= quality <= 100:
-        raise click.ClickException("'frame.quality' must be an integer between 1 and 100")
-
-    compress_level = section.get("compress_level", 0)
-    if not isinstance(compress_level, int) or not 0 <= compress_level <= 9:
-        raise click.ClickException("'frame.compress_level' must be an integer between 0 and 9")
+        raise click.ClickException(f"'{s}.fill_color' must be a non-empty string")
 
     return FrameConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to.strip() if to else None,
-        width=width,
-        height=height,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
+        width=_parse_int(section, "width", s, min_val=1),
+        height=_parse_int(section, "height", s, min_val=1),
         mode=mode,
         gravity=gravity,
         fill=fill,
         fill_color=fill_color.strip(),
-        quality=quality,
-        compress_level=compress_level,
+        quality=_parse_int(section, "quality", s, default=95, min_val=1, max_val=100),
+        compress_level=_parse_int(section, "compress_level", s, default=0, min_val=0, max_val=9),
     )
 
 
@@ -958,23 +694,16 @@ def load_review_config(path: str | Path) -> ReviewConfig:
     if not section or not isinstance(section, dict):
         return ReviewConfig(working_dir=resolved_working_dir)
 
-    from_dir = section.get("from")
-    if from_dir is not None and (not isinstance(from_dir, str) or not from_dir.strip()):
-        raise click.ClickException("'review.from' must be a non-empty string")
-
+    s = "review"
     to = section.get("to", "rejected")
     if not isinstance(to, str) or not to.strip():
-        raise click.ClickException("'review.to' must be a non-empty string")
-
-    port = section.get("port", 8888)
-    if not isinstance(port, int) or port < 1 or port > 65535:
-        raise click.ClickException("'review.port' must be an integer between 1 and 65535")
+        raise click.ClickException(f"'{s}.to' must be a non-empty string")
 
     return ReviewConfig(
         working_dir=resolved_working_dir,
-        from_dir=from_dir.strip() if from_dir else None,
+        from_dir=_parse_optional_str(section, "from", s),
         to=to.strip(),
-        port=port,
+        port=_parse_int(section, "port", s, default=8888, min_val=1, max_val=65535),
     )
 
 
@@ -1073,33 +802,16 @@ def load_rename_config(path: str | Path) -> RenameConfig:
     if not section or not isinstance(section, dict):
         return RenameConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'rename.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'rename.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
+    s = "rename"
     prefix = section.get("prefix", "")
     if not isinstance(prefix, str):
-        raise click.ClickException("'rename.prefix' must be a string")
-
-    digits = section.get("digits")
-    if digits is not None:
-        if not isinstance(digits, int) or digits < 1:
-            raise click.ClickException("'rename.digits' must be a positive integer")
+        raise click.ClickException(f"'{s}.prefix' must be a string")
 
     return RenameConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
+        from_dirs=_parse_str_list(section, "from", s),
         prefix=prefix,
-        digits=digits,
+        digits=_parse_int(section, "digits", s, min_val=1),
     )
 
 
@@ -1118,27 +830,11 @@ def load_validate_config(path: str | Path) -> ValidateConfig:
     if not section or not isinstance(section, dict):
         return ValidateConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'validate.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'validate.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    square = section.get("square", False)
-    if not isinstance(square, bool):
-        raise click.ClickException("'validate.square' must be a boolean")
-
+    s = "validate"
     return ValidateConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        square=square,
+        from_dirs=_parse_str_list(section, "from", s),
+        square=_parse_bool(section, "square", False, s),
     )
 
 
@@ -1166,59 +862,29 @@ def load_format_config(path: str | Path) -> FormatConfig:
     if not section or not isinstance(section, dict):
         return FormatConfig(working_dir=resolved_working_dir)
 
-    from_raw = section.get("from")
-    if from_raw is not None:
-        if isinstance(from_raw, list):
-            from_dirs = [str(d).strip() for d in from_raw if str(d).strip()]
-        elif isinstance(from_raw, str):
-            from_dirs = [d.strip() for d in from_raw.split(",") if d.strip()]
-        else:
-            raise click.ClickException("'format.from' must be a string or list of strings")
-        if not from_dirs:
-            raise click.ClickException("'format.from' must contain at least one directory name")
-    else:
-        from_dirs = None
-
-    to = section.get("to")
-    if to is not None:
-        if not isinstance(to, str) or not to.strip():
-            raise click.ClickException("'format.to' must be a non-empty string")
-        to = to.strip()
-
+    s = "format"
     fmt = section.get("format")
     if fmt is not None:
         if fmt not in ("jpg", "png", "webp"):
-            raise click.ClickException("'format.format' must be one of: jpg, png, webp")
-
-    quality = section.get("quality", 95)
-    if not isinstance(quality, int) or not 1 <= quality <= 100:
-        raise click.ClickException("'format.quality' must be an integer between 1 and 100")
-
-    compress_level = section.get("compress_level", 0)
-    if not isinstance(compress_level, int) or not 0 <= compress_level <= 9:
-        raise click.ClickException("'format.compress_level' must be an integer between 0 and 9")
-
-    strip_metadata = section.get("strip_metadata", False)
-    if not isinstance(strip_metadata, bool):
-        raise click.ClickException("'format.strip_metadata' must be a boolean")
+            raise click.ClickException(f"'{s}.format' must be one of: jpg, png, webp")
 
     channels = section.get("channels")
     if channels is not None:
         if channels not in VALID_FORMAT_CHANNELS:
-            raise click.ClickException(f"'format.channels' must be one of: {', '.join(sorted(VALID_FORMAT_CHANNELS))}")
+            raise click.ClickException(f"'{s}.channels' must be one of: {', '.join(sorted(VALID_FORMAT_CHANNELS))}")
 
     background = section.get("background", "white")
     if not isinstance(background, str) or not background.strip():
-        raise click.ClickException("'format.background' must be a non-empty string")
+        raise click.ClickException(f"'{s}.background' must be a non-empty string")
 
     return FormatConfig(
         working_dir=resolved_working_dir,
-        from_dirs=from_dirs,
-        to=to,
+        from_dirs=_parse_str_list(section, "from", s),
+        to=_parse_optional_str(section, "to", s),
         format=fmt,
-        quality=quality,
-        compress_level=compress_level,
-        strip_metadata=strip_metadata,
+        quality=_parse_int(section, "quality", s, default=95, min_val=1, max_val=100),
+        compress_level=_parse_int(section, "compress_level", s, default=0, min_val=0, max_val=9),
+        strip_metadata=_parse_bool(section, "strip_metadata", False, s),
         channels=channels,
         background=background.strip(),
     )
