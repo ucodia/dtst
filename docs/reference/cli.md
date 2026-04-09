@@ -683,12 +683,11 @@ Examples:
     dtst select -d ./project --from raw --to backup
     dtst select -d ./project --from raw,extra --to combined
     dtst select -d ./project --from faces --to curated --min-side 256
-    dtst select -d ./project --from faces --to curated --max-side 2048
-    dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
-    dtst select -d ./project --from faces --to curated --move --min-blur 50
+    dtst select -d ./project --from faces --to curated --min-metric blur:5
+    dtst select -d ./project --from faces --to curated --min-metric blur:5 --min-metric musiq:60
+    dtst select -d ./project --from faces --to curated --max-metric brisque:40
     dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
     dtst select -d ./project --from raw --to licensed --source serper,flickr
-    dtst select -d ./project --from raw --to licensed --license cc-by,cc-by-sa
     dtst select config.yaml --dry-run
 
 **Usage:**
@@ -711,8 +710,8 @@ dtst select [OPTIONS] [CONFIG]
 | `--max-width` | integer | Maximum width in pixels; wider images are excluded. | None |
 | `--min-height` | integer | Minimum height in pixels; shorter images are excluded. | None |
 | `--max-height` | integer | Maximum height in pixels; taller images are excluded. | None |
-| `--min-blur` | float | Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry. | None |
-| `--max-blur` | float | Maximum blur score (Laplacian variance); higher-scoring images are excluded. | None |
+| `--min-metric` | text | Minimum metric threshold, format: name:value (e.g. blur:5). Can be repeated. | `()` |
+| `--max-metric` | text | Maximum metric threshold, format: name:value (e.g. brisque:40). Can be repeated. | `()` |
 | `--max-detect` | <text float> | Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5). | `()` |
 | `--min-detect` | <text float> | Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3). | `()` |
 | `--source` | text | Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field. | None |

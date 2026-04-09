@@ -51,6 +51,28 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
         return "failed", name, 0, 0, str(e)
 
 
+def _parse_metric_option(raw: tuple[str, ...]) -> list[tuple[str, float]] | None:
+    """Parse --min-metric / --max-metric CLI values ('name:value') into tuples."""
+    if not raw:
+        return None
+    result = []
+    for entry in raw:
+        if ":" not in entry:
+            raise click.ClickException(
+                f"Invalid metric filter '{entry}'. Expected format: name:value (e.g. blur:5)"
+            )
+        name, _, val_str = entry.partition(":")
+        name = name.strip()
+        if not name:
+            raise click.ClickException(f"Invalid metric filter '{entry}': metric name cannot be empty")
+        try:
+            value = float(val_str.strip())
+        except ValueError:
+            raise click.ClickException(f"Invalid metric filter '{entry}': '{val_str.strip()}' is not a number")
+        result.append((name, value))
+    return result
+
+
 def _resolve_config(
     config: Path | None,
     working_dir: Path | None,
@@ -63,8 +85,8 @@ def _resolve_config(
     max_width: int | None,
     min_height: int | None,
     max_height: int | None,
-    min_blur: float | None,
-    max_blur: float | None,
+    min_metric: list[tuple[str, float]] | None = None,
+    max_metric: list[tuple[str, float]] | None = None,
     max_detect: tuple[tuple[str, float], ...] | None = None,
     min_detect: tuple[tuple[str, float], ...] | None = None,
     source: list[str] | None = None,
@@ -95,10 +117,10 @@ def _resolve_config(
         cfg.min_height = min_height
     if max_height is not None:
         cfg.max_height = max_height
-    if min_blur is not None:
-        cfg.min_blur = min_blur
-    if max_blur is not None:
-        cfg.max_blur = max_blur
+    if min_metric:
+        cfg.min_metric = list(min_metric)
+    if max_metric:
+        cfg.max_metric = list(max_metric)
     if max_detect:
         cfg.max_detect = list(max_detect)
     if min_detect:
@@ -128,8 +150,8 @@ def _resolve_config(
 @click.option("--max-width", type=int, default=None, help="Maximum width in pixels; wider images are excluded.")
 @click.option("--min-height", type=int, default=None, help="Minimum height in pixels; shorter images are excluded.")
 @click.option("--max-height", type=int, default=None, help="Maximum height in pixels; taller images are excluded.")
-@click.option("--min-blur", type=float, default=None, help="Minimum blur score (Laplacian variance); lower-scoring images are excluded as too blurry.")
-@click.option("--max-blur", type=float, default=None, help="Maximum blur score (Laplacian variance); higher-scoring images are excluded.")
+@click.option("--min-metric", type=str, multiple=True, default=(), help="Minimum metric threshold, format: name:value (e.g. blur:5). Can be repeated.")
+@click.option("--max-metric", type=str, multiple=True, default=(), help="Maximum metric threshold, format: name:value (e.g. brisque:40). Can be repeated.")
 @click.option("--max-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).")
 @click.option("--min-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).")
 @click.option("--source", type=str, default=None, help="Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field.")
@@ -148,8 +170,8 @@ def cmd(
     max_width: int | None,
     min_height: int | None,
     max_height: int | None,
-    min_blur: float | None,
-    max_blur: float | None,
+    min_metric: tuple[str, ...],
+    max_metric: tuple[str, ...],
     max_detect: tuple[tuple[str, float], ...],
     min_detect: tuple[tuple[str, float], ...],
     source: str | None,
@@ -174,12 +196,11 @@ def cmd(
         dtst select -d ./project --from raw --to backup
         dtst select -d ./project --from raw,extra --to combined
         dtst select -d ./project --from faces --to curated --min-side 256
-        dtst select -d ./project --from faces --to curated --max-side 2048
-        dtst select -d ./project --from faces --to curated --min-width 512 --max-height 1024
-        dtst select -d ./project --from faces --to curated --move --min-blur 50
+        dtst select -d ./project --from faces --to curated --min-metric blur:5
+        dtst select -d ./project --from faces --to curated --min-metric blur:5 --min-metric musiq:60
+        dtst select -d ./project --from faces --to curated --max-metric brisque:40
         dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
         dtst select -d ./project --from raw --to licensed --source serper,flickr
-        dtst select -d ./project --from raw --to licensed --license cc-by,cc-by-sa
         dtst select config.yaml --dry-run
     """
     parsed_from_dirs: list[str] | None = None
@@ -200,10 +221,13 @@ def cmd(
         if not parsed_license:
             raise click.ClickException("--license must contain at least one value")
 
+    parsed_min_metric = _parse_metric_option(min_metric)
+    parsed_max_metric = _parse_metric_option(max_metric)
+
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, move,
         min_side, max_side, min_width, max_width, min_height, max_height,
-        min_blur, max_blur, max_detect, min_detect,
+        parsed_min_metric, parsed_max_metric, max_detect, min_detect,
         parsed_source, parsed_license,
     )
 
@@ -231,9 +255,9 @@ def cmd(
     has_dimension_criteria = any(v is not None for v in (
         cfg.min_side, cfg.max_side, cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height,
     ))
-    has_blur_criteria = cfg.min_blur is not None or cfg.max_blur is not None
+    has_metric_criteria = cfg.min_metric is not None or cfg.max_metric is not None
     has_sidecar_criteria = cfg.source is not None or cfg.license is not None
-    has_criteria = has_dimension_criteria or has_blur_criteria or cfg.max_detect or cfg.min_detect or has_sidecar_criteria
+    has_criteria = has_dimension_criteria or has_metric_criteria or cfg.max_detect or cfg.min_detect or has_sidecar_criteria
     transfer_label = "move" if cfg.move else "copy"
 
     # --- Filter images -------------------------------------------------------
@@ -251,10 +275,12 @@ def cmd(
         ]:
             if val is not None:
                 criteria_parts.append(f"{name}={val}")
-        if cfg.min_blur is not None:
-            criteria_parts.append(f"min_blur={cfg.min_blur}")
-        if cfg.max_blur is not None:
-            criteria_parts.append(f"max_blur={cfg.max_blur}")
+        if cfg.min_metric:
+            for metric_name, threshold in cfg.min_metric:
+                criteria_parts.append(f"min_metric({metric_name})={threshold}")
+        if cfg.max_metric:
+            for metric_name, threshold in cfg.max_metric:
+                criteria_parts.append(f"max_metric({metric_name})={threshold}")
         if cfg.max_detect:
             for cls, threshold in cfg.max_detect:
                 criteria_parts.append(f"max_detect({cls})={threshold}")
@@ -295,25 +321,39 @@ def cmd(
                             executor.shutdown(wait=False, cancel_futures=True)
                             raise
 
-        # Blur check (sidecar lookup)
-        if has_blur_criteria:
+        # Metric check (sidecar lookup)
+        if has_metric_criteria:
             remaining = sorted(kept_set)
             for img_path in remaining:
                 sidecar = read_sidecar(img_path)
                 metrics = sidecar.get("metrics", {})
-                blur_score = metrics.get("blur")
-                if blur_score is None:
-                    rejects[img_path] = "missing blur data"
-                    kept_set.discard(img_path)
-                    continue
-                score = blur_score
-                if cfg.min_blur is not None and score < cfg.min_blur:
-                    rejects[img_path] = f"too blurry (score={score:.2f})"
-                    kept_set.discard(img_path)
-                    continue
-                if cfg.max_blur is not None and score > cfg.max_blur:
-                    rejects[img_path] = f"too sharp (score={score:.2f})"
-                    kept_set.discard(img_path)
+
+                rejected = False
+                if cfg.min_metric:
+                    for metric_name, threshold in cfg.min_metric:
+                        score = metrics.get(metric_name)
+                        if score is None:
+                            rejects[img_path] = f"missing '{metric_name}' metric data"
+                            kept_set.discard(img_path)
+                            rejected = True
+                            break
+                        if score < threshold:
+                            rejects[img_path] = f"{metric_name} too low ({score} < {threshold})"
+                            kept_set.discard(img_path)
+                            rejected = True
+                            break
+
+                if not rejected and cfg.max_metric:
+                    for metric_name, threshold in cfg.max_metric:
+                        score = metrics.get(metric_name)
+                        if score is None:
+                            rejects[img_path] = f"missing '{metric_name}' metric data"
+                            kept_set.discard(img_path)
+                            break
+                        if score > threshold:
+                            rejects[img_path] = f"{metric_name} too high ({score} > {threshold})"
+                            kept_set.discard(img_path)
+                            break
 
         # Detection check (sidecar lookup)
         if cfg.max_detect or cfg.min_detect:

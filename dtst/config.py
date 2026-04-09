@@ -316,8 +316,8 @@ class SelectConfig:
     max_width: int | None = None
     min_height: int | None = None
     max_height: int | None = None
-    min_blur: float | None = None
-    max_blur: float | None = None
+    min_metric: list[tuple[str, float]] | None = None
+    max_metric: list[tuple[str, float]] | None = None
     max_detect: list[tuple[str, float]] | None = None
     min_detect: list[tuple[str, float]] | None = None
     source: list[str] | None = None
@@ -381,17 +381,8 @@ def load_select_config(path: str | Path) -> SelectConfig:
                 raise click.ClickException(f"'select.{field_name}' must be a positive integer")
         dim_fields[field_name] = value
 
-    min_blur = section.get("min_blur")
-    if min_blur is not None:
-        if not isinstance(min_blur, (int, float)) or min_blur < 0:
-            raise click.ClickException("'select.min_blur' must be a non-negative number")
-        min_blur = float(min_blur)
-
-    max_blur = section.get("max_blur")
-    if max_blur is not None:
-        if not isinstance(max_blur, (int, float)) or max_blur < 0:
-            raise click.ClickException("'select.max_blur' must be a non-negative number")
-        max_blur = float(max_blur)
+    min_metric = _parse_tag_thresholds(section, "min_metric")
+    max_metric = _parse_tag_thresholds(section, "max_metric")
 
     max_detect = _parse_tag_thresholds(section, "max_detect")
     min_detect = _parse_tag_thresholds(section, "min_detect")
@@ -429,8 +420,8 @@ def load_select_config(path: str | Path) -> SelectConfig:
         max_width=dim_fields["max_width"],
         min_height=dim_fields["min_height"],
         max_height=dim_fields["max_height"],
-        min_blur=min_blur,
-        max_blur=max_blur,
+        min_metric=min_metric,
+        max_metric=max_metric,
         max_detect=max_detect,
         min_detect=min_detect,
         source=source,

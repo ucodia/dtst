@@ -28,6 +28,7 @@ dependencies = [
     "uvicorn>=0.34.0",
     "transformers>=4.50.0",
     "pyiqa>=0.1.15.post2",
+    "setuptools<82",
 ]
 
 [project.scripts]
