@@ -16,6 +16,17 @@ from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
 
+CPU_METRICS = {"phash", "blur"}
+
+
+def _get_iqa_metrics() -> set[str]:
+    try:
+        import pyiqa
+
+        return set(pyiqa.list_models())
+    except ImportError:
+        return set()
+
 
 def _compute_phash(args: tuple) -> tuple[str, str | None, str | None]:
     (image_path_str,) = args
@@ -45,6 +56,12 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
         return (image_path_str, None, str(exc))
 
 
+_CPU_COMPUTE_FNS = {
+    "phash": _compute_phash,
+    "blur": _compute_blur,
+}
+
+
 @click.command("analyze")
 @click.argument(
     "config",
@@ -59,13 +76,18 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
     default=None,
     help="Comma-separated source folders (supports globs, e.g. 'images/*').",
 )
-@click.option("--phash", is_flag=True, default=False, help="Compute perceptual hash for each image.")
-@click.option("--blur", is_flag=True, default=False, help="Compute blur score (Laplacian variance) for each image.")
+@click.option(
+    "--metrics",
+    "-m",
+    type=str,
+    default=None,
+    help="Comma-separated metric names (e.g. 'phash,blur,musiq,clipiqa').",
+)
 @click.option(
     "--force",
     is_flag=True,
     default=False,
-    help="Recompute all analyzers even if sidecar data already exists.",
+    help="Recompute all metrics even if sidecar data already exists.",
 )
 @click.option(
     "--working-dir",
@@ -79,28 +101,27 @@ def _compute_blur(args: tuple) -> tuple[str, float | None, str | None]:
     "-w",
     default=None,
     type=int,
-    help="Number of parallel workers (default: CPU count).",
+    help="Number of parallel workers for CPU metrics (default: CPU count).",
 )
 @click.option("--clear", is_flag=True, help="Remove all sidecar files from source folders.")
 @click.option("--dry-run", is_flag=True, help="Preview what would be computed without writing sidecars.")
-def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_run):
-    """Compute image metadata and write JSON sidecars.
+def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run):
+    """Compute image metrics and write JSON sidecars.
 
     Analyzes images in the source folders and writes per-image sidecar
-    JSON files containing the requested metadata (perceptual hash,
-    blur score, or both). Sidecars are merged incrementally — running
-    with --phash then --blur accumulates both.
+    JSON files containing the requested metrics. Sidecars are merged
+    incrementally — running with different metrics accumulates results.
 
-    At least one analyzer flag (--phash, --blur) is required unless
-    using --clear.
+    CPU metrics: phash, blur.
+    IQA metrics (GPU-accelerated): any metric from IQA-PyTorch (e.g.
+    musiq, clipiqa, topiq_nr, dbcnn, hyperiqa, niqe, brisque).
 
     \b
     Examples:
-    
-      dtst analyze --from raw --phash --blur -d ./my-dataset
-      dtst analyze config.yaml --phash
-      dtst analyze --from raw,extra --blur --force
-      dtst analyze --from raw --phash --dry-run -d ./my-dataset
+      dtst analyze --from raw --metrics phash,blur -d ./my-dataset
+      dtst analyze config.yaml --metrics phash
+      dtst analyze --from raw --metrics musiq,clipiqa -d ./my-dataset
+      dtst analyze --from raw --metrics phash,blur,musiq --force
       dtst analyze --from raw --clear -d ./my-dataset
     """
     t0 = time.time()
@@ -113,16 +134,14 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         cfg.working_dir = working_dir
     if from_dirs is not None:
         cfg.from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    if phash:
-        cfg.phash = True
-    if blur:
-        cfg.blur = True
+    if metrics is not None:
+        cli_metrics = [m.strip() for m in metrics.split(",") if m.strip()]
+        cfg.metrics = cli_metrics
 
     if cfg.from_dirs is None:
         raise click.ClickException("--from is required (or set 'analyze.from' in config)")
 
     working = cfg.working_dir.resolve()
-
     input_dirs = resolve_dirs(working, cfg.from_dirs)
 
     if clear:
@@ -158,17 +177,36 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         click.echo(f"Removed {removed:,} sidecar files ({elapsed:.1f}s)")
         return
 
-    if not cfg.phash and not cfg.blur:
-        raise click.ClickException("At least one analyzer flag is required (--phash, --blur).")
+    if not cfg.metrics:
+        raise click.ClickException(
+            "At least one metric is required via --metrics (e.g. --metrics phash,blur,musiq)."
+        )
+
+    iqa_metrics = _get_iqa_metrics()
+    known_metrics = CPU_METRICS | iqa_metrics
+    unknown = [m for m in cfg.metrics if m not in known_metrics]
+    if unknown:
+        raise click.ClickException(
+            f"Unknown metric(s): {', '.join(unknown)}. "
+            f"CPU metrics: {', '.join(sorted(CPU_METRICS))}. "
+            f"IQA metrics: use any name from pyiqa.list_models()."
+        )
+
+    requested_cpu = [m for m in cfg.metrics if m in CPU_METRICS]
+    requested_iqa = [m for m in cfg.metrics if m in iqa_metrics]
+
+    if requested_iqa:
+        from dtst.metrics.iqa import validate_iqa_metrics
+
+        fr_metrics = validate_iqa_metrics(requested_iqa)
+        if fr_metrics:
+            raise click.ClickException(
+                f"Full-reference (FR) metrics are not supported: {', '.join(fr_metrics)}. "
+                f"The analyze command only supports no-reference (NR) metrics."
+            )
 
     if workers is None:
         workers = cpu_count()
-
-    analyzers = []
-    if cfg.phash:
-        analyzers.append("phash")
-    if cfg.blur:
-        analyzers.append("blur")
 
     all_images: list[Path] = []
     for src in input_dirs:
@@ -181,10 +219,10 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         raise click.ClickException("No images found in source directories.")
 
     logger.info(
-        "Found %d images in %s, analyzers: %s",
+        "Found %d images in %s, metrics: %s",
         len(all_images),
         ", ".join(cfg.from_dirs),
-        ", ".join(analyzers),
+        ", ".join(cfg.metrics),
     )
 
     needs_work: dict[Path, list[str]] = {}
@@ -192,7 +230,7 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
     for img in all_images:
         existing = read_sidecar(img) if not force else {}
         existing_metrics = existing.get("metrics", {})
-        missing = [a for a in analyzers if a not in existing_metrics]
+        missing = [m for m in cfg.metrics if m not in existing_metrics]
         if missing:
             needs_work[img] = missing
         else:
@@ -205,48 +243,58 @@ def cmd(config, from_dirs, phash, blur, force, working_dir, workers, clear, dry_
         return
 
     if not needs_work:
-        click.echo(f"All {len(all_images)} images already have requested metadata. Nothing to do.")
+        click.echo(f"All {len(all_images)} images already have requested metrics. Nothing to do.")
         return
 
     logger.info("Analyzing %d images (%d skipped)", len(needs_work), skipped)
 
-    results: dict[Path, dict[str, dict]] = {img: {} for img in needs_work}
+    results: dict[Path, dict] = {img: {} for img in needs_work}
     errors = 0
 
+    # --- CPU metrics via ProcessPoolExecutor ---
     with logging_redirect_tqdm():
-        if "phash" in analyzers:
-            phash_images = [img for img, pending in needs_work.items() if "phash" in pending]
-            if phash_images:
-                work = [(str(img),) for img in phash_images]
-                with ProcessPoolExecutor(max_workers=workers) as executor:
-                    futures = {executor.submit(_compute_phash, w): w for w in work}
-                    with tqdm(total=len(work), desc="Computing phash", unit="image") as pbar:
-                        for future in as_completed(futures):
-                            path_str, hash_val, err = future.result()
-                            img_path = Path(path_str)
-                            if err:
-                                logger.error("phash failed for %s: %s", img_path.name, err)
-                                errors += 1
-                            else:
-                                results[img_path]["phash"] = hash_val
-                            pbar.update(1)
+        for metric_name in requested_cpu:
+            compute_fn = _CPU_COMPUTE_FNS[metric_name]
+            metric_images = [img for img, pending in needs_work.items() if metric_name in pending]
+            if not metric_images:
+                continue
 
-        if "blur" in analyzers:
-            blur_images = [img for img, pending in needs_work.items() if "blur" in pending]
-            if blur_images:
-                work = [(str(img),) for img in blur_images]
-                with ProcessPoolExecutor(max_workers=workers) as executor:
-                    futures = {executor.submit(_compute_blur, w): w for w in work}
-                    with tqdm(total=len(work), desc="Computing blur", unit="image") as pbar:
-                        for future in as_completed(futures):
-                            path_str, score, err = future.result()
-                            img_path = Path(path_str)
-                            if err:
-                                logger.error("blur failed for %s: %s", img_path.name, err)
-                                errors += 1
-                            else:
-                                results[img_path]["blur"] = round(score, 2)
-                            pbar.update(1)
+            work = [(str(img),) for img in metric_images]
+            with ProcessPoolExecutor(max_workers=workers) as executor:
+                futures = {executor.submit(compute_fn, w): w for w in work}
+                with tqdm(total=len(work), desc=f"Computing {metric_name}", unit="image") as pbar:
+                    for future in as_completed(futures):
+                        path_str, value, err = future.result()
+                        img_path = Path(path_str)
+                        if err:
+                            logger.error("%s failed for %s: %s", metric_name, img_path.name, err)
+                            errors += 1
+                        else:
+                            if isinstance(value, float):
+                                value = round(value, 2)
+                            results[img_path][metric_name] = value
+                        pbar.update(1)
+
+    # --- IQA metrics via batched GPU inference ---
+    if requested_iqa:
+        iqa_images_by_metric: dict[str, list[Path]] = {}
+        for metric_name in requested_iqa:
+            imgs = [img for img, pending in needs_work.items() if metric_name in pending]
+            if imgs:
+                iqa_images_by_metric[metric_name] = imgs
+
+        if iqa_images_by_metric:
+            from dtst.metrics.iqa import compute_iqa_metrics
+
+            all_iqa_images = sorted(set().union(*iqa_images_by_metric.values()))
+            iqa_metric_names = list(iqa_images_by_metric.keys())
+
+            with logging_redirect_tqdm():
+                iqa_results = compute_iqa_metrics(iqa_metric_names, all_iqa_images)
+
+            for img, scores in iqa_results.items():
+                if img in results:
+                    results[img].update(scores)
 
     written = 0
     for img, data in results.items():

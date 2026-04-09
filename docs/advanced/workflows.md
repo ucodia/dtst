@@ -25,8 +25,9 @@ extract_faces:
 
 analyze:
   from: curated
-  phash: true
-  blur: true
+  metrics:
+    - phash
+    - blur
 
 select:
   from: faces

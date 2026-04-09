@@ -17,22 +17,21 @@ dtst [OPTIONS] COMMAND [ARGS]...
 
 ## dtst analyze { #dtst-analyze data-toc-label='analyze' }
 
-Compute image metadata and write JSON sidecars.
+Compute image metrics and write JSON sidecars.
 
 Analyzes images in the source folders and writes per-image sidecar
-JSON files containing the requested metadata (perceptual hash,
-blur score, or both). Sidecars are merged incrementally — running
-with --phash then --blur accumulates both.
+JSON files containing the requested metrics. Sidecars are merged
+incrementally — running with different metrics accumulates results.
 
-At least one analyzer flag (--phash, --blur) is required unless
-using --clear.
+CPU metrics: phash, blur.
+IQA metrics (GPU-accelerated): any metric from IQA-PyTorch (e.g.
+musiq, clipiqa, topiq_nr, dbcnn, hyperiqa, niqe, brisque).
 
 Examples:
-
-  dtst analyze --from raw --phash --blur -d ./my-dataset
-  dtst analyze config.yaml --phash
-  dtst analyze --from raw,extra --blur --force
-  dtst analyze --from raw --phash --dry-run -d ./my-dataset
+  dtst analyze --from raw --metrics phash,blur -d ./my-dataset
+  dtst analyze config.yaml --metrics phash
+  dtst analyze --from raw --metrics musiq,clipiqa -d ./my-dataset
+  dtst analyze --from raw --metrics phash,blur,musiq --force
   dtst analyze --from raw --clear -d ./my-dataset
 
 **Usage:**
@@ -46,11 +45,10 @@ dtst analyze [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--from` | text | Comma-separated source folders (supports globs, e.g. 'images/*'). | None |
-| `--phash` | boolean | Compute perceptual hash for each image. | `False` |
-| `--blur` | boolean | Compute blur score (Laplacian variance) for each image. | `False` |
-| `--force` | boolean | Recompute all analyzers even if sidecar data already exists. | `False` |
+| `--metrics`, `-m` | text | Comma-separated metric names (e.g. 'phash,blur,musiq,clipiqa'). | None |
+| `--force` | boolean | Recompute all metrics even if sidecar data already exists. | `False` |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--workers`, `-w` | integer | Number of parallel workers for CPU metrics (default: CPU count). | None |
 | `--clear` | boolean | Remove all sidecar files from source folders. | `False` |
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
@@ -213,8 +211,8 @@ each preference tier, the winner is chosen by resolution
 moved to a duplicated/ subdirectory within the source folder
 (configurable with --to).
 
-Requires phash sidecar data from ``dtst analyze --phash``. Blur
-scores (from ``dtst analyze --blur``) are used as a tiebreaker
+Requires phash sidecar data from ``dtst analyze --metrics phash``. Blur
+scores (from ``dtst analyze --metrics blur``) are used as a tiebreaker
 when available.
 
 Examples:

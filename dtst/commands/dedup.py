@@ -169,8 +169,8 @@ def cmd(
     moved to a duplicated/ subdirectory within the source folder
     (configurable with --to).
 
-    Requires phash sidecar data from ``dtst analyze --phash``. Blur
-    scores (from ``dtst analyze --blur``) are used as a tiebreaker
+    Requires phash sidecar data from ``dtst analyze --metrics phash``. Blur
+    scores (from ``dtst analyze --metrics blur``) are used as a tiebreaker
     when available.
 
     \b

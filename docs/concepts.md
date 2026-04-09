@@ -30,8 +30,9 @@ Different commands write different fields:
 | Command | Fields | Description |
 |---------|--------|-------------|
 | `fetch` | `source`, `origin`, `license` | Where the file came from, its original URL, and license info |
-| `analyze --phash` | `metrics.phash` | Perceptual hash for duplicate detection |
-| `analyze --blur` | `metrics.blur` | Laplacian variance measuring image sharpness |
+| `analyze --metrics phash` | `metrics.phash` | Perceptual hash for duplicate detection |
+| `analyze --metrics blur` | `metrics.blur` | Laplacian variance measuring image sharpness |
+| `analyze --metrics <iqa>` | `metrics.<iqa>` | IQA-PyTorch quality scores (e.g. musiq, clipiqa) |
 | `detect` | `classes` | Object detection results (score + bounding box per class) |
 
 A sidecar after fetching, detecting and analyzing might look like this:

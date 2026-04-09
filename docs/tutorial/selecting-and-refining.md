@@ -52,15 +52,15 @@ dtst select -d scratch/crowd --from faces --to curated --min-side 1024 --dry-run
 The `analyze` command computes per-image metadata and stores it in JSON sidecar files alongside each image. This metadata is used by `select` (blur scores) and `dedup` (perceptual hashes).
 
 ```bash
-dtst analyze -d scratch/crowd --from curated --phash --blur
+dtst analyze -d scratch/crowd --from curated --metrics phash,blur
 ```
 
-After this runs, each image in `curated/` has a `.json` sidecar file containing its perceptual hash and blur score. Sidecars are merged incrementally — you can run `--phash` and `--blur` separately and both values accumulate.
+After this runs, each image in `curated/` has a `.json` sidecar file containing its perceptual hash and blur score. Sidecars are merged incrementally — you can run different metrics separately and both values accumulate.
 
 To force recomputation on images that already have metadata:
 
 ```bash
-dtst analyze -d scratch/crowd --from curated --phash --blur --force
+dtst analyze -d scratch/crowd --from curated --metrics phash,blur --force
 ```
 
 ## Detect

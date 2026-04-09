@@ -54,8 +54,9 @@ select:
 
 analyze:
   from: curated
-  phash: true
-  blur: true
+  metrics:
+    - phash
+    - blur
 
 detect:
   from: curated

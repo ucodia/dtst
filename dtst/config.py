@@ -597,8 +597,7 @@ def load_annotate_config(path: str | Path) -> AnnotateConfig:
 class AnalyzeConfig:
     working_dir: Path = field(default_factory=lambda: Path("."))
     from_dirs: list[str] | None = None
-    phash: bool = False
-    blur: bool = False
+    metrics: list[str] = field(default_factory=list)
 
 
 def load_analyze_config(path: str | Path) -> AnalyzeConfig:
@@ -622,19 +621,18 @@ def load_analyze_config(path: str | Path) -> AnalyzeConfig:
     else:
         from_dirs = None
 
-    phash = section.get("phash", False)
-    if not isinstance(phash, bool):
-        raise click.ClickException("'analyze.phash' must be a boolean")
-
-    blur = section.get("blur", False)
-    if not isinstance(blur, bool):
-        raise click.ClickException("'analyze.blur' must be a boolean")
+    metrics_raw = section.get("metrics", [])
+    if isinstance(metrics_raw, list):
+        metrics = [str(m).strip() for m in metrics_raw if str(m).strip()]
+    elif isinstance(metrics_raw, str):
+        metrics = [m.strip() for m in metrics_raw.split(",") if m.strip()]
+    else:
+        raise click.ClickException("'analyze.metrics' must be a list or comma-separated string")
 
     return AnalyzeConfig(
         working_dir=resolved_working_dir,
         from_dirs=from_dirs if from_dirs else None,
-        phash=phash,
-        blur=blur,
+        metrics=metrics,
     )
 
 
