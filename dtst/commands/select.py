@@ -51,28 +51,6 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
         return "failed", name, 0, 0, str(e)
 
 
-def _parse_metric_option(raw: tuple[str, ...]) -> list[tuple[str, float]] | None:
-    """Parse --min-metric / --max-metric CLI values ('name:value') into tuples."""
-    if not raw:
-        return None
-    result = []
-    for entry in raw:
-        if ":" not in entry:
-            raise click.ClickException(
-                f"Invalid metric filter '{entry}'. Expected format: name:value (e.g. blur:5)"
-            )
-        name, _, val_str = entry.partition(":")
-        name = name.strip()
-        if not name:
-            raise click.ClickException(f"Invalid metric filter '{entry}': metric name cannot be empty")
-        try:
-            value = float(val_str.strip())
-        except ValueError:
-            raise click.ClickException(f"Invalid metric filter '{entry}': '{val_str.strip()}' is not a number")
-        result.append((name, value))
-    return result
-
-
 def _resolve_config(
     config: Path | None,
     working_dir: Path | None,
@@ -85,8 +63,8 @@ def _resolve_config(
     max_width: int | None,
     min_height: int | None,
     max_height: int | None,
-    min_metric: list[tuple[str, float]] | None = None,
-    max_metric: list[tuple[str, float]] | None = None,
+    min_metric: tuple[tuple[str, float], ...] | None = None,
+    max_metric: tuple[tuple[str, float], ...] | None = None,
     max_detect: tuple[tuple[str, float], ...] | None = None,
     min_detect: tuple[tuple[str, float], ...] | None = None,
     source: list[str] | None = None,
@@ -150,8 +128,8 @@ def _resolve_config(
 @click.option("--max-width", type=int, default=None, help="Maximum width in pixels; wider images are excluded.")
 @click.option("--min-height", type=int, default=None, help="Minimum height in pixels; shorter images are excluded.")
 @click.option("--max-height", type=int, default=None, help="Maximum height in pixels; taller images are excluded.")
-@click.option("--min-metric", type=str, multiple=True, default=(), help="Minimum metric threshold, format: name:value (e.g. blur:5). Can be repeated.")
-@click.option("--max-metric", type=str, multiple=True, default=(), help="Maximum metric threshold, format: name:value (e.g. brisque:40). Can be repeated.")
+@click.option("--min-metric", type=(str, float), multiple=True, default=(), help="Minimum metric threshold (e.g. --min-metric blur 5). Can be repeated.")
+@click.option("--max-metric", type=(str, float), multiple=True, default=(), help="Maximum metric threshold (e.g. --max-metric brisque 40). Can be repeated.")
 @click.option("--max-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).")
 @click.option("--min-detect", type=(str, float), multiple=True, default=(), help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).")
 @click.option("--source", type=str, default=None, help="Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field.")
@@ -170,8 +148,8 @@ def cmd(
     max_width: int | None,
     min_height: int | None,
     max_height: int | None,
-    min_metric: tuple[str, ...],
-    max_metric: tuple[str, ...],
+    min_metric: tuple[tuple[str, float], ...],
+    max_metric: tuple[tuple[str, float], ...],
     max_detect: tuple[tuple[str, float], ...],
     min_detect: tuple[tuple[str, float], ...],
     source: str | None,
@@ -196,9 +174,9 @@ def cmd(
         dtst select -d ./project --from raw --to backup
         dtst select -d ./project --from raw,extra --to combined
         dtst select -d ./project --from faces --to curated --min-side 256
-        dtst select -d ./project --from faces --to curated --min-metric blur:5
-        dtst select -d ./project --from faces --to curated --min-metric blur:5 --min-metric musiq:60
-        dtst select -d ./project --from faces --to curated --max-metric brisque:40
+        dtst select -d ./project --from faces --to curated --min-metric blur 5
+        dtst select -d ./project --from faces --to curated --min-metric blur 5 --min-metric musiq 60
+        dtst select -d ./project --from faces --to curated --max-metric brisque 40
         dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
         dtst select -d ./project --from raw --to licensed --source serper,flickr
         dtst select config.yaml --dry-run
@@ -221,13 +199,10 @@ def cmd(
         if not parsed_license:
             raise click.ClickException("--license must contain at least one value")
 
-    parsed_min_metric = _parse_metric_option(min_metric)
-    parsed_max_metric = _parse_metric_option(max_metric)
-
     cfg = _resolve_config(
         config, working_dir, parsed_from_dirs, to, move,
         min_side, max_side, min_width, max_width, min_height, max_height,
-        parsed_min_metric, parsed_max_metric, max_detect, min_detect,
+        min_metric or None, max_metric or None, max_detect, min_detect,
         parsed_source, parsed_license,
     )
 

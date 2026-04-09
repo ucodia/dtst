@@ -9,32 +9,77 @@ from dtst.config import load_workflow_config
 logger = logging.getLogger(__name__)
 
 
-def _build_cli_args(step, config_path, working_dir, workflow_working_dir):
-    """Convert a workflow step into CLI argument strings for Click to parse."""
-    args = []
+def _coerce_override(param, value):
+    """Convert a YAML override value to what Click expects for this param."""
+    is_multi = getattr(param, "multiple", False)
+    is_tuple = isinstance(param.type, click.Tuple)
 
-    if step.inherit:
-        args.append(str(config_path))
+    if isinstance(value, bool):
+        return value
 
-    wd = working_dir or (workflow_working_dir if not step.inherit else None)
-    if wd:
-        args.extend(["--working-dir", str(wd)])
+    # dict → tuple of tuples (for type=(str, float), multiple=True)
+    if isinstance(value, dict) and is_tuple and is_multi:
+        return tuple((str(k), float(v)) for k, v in value.items())
 
-    for key, value in step.overrides.items():
-        flag = f"--{key}"
-        if isinstance(value, bool):
-            if value:
-                args.append(flag)
-        elif isinstance(value, list):
-            if all(isinstance(v, str) for v in value):
-                args.extend([flag, ",".join(value)])
+    # list → comma-joined string (for type=str, multiple=False like --from)
+    if isinstance(value, list) and not is_multi:
+        return ",".join(str(v) for v in value)
+
+    # list → tuple (for multiple=True options)
+    if isinstance(value, list) and is_multi:
+        return tuple(str(v) for v in value)
+
+    # scalar for a multiple option → single-element tuple
+    if is_multi and not isinstance(value, (list, tuple)):
+        return (value,)
+
+    return value
+
+
+def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_working_dir):
+    """Build a ctx.params dict for a Click command from workflow step overrides.
+
+    Introspects the command's Click params to convert YAML override values
+    to the types Click expects. This ensures workflow config uses the exact
+    same YAML format as top-level command config sections.
+    """
+    param_info = {p.name: p for p in click_cmd.params}
+
+    # Start with defaults for all params
+    params = {}
+    for p in click_cmd.params:
+        if isinstance(p, click.Argument):
+            params[p.name] = p.default
+        elif isinstance(p, click.Option):
+            if p.multiple:
+                params[p.name] = p.default or ()
             else:
-                args.append(flag)
-                args.extend(str(v) for v in value)
-        else:
-            args.extend([flag, str(value)])
+                params[p.name] = p.default
 
-    return args
+    # Config file path (positional argument)
+    if step.inherit and "config" in params:
+        params["config"] = config_path
+
+    # Working directory
+    wd = working_dir or (workflow_working_dir if not step.inherit else None)
+    if wd and "working_dir" in param_info:
+        params["working_dir"] = wd
+
+    # Apply overrides with type coercion
+    for key, value in step.overrides.items():
+        param_name = key.replace("-", "_")
+        if param_name == "from":
+            param_name = "from_dirs"
+
+        p = param_info.get(param_name)
+        if p is None:
+            raise click.ClickException(
+                f"Unknown parameter '{key}' for command '{click_cmd.name}'"
+            )
+
+        params[param_name] = _coerce_override(p, value)
+
+    return params
 
 
 @click.command("run")
@@ -111,10 +156,11 @@ def cmd(ctx, workflow, config, working_dir, dry_run):
                 click.echo(f"  [dry-run] {cmd_name}")
             continue
 
-        args = _build_cli_args(
-            step, config_path, working_dir, workflow_cfg.working_dir
+        params = _build_ctx_params(
+            click_cmd, step, config_path, working_dir, workflow_cfg.working_dir
         )
-        sub_ctx = click_cmd.make_context(cmd_name, args, parent=ctx)
+        sub_ctx = click.Context(click_cmd, info_name=cmd_name, parent=ctx)
+        sub_ctx.params = params
         with sub_ctx:
             click_cmd.invoke(sub_ctx)
 

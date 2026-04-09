@@ -35,7 +35,7 @@ Select only large, sharp images without microphones:
 ```bash
 dtst select -d scratch/crowd --from faces --to curated \
   --min-side 1024 \
-  --min-metric blur:5 \
+  --min-metric blur 5 \
   --max-detect microphone 0.25
 ```
 
