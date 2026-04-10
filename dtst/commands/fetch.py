@@ -18,7 +18,7 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import FetchConfig, load_fetch_config
+from dtst.config import config_argument
 from dtst.sidecar import write_sidecar
 from dtst.throttle import DomainThrottler
 from dtst.urls import canonicalize_image_url, clean_image_url
@@ -370,43 +370,13 @@ def _load_urls_from_txt(txt_file: Path) -> tuple[list[str], dict[str, dict]]:
     return sorted(set(urls)), sidecar_data
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    to: str | None,
-    input_file: str | None,
-    min_size: int | None,
-    license_filter: str | None,
-) -> FetchConfig:
-    if config is not None:
-        cfg = load_fetch_config(config)
-    else:
-        cfg = FetchConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if to is not None:
-        cfg.to = to
-    if input_file is not None:
-        cfg.input = input_file
-    if min_size is not None:
-        cfg.min_size = min_size
-    if license_filter is not None:
-        cfg.license = license_filter
-
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'fetch.to' in config)")
-
-    return cfg
-
-
 def _check_ytdlp() -> bool:
     """Return True if yt-dlp is available on PATH."""
     return shutil.which("yt-dlp") is not None
 
 
 @click.command("fetch")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where input is read from and media is written to (default: .).")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
 @click.option("--input", "-i", "input_file", type=str, default=None, help="Input file name relative to the working directory. Supports .jsonl and .txt formats.")
@@ -418,7 +388,6 @@ def _check_ytdlp() -> bool:
 @click.option("--no-wait", is_flag=True, help="Never wait for Retry-After headers; use fast exponential backoff instead.")
 @click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     to: str | None,
     input_file: str | None,
@@ -467,13 +436,16 @@ def cmd(
     if no_wait:
         max_wait = 0
 
-    cfg = _resolve_config(config, working_dir, to, input_file, min_size, license_filter)
+    if to is None:
+        raise click.ClickException("--to is required (or set 'fetch.to' in config)")
+    working = (working_dir or Path(".")).resolve()
+    min_size = min_size if min_size is not None else 512
 
     # Determine input file and format
-    if cfg.input is None:
+    if input_file is None:
         raise click.ClickException("--input is required (or set 'fetch.input' in config)")
-    input_name = cfg.input
-    input_path = cfg.working_dir / input_name
+    input_name = input_file
+    input_path = working / input_name
     input_ext = Path(input_name).suffix.lower()
 
     if not input_path.exists():
@@ -483,7 +455,7 @@ def cmd(
     skipped_unsupported = 0
     sidecar_lookup: dict[str, dict] = {}
     if input_ext == ".jsonl":
-        urls, skipped_unsupported, sidecar_lookup = _load_urls_from_jsonl(input_path, cfg.min_size, cfg.license)
+        urls, skipped_unsupported, sidecar_lookup = _load_urls_from_jsonl(input_path, min_size, license_filter)
         logger.info("Loaded URLs from %s (jsonl mode)", input_path)
     elif input_ext == ".txt":
         urls, sidecar_lookup = _load_urls_from_txt(input_path)
@@ -499,7 +471,7 @@ def cmd(
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
 
-    dest_dir = cfg.working_dir / cfg.to
+    dest_dir = working / to
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     # Partition URLs into direct download vs yt-dlp

@@ -14,8 +14,7 @@ from dtst.config import (
     FRAME_FILLS,
     FRAME_GRAVITIES,
     FRAME_MODES,
-    FrameConfig,
-    load_frame_config,
+    config_argument,
 )
 from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
@@ -149,62 +148,8 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
         return "failed", name, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    width: int | None,
-    height: int | None,
-    mode: str | None,
-    gravity: str | None,
-    fill: str | None,
-    fill_color: str | None,
-    quality: int | None,
-    compress_level: int | None,
-) -> FrameConfig:
-    if config is not None:
-        cfg = load_frame_config(config)
-    else:
-        cfg = FrameConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if width is not None:
-        cfg.width = width
-    if height is not None:
-        cfg.height = height
-    if mode is not None:
-        cfg.mode = mode
-    if gravity is not None:
-        cfg.gravity = gravity
-    if fill is not None:
-        cfg.fill = fill
-    if fill_color is not None:
-        cfg.fill_color = fill_color
-    if quality is not None:
-        cfg.quality = quality
-    if compress_level is not None:
-        cfg.compress_level = compress_level
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'frame.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'frame.to' in config)")
-    if cfg.width is None and cfg.height is None:
-        raise click.ClickException(
-            "At least one of --width or --height is required"
-        )
-
-    return cfg
-
-
 @click.command("frame")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -219,7 +164,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -260,16 +204,25 @@ def cmd(
         dtst frame -d ./project --from faces --to resized --width 512
         dtst frame config.yaml --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'frame.from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'frame.to' in config)")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, width, height, mode, gravity, fill, fill_color, quality, compress_level)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    mode = mode or "crop"
+    gravity = gravity or "center"
+    fill = fill or "color"
+    fill_color = fill_color or "#000000"
+    quality = quality if quality is not None else 95
+    compress_level = compress_level if compress_level is not None else 0
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    if width is None and height is None:
+        raise click.ClickException("At least one of --width or --height is required")
+
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -288,29 +241,29 @@ def cmd(
             f"No images found in: {', '.join(str(d) for d in input_dirs)}"
         )
 
-    width_label = str(cfg.width) if cfg.width is not None else "auto"
-    height_label = str(cfg.height) if cfg.height is not None else "auto"
-    both_dims = cfg.width is not None and cfg.height is not None
+    width_label = str(width) if width is not None else "auto"
+    height_label = str(height) if height is not None else "auto"
+    both_dims = width is not None and height is not None
     from_label = ", ".join(str(d) for d in input_dirs)
     num_workers = workers if workers is not None else cpu_count() or 4
 
     logger.info(
         "Resizing %d images from [%s] to %sx%s mode=%s (workers=%d)",
         len(images), from_label, width_label, height_label,
-        cfg.mode if both_dims else "proportional", num_workers,
+        mode if both_dims else "proportional", num_workers,
     )
 
     if dry_run:
         click.echo(f"\nDry run -- would resize {len(images):,} images")
         click.echo(f"  Target: {width_label} x {height_label}")
         if both_dims:
-            click.echo(f"  Mode: {cfg.mode}")
-            if cfg.mode in ("crop", "pad"):
-                click.echo(f"  Gravity: {cfg.gravity}")
-            if cfg.mode == "pad":
-                fill_label = cfg.fill
-                if cfg.fill == "color":
-                    fill_label += f" ({cfg.fill_color})"
+            click.echo(f"  Mode: {mode}")
+            if mode in ("crop", "pad"):
+                click.echo(f"  Gravity: {gravity}")
+            if mode == "pad":
+                fill_label = fill
+                if fill == "color":
+                    fill_label += f" ({fill_color})"
                 click.echo(f"  Fill: {fill_label}")
         click.echo(f"  Output: {output_dir}")
         return
@@ -318,7 +271,7 @@ def cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), cfg.width, cfg.height, cfg.mode, cfg.gravity, cfg.fill, cfg.fill_color, cfg.quality, cfg.compress_level)
+        (str(img_path), str(output_dir), width, height, mode, gravity, fill, fill_color, quality, compress_level)
         for img_path in images
     ]
 
@@ -354,6 +307,6 @@ def cmd(
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Target: {width_label} x {height_label}")
     if both_dims:
-        click.echo(f"  Mode: {cfg.mode}")
+        click.echo(f"  Mode: {mode}")
     click.echo(f"  Time: {minutes}m {seconds}s")
     click.echo(f"  Output: {output_dir}")

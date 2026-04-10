@@ -11,7 +11,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import DedupConfig, load_dedup_config
+from dtst.config import config_argument
 from dtst.files import find_images
 from dtst.sidecar import read_all_sidecars, sidecar_path
 
@@ -60,43 +60,8 @@ class _UnionFind:
         return result
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dir: str | None,
-    to: str | None,
-    threshold: int | None,
-    prefer_upscaled: bool = False,
-) -> DedupConfig:
-    if config is not None:
-        cfg = load_dedup_config(config)
-    else:
-        cfg = DedupConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dir is not None:
-        cfg.from_dir = from_dir
-    if to is not None:
-        cfg.to = to
-    if threshold is not None:
-        cfg.threshold = threshold
-    if prefer_upscaled:
-        cfg.prefer_upscaled = prefer_upscaled
-
-    if cfg.from_dir is None:
-        raise click.ClickException("--from is required (or set 'dedup.from' in config)")
-
-    return cfg
-
-
 @click.command("dedup")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--working-dir",
     "-d",
@@ -149,7 +114,6 @@ def _resolve_config(
     help="Prefer upscaled images over originals when deduplicating.",
 )
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dir: str | None,
     to: str | None,
@@ -183,9 +147,13 @@ def cmd(
     """
     t0 = time.time()
 
-    cfg = _resolve_config(config, working_dir, from_dir, to, threshold, prefer_upscaled)
-    source_dir = cfg.working_dir.resolve() / cfg.from_dir
-    duplicated_dir = source_dir / cfg.to
+    if from_dir is None:
+        raise click.ClickException("--from is required (or set 'dedup.from' in config)")
+    to = to or "duplicated"
+    threshold = threshold if threshold is not None else 8
+    working = (working_dir or Path(".")).resolve()
+    source_dir = working / from_dir
+    duplicated_dir = source_dir / to
 
     if not source_dir.is_dir():
         raise click.ClickException(f"Source directory not found: {source_dir}")
@@ -287,12 +255,12 @@ def cmd(
         h = imagehash.hex_to_hash(sidecars[img]["metrics"]["phash"])
         hashes.append(h)
 
-    logger.info("Computing pairwise hamming distances (threshold=%d)", cfg.threshold)
+    logger.info("Computing pairwise hamming distances (threshold=%d)", threshold)
     n = len(valid_images)
     uf = _UnionFind(n)
     for i in range(n):
         for j in range(i + 1, n):
-            if hashes[i] - hashes[j] <= cfg.threshold:
+            if hashes[i] - hashes[j] <= threshold:
                 uf.union(i, j)
 
     groups = uf.groups()
@@ -316,7 +284,7 @@ def cmd(
             sc = sidecars.get(p, {})
             blur_score = sc.get("metrics", {}).get("blur", 0.0)
             is_upscaled = 1 if sc.get("upscale") else 0
-            preference = is_upscaled if cfg.prefer_upscaled else (1 - is_upscaled)
+            preference = is_upscaled if prefer_upscaled else (1 - is_upscaled)
             return (preference, resolution, fsize, blur_score)
 
         group_paths.sort(key=sort_key, reverse=True)

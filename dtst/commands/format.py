@@ -9,7 +9,7 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import FormatConfig, load_format_config
+from dtst.config import config_argument
 from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
@@ -87,52 +87,8 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
         return "failed", input_path.name, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    fmt: str | None,
-    quality: int | None,
-    compress_level: int | None,
-    strip_metadata: bool,
-    channels: str | None,
-    background: str | None,
-) -> FormatConfig:
-    if config is not None:
-        cfg = load_format_config(config)
-    else:
-        cfg = FormatConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if fmt is not None:
-        cfg.format = fmt
-    if quality is not None:
-        cfg.quality = quality
-    if compress_level is not None:
-        cfg.compress_level = compress_level
-    if strip_metadata:
-        cfg.strip_metadata = True
-    if channels is not None:
-        cfg.channels = channels
-    if background is not None:
-        cfg.background = background
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'to' in config)")
-
-    return cfg
-
-
 @click.command("format")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs).")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -145,7 +101,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -174,16 +129,19 @@ def cmd(
         dtst format -d ./project --from raw --to gray --channels grayscale
         dtst format config.yaml --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'to' in config)")
 
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, fmt, quality, compress_level, strip_metadata, channels, background)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    quality = quality if quality is not None else 95
+    compress_level = compress_level if compress_level is not None else 0
+    background = background or "white"
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -206,11 +164,11 @@ def cmd(
     num_workers = workers if workers is not None else cpu_count() or 4
 
     ops: list[str] = []
-    if cfg.format:
-        ops.append(f"format={cfg.format}")
-    if cfg.channels:
-        ops.append(f"channels={cfg.channels}")
-    if cfg.strip_metadata:
+    if fmt:
+        ops.append(f"format={fmt}")
+    if channels:
+        ops.append(f"channels={channels}")
+    if strip_metadata:
         ops.append("strip-metadata")
 
     logger.info(
@@ -221,24 +179,24 @@ def cmd(
 
     if dry_run:
         click.echo(f"\nDry run -- would format {len(images):,} images")
-        if cfg.format:
-            click.echo(f"  Format: {cfg.format}")
-        if cfg.channels:
-            click.echo(f"  Channels: {cfg.channels}")
-        if cfg.strip_metadata:
+        if fmt:
+            click.echo(f"  Format: {fmt}")
+        if channels:
+            click.echo(f"  Channels: {channels}")
+        if strip_metadata:
             click.echo(f"  Strip metadata: yes")
-        if cfg.format in ("jpg", "webp"):
-            click.echo(f"  Quality: {cfg.quality}")
-        if cfg.format == "png" or cfg.format is None:
-            click.echo(f"  Compress level: {cfg.compress_level}")
+        if fmt in ("jpg", "webp"):
+            click.echo(f"  Quality: {quality}")
+        if fmt == "png" or fmt is None:
+            click.echo(f"  Compress level: {compress_level}")
         click.echo(f"  Output: {output_dir}")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), cfg.format, cfg.quality, cfg.compress_level,
-         cfg.strip_metadata, cfg.channels, cfg.background)
+        (str(img_path), str(output_dir), fmt, quality, compress_level,
+         strip_metadata, channels, background)
         for img_path in images
     ]
 

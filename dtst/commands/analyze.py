@@ -10,7 +10,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import AnalyzeConfig, load_analyze_config
+from dtst.config import config_argument
 from dtst.files import find_images, resolve_dirs
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
@@ -63,12 +63,7 @@ _CPU_COMPUTE_FNS = {
 
 
 @click.command("analyze")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--from",
     "from_dirs",
@@ -105,7 +100,7 @@ _CPU_COMPUTE_FNS = {
 )
 @click.option("--clear", is_flag=True, help="Remove all sidecar files from source folders.")
 @click.option("--dry-run", is_flag=True, help="Preview what would be computed without writing sidecars.")
-def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run):
+def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     """Compute image metrics and write JSON sidecars.
 
     Analyzes images in the source folders and writes per-image sidecar
@@ -126,23 +121,12 @@ def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run)
     """
     t0 = time.time()
 
-    cfg = AnalyzeConfig()
-    if config is not None:
-        cfg = load_analyze_config(config)
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    if metrics is not None:
-        cli_metrics = [m.strip() for m in metrics.split(",") if m.strip()]
-        cfg.metrics = cli_metrics
-
-    if cfg.from_dirs is None:
+    if from_dirs is None:
         raise click.ClickException("--from is required (or set 'analyze.from' in config)")
-
-    working = cfg.working_dir.resolve()
-    input_dirs = resolve_dirs(working, cfg.from_dirs)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    metrics_list = [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
+    working = (working_dir or Path(".")).resolve()
+    input_dirs = resolve_dirs(working, dirs_list)
 
     if clear:
         all_images: list[Path] = []
@@ -177,14 +161,14 @@ def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run)
         click.echo(f"Removed {removed:,} sidecar files ({elapsed:.1f}s)")
         return
 
-    if not cfg.metrics:
+    if not metrics_list:
         raise click.ClickException(
             "At least one metric is required via --metrics (e.g. --metrics phash,blur,musiq)."
         )
 
     iqa_metrics = _get_iqa_metrics()
     known_metrics = CPU_METRICS | iqa_metrics
-    unknown = [m for m in cfg.metrics if m not in known_metrics]
+    unknown = [m for m in metrics_list if m not in known_metrics]
     if unknown:
         raise click.ClickException(
             f"Unknown metric(s): {', '.join(unknown)}. "
@@ -192,8 +176,8 @@ def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run)
             f"IQA metrics: use any name from pyiqa.list_models()."
         )
 
-    requested_cpu = [m for m in cfg.metrics if m in CPU_METRICS]
-    requested_iqa = [m for m in cfg.metrics if m in iqa_metrics]
+    requested_cpu = [m for m in metrics_list if m in CPU_METRICS]
+    requested_iqa = [m for m in metrics_list if m in iqa_metrics]
 
     if requested_iqa:
         from dtst.metrics.iqa import validate_iqa_metrics
@@ -221,8 +205,8 @@ def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run)
     logger.info(
         "Found %d images in %s, metrics: %s",
         len(all_images),
-        ", ".join(cfg.from_dirs),
-        ", ".join(cfg.metrics),
+        ", ".join(dirs_list),
+        ", ".join(metrics_list),
     )
 
     needs_work: dict[Path, list[str]] = {}
@@ -230,7 +214,7 @@ def cmd(config, from_dirs, metrics, force, working_dir, workers, clear, dry_run)
     for img in all_images:
         existing = read_sidecar(img) if not force else {}
         existing_metrics = existing.get("metrics", {})
-        missing = [m for m in cfg.metrics if m not in existing_metrics]
+        missing = [m for m in metrics_list if m not in existing_metrics]
         if missing:
             needs_work[img] = missing
         else:

@@ -14,7 +14,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import VALID_FRAME_FORMATS, ExtractFramesConfig, load_extract_frames_config
+from dtst.config import VALID_FRAME_FORMATS, config_argument
 from dtst.files import find_videos, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
@@ -131,45 +131,13 @@ def _extract_frames(args: tuple, progress_callback=None) -> tuple[str, str, int,
         return "failed", name, 0, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    keyframes: float | None,
-    fmt: str | None,
-) -> ExtractFramesConfig:
-    if config is not None:
-        cfg = load_extract_frames_config(config)
-    else:
-        cfg = ExtractFramesConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if keyframes is not None:
-        cfg.keyframes = keyframes
-    if fmt is not None:
-        cfg.format = fmt
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'extract_frames.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'extract_frames.to' in config)")
-
-    return cfg
-
-
 def _check_ffmpeg() -> bool:
     """Return True if ffmpeg is available on PATH."""
     return shutil.which("ffmpeg") is not None
 
 
 @click.command("extract-frames")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -178,7 +146,6 @@ def _check_ffmpeg() -> bool:
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be done without extracting frames.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -218,21 +185,22 @@ def cmd(
     if keyframes is not None and keyframes <= 0:
         raise click.ClickException("--keyframes must be a positive number")
 
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
-
-    cfg = _resolve_config(config, working_dir, parsed_from_dirs, to, keyframes, fmt)
+    if from_dirs is None:
+        raise click.ClickException("--from is required (or set 'extract_frames.from' in config)")
+    if to is None:
+        raise click.ClickException("--to is required (or set 'extract_frames.to' in config)")
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    keyframes = keyframes if keyframes is not None else 10.0
+    fmt = fmt or "jpg"
 
     if not _check_ffmpeg():
         raise click.ClickException(
             "ffmpeg is not installed or not on PATH. Install it with: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         )
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -256,13 +224,13 @@ def cmd(
 
     logger.info(
         "Extracting keyframes from %d videos in [%s] (interval=%.1fs, format=%s, workers=%d)",
-        len(videos), from_label, cfg.keyframes, cfg.format, num_workers,
+        len(videos), from_label, keyframes, fmt, num_workers,
     )
 
     if dry_run:
         click.echo(f"\nDry run -- would extract keyframes from {len(videos):,} videos")
-        click.echo(f"  Min interval: {cfg.keyframes}s")
-        click.echo(f"  Format: {cfg.format}")
+        click.echo(f"  Min interval: {keyframes}s")
+        click.echo(f"  Format: {fmt}")
         click.echo(f"  Output: {output_dir}")
         return
 
@@ -275,7 +243,7 @@ def cmd(
         durations[str(video_path)] = _probe_duration(str(video_path))
 
     work = [
-        (str(video_path), str(output_dir), cfg.keyframes, cfg.format, durations.get(str(video_path)))
+        (str(video_path), str(output_dir), keyframes, fmt, durations.get(str(video_path)))
         for video_path in videos
     ]
 
@@ -320,7 +288,7 @@ def cmd(
                                 total_frames += frame_count
                                 video_path = Path(video_path_s)
                                 stem = video_path.stem
-                                for frame_path in sorted(output_dir.glob(f"{stem}_*.{cfg.format}")):
+                                for frame_path in sorted(output_dir.glob(f"{stem}_*.{fmt}")):
                                     copy_sidecar(video_path, frame_path, exclude={"metrics", "classes"})
                             elif status == "skipped":
                                 skipped_count += 1

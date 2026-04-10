@@ -11,7 +11,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import AugmentConfig, load_augment_config
+from dtst.config import config_argument
 from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
@@ -76,50 +76,8 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
         return "failed", name, created, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    flip_x: bool,
-    flip_y: bool,
-    flip_xy: bool,
-    no_copy: bool,
-) -> AugmentConfig:
-    if config is not None:
-        cfg = load_augment_config(config)
-    else:
-        cfg = AugmentConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if flip_x:
-        cfg.flip_x = True
-    if flip_y:
-        cfg.flip_y = True
-    if flip_xy:
-        cfg.flip_xy = True
-    if no_copy:
-        cfg.no_copy = True
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'augment.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'augment.to' in config)")
-    if not cfg.flip_x and not cfg.flip_y and not cfg.flip_xy:
-        raise click.ClickException(
-            "At least one transform flag is required (--flipX, --flipY, --flipXY)"
-        )
-
-    return cfg
-
-
 @click.command("augment")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -130,7 +88,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -166,19 +123,19 @@ def cmd(
         dtst augment -d ./project --from faces --to augmented --flipX --no-copy
         dtst augment config.yaml --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if from_dirs is None:
+        raise click.ClickException("--from is required (or set 'augment.from' in config)")
+    if to is None:
+        raise click.ClickException("--to is required (or set 'augment.to' in config)")
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    if not flip_x and not flip_y and not flip_xy:
+        raise click.ClickException(
+            "At least one transform flag is required (--flipX, --flipY, --flipXY)"
+        )
 
-    cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to,
-        flip_x, flip_y, flip_xy, no_copy,
-    )
-
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -198,28 +155,28 @@ def cmd(
         )
 
     transforms = []
-    if cfg.flip_x:
+    if flip_x:
         transforms.append("flipX")
-    if cfg.flip_y:
+    if flip_y:
         transforms.append("flipY")
-    if cfg.flip_xy:
+    if flip_xy:
         transforms.append("flipXY")
 
-    copies_per_image = len(transforms) + (0 if cfg.no_copy else 1)
+    copies_per_image = len(transforms) + (0 if no_copy else 1)
     total_output = len(images) * copies_per_image
 
     from_label = ", ".join(str(d) for d in input_dirs)
     logger.info(
         "Augmenting %d images from [%s] with transforms [%s] (copy_original=%s, workers=%d expected output=%d)",
         len(images), from_label, ", ".join(transforms),
-        not cfg.no_copy, workers if workers is not None else cpu_count() or 4,
+        not no_copy, workers if workers is not None else cpu_count() or 4,
         total_output,
     )
 
     if dry_run:
         click.echo(f"\nDry run -- would augment {len(images):,} images")
         click.echo(f"  Transforms: {', '.join(transforms)}")
-        click.echo(f"  Copy originals: {not cfg.no_copy}")
+        click.echo(f"  Copy originals: {not no_copy}")
         click.echo(f"  Files per image: {copies_per_image}")
         click.echo(f"  Total output files: {total_output:,}")
         click.echo(f"  Output: {output_dir}")
@@ -227,15 +184,15 @@ def cmd(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
-    copy_original = not cfg.no_copy
+    copy_original = not no_copy
 
     work = [
         (
             str(img_path),
             str(output_dir),
-            cfg.flip_x,
-            cfg.flip_y,
-            cfg.flip_xy,
+            flip_x,
+            flip_y,
+            flip_xy,
             copy_original,
         )
         for img_path in images

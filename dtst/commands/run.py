@@ -4,44 +4,25 @@ from pathlib import Path
 
 import click
 
-from dtst.config import load_workflow_config
+from dtst.config import (
+    _YAML_TO_CLICK,
+    _coerce_for_click,
+    _resolve_working_dir,
+    load_workflow_config,
+    load_yaml,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _coerce_override(param, value):
-    """Convert a YAML override value to what Click expects for this param."""
-    is_multi = getattr(param, "multiple", False)
-    is_tuple = isinstance(param.type, click.Tuple)
-
-    if isinstance(value, bool):
-        return value
-
-    # dict → tuple of tuples (for type=(str, float), multiple=True)
-    if isinstance(value, dict) and is_tuple and is_multi:
-        return tuple((str(k), float(v)) for k, v in value.items())
-
-    # list → comma-joined string (for type=str, multiple=False like --from)
-    if isinstance(value, list) and not is_multi:
-        return ",".join(str(v) for v in value)
-
-    # list → tuple (for multiple=True options)
-    if isinstance(value, list) and is_multi:
-        return tuple(str(v) for v in value)
-
-    # scalar for a multiple option → single-element tuple
-    if is_multi and not isinstance(value, (list, tuple)):
-        return (value,)
-
-    return value
 
 
 def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_working_dir):
     """Build a ctx.params dict for a Click command from workflow step overrides.
 
-    Introspects the command's Click params to convert YAML override values
-    to the types Click expects. This ensures workflow config uses the exact
-    same YAML format as top-level command config sections.
+    Loads the command's config section from the YAML file (when inherit is
+    True), applies step overrides on top, and coerces all values to the
+    types Click expects.
     """
     param_info = {p.name: p for p in click_cmd.params}
 
@@ -56,16 +37,27 @@ def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_workin
             else:
                 params[p.name] = p.default
 
-    # Config file path (positional argument)
-    if step.inherit and "config" in params:
-        params["config"] = config_path
+    # Load config section defaults (replaces the old config= pass-through)
+    if step.inherit:
+        data, config_dir = load_yaml(config_path)
+        section_key = click_cmd.name.replace("-", "_")
+        section = data.get(section_key, {})
+        if isinstance(section, dict):
+            for yaml_key, value in section.items():
+                param_name = _YAML_TO_CLICK.get(yaml_key, yaml_key)
+                p = param_info.get(param_name)
+                if p is not None:
+                    params[param_name] = _coerce_for_click(p, value)
+        # Inject resolved working_dir
+        if "working_dir" in param_info:
+            params["working_dir"] = _resolve_working_dir(data, config_dir)
 
-    # Working directory
+    # CLI working_dir override takes precedence
     wd = working_dir or (workflow_working_dir if not step.inherit else None)
     if wd and "working_dir" in param_info:
         params["working_dir"] = wd
 
-    # Apply overrides with type coercion
+    # Apply step overrides with type coercion
     for key, value in step.overrides.items():
         param_name = key.replace("-", "_")
         if param_name == "from":
@@ -77,7 +69,7 @@ def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_workin
                 f"Unknown parameter '{key}' for command '{click_cmd.name}'"
             )
 
-        params[param_name] = _coerce_override(p, value)
+        params[param_name] = _coerce_for_click(p, value)
 
     return params
 

@@ -9,7 +9,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import SelectConfig, load_select_config
+from dtst.config import config_argument
 from dtst.files import copy_image, find_images, move_image, resolve_dirs
 from dtst.sidecar import read_sidecar
 
@@ -51,73 +51,8 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
         return "failed", name, 0, 0, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    move: bool,
-    min_side: int | None,
-    max_side: int | None,
-    min_width: int | None,
-    max_width: int | None,
-    min_height: int | None,
-    max_height: int | None,
-    min_metric: tuple[tuple[str, float], ...] | None = None,
-    max_metric: tuple[tuple[str, float], ...] | None = None,
-    max_detect: tuple[tuple[str, float], ...] | None = None,
-    min_detect: tuple[tuple[str, float], ...] | None = None,
-    source: list[str] | None = None,
-    license: list[str] | None = None,
-) -> SelectConfig:
-    if config is not None:
-        cfg = load_select_config(config)
-    else:
-        cfg = SelectConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if move:
-        cfg.move = True
-    if min_side is not None:
-        cfg.min_side = min_side
-    if max_side is not None:
-        cfg.max_side = max_side
-    if min_width is not None:
-        cfg.min_width = min_width
-    if max_width is not None:
-        cfg.max_width = max_width
-    if min_height is not None:
-        cfg.min_height = min_height
-    if max_height is not None:
-        cfg.max_height = max_height
-    if min_metric:
-        cfg.min_metric = list(min_metric)
-    if max_metric:
-        cfg.max_metric = list(max_metric)
-    if max_detect:
-        cfg.max_detect = list(max_detect)
-    if min_detect:
-        cfg.min_detect = list(min_detect)
-    if source is not None:
-        cfg.source = source
-    if license is not None:
-        cfg.license = license
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'select.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'select.to' in config)")
-
-    return cfg
-
-
 @click.command("select")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -137,7 +72,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be selected without creating files.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -181,33 +115,22 @@ def cmd(
         dtst select -d ./project --from raw --to licensed --source serper,flickr
         dtst select config.yaml --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'select.from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'select.to' in config)")
 
-    parsed_source: list[str] | None = None
-    if source is not None:
-        parsed_source = [s.strip().lower() for s in source.split(",") if s.strip()]
-        if not parsed_source:
-            raise click.ClickException("--source must contain at least one value")
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    source_list = [s.strip().lower() for s in source.split(",") if s.strip()] if source else None
+    license_list = [lf.strip().lower() for lf in license_filter.split(",") if lf.strip()] if license_filter else None
+    min_metric_list = list(min_metric) if min_metric else None
+    max_metric_list = list(max_metric) if max_metric else None
+    min_detect_list = list(min_detect) if min_detect else None
+    max_detect_list = list(max_detect) if max_detect else None
 
-    parsed_license: list[str] | None = None
-    if license_filter is not None:
-        parsed_license = [l.strip().lower() for l in license_filter.split(",") if l.strip()]
-        if not parsed_license:
-            raise click.ClickException("--license must contain at least one value")
-
-    cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to, move,
-        min_side, max_side, min_width, max_width, min_height, max_height,
-        min_metric or None, max_metric or None, max_detect, min_detect,
-        parsed_source, parsed_license,
-    )
-
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -228,12 +151,12 @@ def cmd(
 
     num_workers = workers if workers is not None else cpu_count() or 4
     has_dimension_criteria = any(v is not None for v in (
-        cfg.min_side, cfg.max_side, cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height,
+        min_side, max_side, min_width, max_width, min_height, max_height,
     ))
-    has_metric_criteria = cfg.min_metric is not None or cfg.max_metric is not None
-    has_sidecar_criteria = cfg.source is not None or cfg.license is not None
-    has_criteria = has_dimension_criteria or has_metric_criteria or cfg.max_detect or cfg.min_detect or has_sidecar_criteria
-    transfer_label = "move" if cfg.move else "copy"
+    has_metric_criteria = min_metric_list is not None or max_metric_list is not None
+    has_sidecar_criteria = source_list is not None or license_list is not None
+    has_criteria = has_dimension_criteria or has_metric_criteria or max_detect_list or min_detect_list or has_sidecar_criteria
+    transfer_label = "move" if move else "copy"
 
     # --- Filter images -------------------------------------------------------
 
@@ -244,28 +167,28 @@ def cmd(
     if has_criteria:
         criteria_parts = []
         for name, val in [
-            ("min_side", cfg.min_side), ("max_side", cfg.max_side),
-            ("min_width", cfg.min_width), ("max_width", cfg.max_width),
-            ("min_height", cfg.min_height), ("max_height", cfg.max_height),
+            ("min_side", min_side), ("max_side", max_side),
+            ("min_width", min_width), ("max_width", max_width),
+            ("min_height", min_height), ("max_height", max_height),
         ]:
             if val is not None:
                 criteria_parts.append(f"{name}={val}")
-        if cfg.min_metric:
-            for metric_name, threshold in cfg.min_metric:
+        if min_metric_list:
+            for metric_name, threshold in min_metric_list:
                 criteria_parts.append(f"min_metric({metric_name})={threshold}")
-        if cfg.max_metric:
-            for metric_name, threshold in cfg.max_metric:
+        if max_metric_list:
+            for metric_name, threshold in max_metric_list:
                 criteria_parts.append(f"max_metric({metric_name})={threshold}")
-        if cfg.max_detect:
-            for cls, threshold in cfg.max_detect:
+        if max_detect_list:
+            for cls, threshold in max_detect_list:
                 criteria_parts.append(f"max_detect({cls})={threshold}")
-        if cfg.min_detect:
-            for cls, threshold in cfg.min_detect:
+        if min_detect_list:
+            for cls, threshold in min_detect_list:
                 criteria_parts.append(f"min_detect({cls})={threshold}")
-        if cfg.source:
-            criteria_parts.append(f"source={','.join(cfg.source)}")
-        if cfg.license:
-            criteria_parts.append(f"license={','.join(cfg.license)}")
+        if source_list:
+            criteria_parts.append(f"source={','.join(source_list)}")
+        if license_list:
+            criteria_parts.append(f"license={','.join(license_list)}")
         logger.info("Filtering %d images (%s)", len(images), ", ".join(criteria_parts))
 
         # Dimension check (parallel, CPU-bound)
@@ -273,8 +196,8 @@ def cmd(
             from concurrent.futures import ProcessPoolExecutor, as_completed
 
             work = [
-                (str(p), cfg.min_side, cfg.max_side,
-                 cfg.min_width, cfg.max_width, cfg.min_height, cfg.max_height)
+                (str(p), min_side, max_side,
+                 min_width, max_width, min_height, max_height)
                 for p in images
             ]
             with logging_redirect_tqdm():
@@ -304,8 +227,8 @@ def cmd(
                 metrics = sidecar.get("metrics", {})
 
                 rejected = False
-                if cfg.min_metric:
-                    for metric_name, threshold in cfg.min_metric:
+                if min_metric_list:
+                    for metric_name, threshold in min_metric_list:
                         score = metrics.get(metric_name)
                         if score is None:
                             rejects[img_path] = f"missing '{metric_name}' metric data"
@@ -318,8 +241,8 @@ def cmd(
                             rejected = True
                             break
 
-                if not rejected and cfg.max_metric:
-                    for metric_name, threshold in cfg.max_metric:
+                if not rejected and max_metric_list:
+                    for metric_name, threshold in max_metric_list:
                         score = metrics.get(metric_name)
                         if score is None:
                             rejects[img_path] = f"missing '{metric_name}' metric data"
@@ -331,7 +254,7 @@ def cmd(
                             break
 
         # Detection check (sidecar lookup)
-        if cfg.max_detect or cfg.min_detect:
+        if max_detect_list or min_detect_list:
             remaining = sorted(kept_set)
             for img_path in remaining:
                 sidecar = read_sidecar(img_path)
@@ -342,8 +265,8 @@ def cmd(
                     continue
 
                 rejected = False
-                if cfg.max_detect:
-                    for cls, threshold in cfg.max_detect:
+                if max_detect_list:
+                    for cls, threshold in max_detect_list:
                         entry = detect_data.get(cls, [])
                         if not entry:
                             continue
@@ -354,8 +277,8 @@ def cmd(
                             rejected = True
                             break
 
-                if not rejected and cfg.min_detect:
-                    for cls, threshold in cfg.min_detect:
+                if not rejected and min_detect_list:
+                    for cls, threshold in min_detect_list:
                         entry = detect_data.get(cls, [])
                         if not entry:
                             rejects[img_path] = f"'{cls}' not detected"
@@ -373,25 +296,25 @@ def cmd(
             for img_path in remaining:
                 sidecar = read_sidecar(img_path)
 
-                if cfg.source is not None:
+                if source_list is not None:
                     img_source = sidecar.get("source")
                     if img_source is None:
                         rejects[img_path] = "missing source data"
                         kept_set.discard(img_path)
                         continue
-                    if str(img_source).lower() not in cfg.source:
-                        rejects[img_path] = f"source '{img_source}' not in {cfg.source}"
+                    if str(img_source).lower() not in source_list:
+                        rejects[img_path] = f"source '{img_source}' not in {source_list}"
                         kept_set.discard(img_path)
                         continue
 
-                if cfg.license is not None:
+                if license_list is not None:
                     img_license = sidecar.get("license")
                     if img_license is None:
                         rejects[img_path] = "missing license data"
                         kept_set.discard(img_path)
                         continue
-                    if str(img_license).lower() not in cfg.license:
-                        rejects[img_path] = f"license '{img_license}' not in {cfg.license}"
+                    if str(img_license).lower() not in license_list:
+                        rejects[img_path] = f"license '{img_license}' not in {license_list}"
                         kept_set.discard(img_path)
                         continue
 
@@ -430,7 +353,7 @@ def cmd(
     skipped_count = 0
     failed_count = 0
 
-    transfer_fn = move_image if cfg.move else copy_image
+    transfer_fn = move_image if move else copy_image
 
     with logging_redirect_tqdm():
         with tqdm(total=len(selected), desc="Selecting", unit="image") as pbar:
@@ -452,7 +375,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    verb = "Moved" if cfg.move else "Copied"
+    verb = "Moved" if move else "Copied"
     click.echo(f"\nSelect complete!")
     click.echo(f"  {verb}: {ok_count:,}")
     if skipped_count > 0:

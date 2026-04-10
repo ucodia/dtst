@@ -9,7 +9,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import SearchConfig, load_search_config
+from dtst.config import config_argument
 from dtst.engines import ENGINE_REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -61,45 +61,8 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
-def _resolve_config(
-    config: Path | None,
-    terms: str | None,
-    suffixes: str | None,
-    engines: str | None,
-    working_dir: Path | None,
-    min_size: int | None,
-    output: str | None,
-) -> SearchConfig:
-    if config is not None:
-        cfg = load_search_config(config)
-    else:
-        cfg = SearchConfig()
-
-    if terms is not None:
-        cfg.terms = [t.strip() for t in terms.split(",") if t.strip()]
-    if suffixes is not None:
-        cfg.suffixes = [s.strip() for s in suffixes.split(",") if s.strip()]
-    if engines is not None:
-        cfg.engines = [e.strip().lower() for e in engines.split(",") if e.strip()]
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if min_size is not None:
-        cfg.min_size = min_size
-    if output is not None:
-        cfg.output = output
-
-    if not cfg.terms:
-        raise click.ClickException("Search terms must be provided via config or --terms.")
-    if not cfg.suffixes:
-        raise click.ClickException("Suffixes must be provided via config or --suffixes.")
-    if not cfg.engines:
-        raise click.ClickException("At least one engine must be specified via config or --engines.")
-
-    return cfg
-
-
 @click.command("search")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
 @click.option("--suffixes", type=str, default=None, help="Comma-separated query suffixes (override config).")
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results are written (default: .).")
@@ -131,7 +94,6 @@ def _resolve_config(
     help="Run only queries that include a suffix (e.g. 'term suffix'). Skip bare term queries.",
 )
 def cmd(
-    config: Path | None,
     terms: str | None,
     suffixes: str | None,
     working_dir: Path | None,
@@ -170,22 +132,44 @@ def cmd(
         dtst search config.yaml --max-pages 3 --engines flickr,wikimedia
         dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
     """
-    cfg = _resolve_config(config, terms, suffixes, engines, working_dir, min_size, output)
+    terms_list = [t.strip() for t in terms.split(",") if t.strip()] if terms else []
+    suffixes_list = [s.strip() for s in suffixes.split(",") if s.strip()] if suffixes else []
+    engine_list = [e.strip().lower() for e in engines.split(",") if e.strip()] if engines else []
+    min_size_val = min_size if min_size is not None else 512
+    output_file = output or "results.jsonl"
+    working_dir_path = (working_dir or Path(".")).resolve()
 
-    engine_list = cfg.engines
+    if not terms_list:
+        raise click.ClickException("Search terms must be provided via config or --terms.")
+    if not suffixes_list:
+        raise click.ClickException("Suffixes must be provided via config or --suffixes.")
+    if not engine_list:
+        raise click.ClickException("At least one engine must be specified via config or --engines.")
+
     invalid = [e for e in engine_list if e not in ENGINE_REGISTRY]
     if invalid:
         raise click.ClickException(
             f"Invalid engine(s): {set(invalid)}; valid: {sorted(ENGINE_REGISTRY)}"
         )
-    queries = cfg.query_matrix(suffix_only=suffix_only)
+
+    def query_matrix(suffix_only: bool = False) -> list[str]:
+        queries = []
+        if not suffix_only:
+            queries.extend(terms_list)
+        queries.extend(
+            f"{term} {suffix}".strip()
+            for term in terms_list for suffix in suffixes_list if suffix
+        )
+        return queries
+
+    queries = query_matrix(suffix_only=suffix_only)
 
     if dry_run:
         click.echo("Query matrix:")
         for q in queries:
             click.echo(f"  {q}")
         click.echo("Engines: " + ", ".join(engine_list))
-        click.echo(f"Min size: {cfg.min_size}px")
+        click.echo(f"Min size: {min_size_val}px")
         return
 
     num_workers = workers if workers is not None else cpu_count() or 4
@@ -197,11 +181,11 @@ def cmd(
                 continue
             limit = max_pages if max_pages is not None else DEFAULT_MAX_PAGES.get(en, 10)
             for page in range(1, limit + 1):
-                tasks.append((query, en, page, cfg.min_size, retries, timeout))
+                tasks.append((query, en, page, min_size_val, retries, timeout))
 
     logger.info(
         'Searching for "%s" across %d engines (%d queries, %d pages, %d workers)',
-        cfg.terms[0], len(engine_list), len(queries), len(tasks), num_workers,
+        terms_list[0], len(engine_list), len(queries), len(tasks), num_workers,
     )
 
     start_time = time.monotonic()
@@ -228,9 +212,8 @@ def cmd(
                     executor.shutdown(wait=False, cancel_futures=True)
                     raise
 
-    working_dir_path = cfg.working_dir
     working_dir_path.mkdir(parents=True, exist_ok=True)
-    results_file = working_dir_path / cfg.output
+    results_file = working_dir_path / output_file
 
     existing_results: list[dict] = []
     if results_file.exists():

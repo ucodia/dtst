@@ -13,62 +13,15 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.cache import load_embeddings, save_embeddings
-from dtst.config import ClusterConfig, load_cluster_config
+from dtst.config import config_argument
 from dtst.embeddings import VALID_MODELS, detect_device, get_backend
 from dtst.files import copy_image, find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    model: str | None,
-    top: int | None,
-    min_cluster_size: int | None,
-    min_samples: int | None,
-    batch_size: int | None,
-    no_cache: bool = False,
-    clean: bool = False,
-) -> ClusterConfig:
-    if config is not None:
-        cfg = load_cluster_config(config)
-    else:
-        cfg = ClusterConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if model is not None:
-        cfg.model = model
-    if top is not None:
-        cfg.top = top
-    if min_cluster_size is not None:
-        cfg.min_cluster_size = min_cluster_size
-    if min_samples is not None:
-        cfg.min_samples = min_samples
-    if batch_size is not None:
-        cfg.batch_size = batch_size
-    if no_cache:
-        cfg.no_cache = True
-    if clean:
-        cfg.clean = True
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'cluster.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'cluster.to' in config)")
-
-    return cfg
-
-
 @click.command("cluster")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", "-t", type=str, default=None, help="Destination folder name within the working directory.")
@@ -82,7 +35,6 @@ def _resolve_config(
 @click.option("--clean", is_flag=True, help="Remove the output directory before writing new clusters.")
 @click.option("--dry-run", is_flag=True, help="Show image count and configuration without clustering.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -132,19 +84,20 @@ def cmd(
         dtst cluster -d ./project --min-samples 1 --min-cluster-size 8
         dtst cluster config.yaml --model arcface --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'cluster.from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'cluster.to' in config)")
 
-    cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to, model, top,
-        min_cluster_size, min_samples, batch_size, no_cache, clean,
-    )
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    model = model or "arcface"
+    min_cluster_size = min_cluster_size if min_cluster_size is not None else 5
+    min_samples = min_samples if min_samples is not None else 2
+    batch_size = batch_size if batch_size is not None else 32
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -165,18 +118,18 @@ def cmd(
 
     num_workers = workers if workers is not None else cpu_count() or 4
     from_label = ", ".join(str(d) for d in input_dirs)
-    top_label = str(cfg.top) if cfg.top is not None else "all"
+    top_label = str(top) if top is not None else "all"
 
     logger.info(
         "Clustering %d images from [%s] (model=%s, min_cluster_size=%d, min_samples=%d, top=%s, batch_size=%d)",
-        len(images), from_label, cfg.model, cfg.min_cluster_size, cfg.min_samples, top_label, cfg.batch_size,
+        len(images), from_label, model, min_cluster_size, min_samples, top_label, batch_size,
     )
 
     if dry_run:
         click.echo(f"\nDry run -- would cluster {len(images):,} images")
-        click.echo(f"  Model: {cfg.model}")
-        click.echo(f"  Min cluster size: {cfg.min_cluster_size}")
-        click.echo(f"  Min samples: {cfg.min_samples}")
+        click.echo(f"  Model: {model}")
+        click.echo(f"  Min cluster size: {min_cluster_size}")
+        click.echo(f"  Min samples: {min_samples}")
         click.echo(f"  Top clusters: {top_label}")
         click.echo(f"  Output: {output_dir}")
         return
@@ -186,28 +139,28 @@ def cmd(
     start_time = time.monotonic()
     cached = None
 
-    if not cfg.no_cache:
-        cached = load_embeddings(cfg.working_dir, cfg.model, images)
+    if not no_cache:
+        cached = load_embeddings(working, model, images)
 
     if cached is not None:
         embeddings, valid_paths = cached
     else:
         device = detect_device()
-        backend = get_backend(cfg.model)
+        backend = get_backend(model)
         backend.load(device)
 
         with logging_redirect_tqdm():
             embeddings, valid_paths = backend.embed(
                 images,
-                batch_size=cfg.batch_size,
+                batch_size=batch_size,
                 num_workers=num_workers,
             )
 
         if len(valid_paths) == 0:
             raise click.ClickException("No images produced valid embeddings")
 
-        if not cfg.no_cache:
-            save_embeddings(cfg.working_dir, cfg.model, images, embeddings, valid_paths)
+        if not no_cache:
+            save_embeddings(working, model, images, embeddings, valid_paths)
 
     embed_time = time.monotonic() - start_time
     logger.info(
@@ -221,8 +174,8 @@ def cmd(
 
     cluster_start = time.monotonic()
     clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=cfg.min_cluster_size,
-        min_samples=cfg.min_samples,
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
         metric="euclidean",
         cluster_selection_epsilon=0.0,
     )
@@ -252,12 +205,12 @@ def cmd(
         )
 
     # Apply --top limit
-    if cfg.top is not None:
-        cluster_info = cluster_info[: cfg.top]
+    if top is not None:
+        cluster_info = cluster_info[: top]
 
     # --- Write output --------------------------------------------------------
 
-    if cfg.clean and output_dir.exists():
+    if clean and output_dir.exists():
         shutil.rmtree(output_dir)
         logger.info("Cleaned output directory: %s", output_dir)
 
@@ -290,9 +243,9 @@ def cmd(
     # --- Write metadata ------------------------------------------------------
 
     metadata: dict = {
-        "model": cfg.model,
-        "min_cluster_size": cfg.min_cluster_size,
-        "min_samples": cfg.min_samples,
+        "model": model,
+        "min_cluster_size": min_cluster_size,
+        "min_samples": min_samples,
         "total_images": len(images),
         "embedded_images": len(valid_paths),
         "num_clusters": len(cluster_info),

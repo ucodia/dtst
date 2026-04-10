@@ -10,7 +10,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import ExtractFacesConfig, load_extract_faces_config
+from dtst.config import config_argument
 from dtst.files import find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar
 
@@ -79,55 +79,8 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
         return "failed", name, 0, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    max_size: int | None,
-    engine: str | None,
-    max_faces: int | None,
-    padding: bool | None,
-    skip_partial: bool,
-    refine_landmarks: bool,
-    debug: bool,
-) -> ExtractFacesConfig:
-    if config is not None:
-        cfg = load_extract_faces_config(config)
-    else:
-        cfg = ExtractFacesConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if max_size is not None:
-        cfg.max_size = max_size
-    if engine is not None:
-        cfg.engine = engine
-    if max_faces is not None:
-        cfg.max_faces = max_faces
-    if padding is not None:
-        cfg.padding = padding
-    if skip_partial:
-        cfg.skip_partial = True
-    if refine_landmarks:
-        cfg.refine_landmarks = True
-    if debug:
-        cfg.debug = True
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'extract_faces.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'extract_faces.to' in config)")
-
-    return cfg
-
-
 @click.command("extract-faces")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -140,7 +93,6 @@ def _resolve_config(
 @click.option("--refine-landmarks", is_flag=True, help="Enable MediaPipe refined landmarks (478 vs 468).")
 @click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -177,19 +129,20 @@ def cmd(
         dtst extract-faces -d ./crowd --from raw,extra --to faces
         dtst extract-faces config.yaml --max-faces 3 --no-padding
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'extract_faces.from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'extract_faces.to' in config)")
 
-    cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to, max_size, engine, max_faces, padding,
-        skip_partial, refine_landmarks, debug,
-    )
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    engine = engine or "mediapipe"
+    max_faces = max_faces if max_faces is not None else 1
+    if padding is None:
+        padding = True
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -207,24 +160,24 @@ def cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
 
-    max_size_label = str(cfg.max_size) if cfg.max_size is not None else "none"
+    max_size_label = str(max_size) if max_size is not None else "none"
     from_label = ", ".join(str(d) for d in input_dirs)
     logger.info(
         "Extracting faces from %d images across [%s] (engine=%s, max_size=%s, max_faces=%d, workers=%d)",
-        len(images), from_label, cfg.engine, max_size_label, cfg.max_faces, num_workers,
+        len(images), from_label, engine, max_size_label, max_faces, num_workers,
     )
 
     work = [
         (
             str(img_path),
             str(output_dir),
-            cfg.max_size,
-            cfg.engine,
-            cfg.max_faces,
-            cfg.padding,
-            cfg.skip_partial,
-            cfg.refine_landmarks,
-            cfg.debug,
+            max_size,
+            engine,
+            max_faces,
+            padding,
+            skip_partial,
+            refine_landmarks,
+            debug,
         )
         for img_path in images
     ]

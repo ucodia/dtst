@@ -13,7 +13,7 @@ import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import ValidateConfig, load_validate_config
+from dtst.config import config_argument
 from dtst.files import find_images, resolve_dirs
 
 logger = logging.getLogger(__name__)
@@ -60,12 +60,7 @@ def _check_image(args: tuple) -> tuple[str, int, int, str, bool, int | None, str
 
 
 @click.command("validate")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--from",
     "from_dirs",
@@ -93,7 +88,7 @@ def _check_image(args: tuple) -> tuple[str, int, int, str, bool, int | None, str
     type=int,
     help="Number of parallel workers (default: CPU count).",
 )
-def cmd(config, from_dirs, working_dir, square, workers):
+def cmd(from_dirs, working_dir, square, workers):
     """Validate that all images in a folder are consistent.
 
     Checks that every image shares the same dimensions and channel mode.
@@ -108,23 +103,12 @@ def cmd(config, from_dirs, working_dir, square, workers):
     """
     if workers is None:
         workers = cpu_count()
-
-    cfg = ValidateConfig()
-    if config is not None:
-        cfg = load_validate_config(config)
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    if square:
-        cfg.square = True
-
-    if cfg.from_dirs is None:
+    if from_dirs is None:
         raise click.ClickException("--from is required (or set 'validate.from' in config)")
 
-    working = cfg.working_dir.resolve()
-    input_dirs = resolve_dirs(working, cfg.from_dirs)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    input_dirs = resolve_dirs(working, dirs_list)
 
     all_images: list[Path] = []
     for src in input_dirs:
@@ -136,7 +120,7 @@ def cmd(config, from_dirs, working_dir, square, workers):
     if not all_images:
         raise click.ClickException("No images found in source directories.")
 
-    logger.info("Validating %d images from %s", len(all_images), ", ".join(cfg.from_dirs))
+    logger.info("Validating %d images from %s", len(all_images), ", ".join(dirs_list))
 
     t0 = time.monotonic()
     dim_counts: Counter[tuple[int, int]] = Counter()
@@ -161,7 +145,7 @@ def cmd(config, from_dirs, working_dir, square, workers):
                         else:
                             dim_counts[(w, h)] += 1
                             mode_counts[mode] += 1
-                            if cfg.square and w != h:
+                            if square and w != h:
                                 non_square += 1
                             if is_png:
                                 total_png += 1
@@ -201,7 +185,7 @@ def cmd(config, from_dirs, working_dir, square, workers):
             click.echo(f"    {mode}: {count:,} images")
 
     # Square check
-    if cfg.square:
+    if square:
         if non_square == 0:
             click.echo("  Square:     PASS")
         else:

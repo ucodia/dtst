@@ -12,7 +12,7 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import UpscaleConfig, load_upscale_config
+from dtst.config import config_argument
 from dtst.embeddings.base import detect_device
 from dtst.files import build_save_kwargs, find_images, resolve_dirs
 from dtst.sidecar import copy_sidecar, read_sidecar, scale_classes, write_sidecar
@@ -181,59 +181,8 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
         return path, None, str(e)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: list[str] | None,
-    to: str | None,
-    scale: int | None,
-    model: str | None,
-    tile_size: int | None,
-    tile_pad: int | None,
-    fmt: str | None,
-    quality: int | None,
-    denoise: float | None,
-) -> UpscaleConfig:
-    if config is not None:
-        cfg = load_upscale_config(config)
-    else:
-        cfg = UpscaleConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = from_dirs
-    if to is not None:
-        cfg.to = to
-    if scale is not None:
-        cfg.scale = scale
-    if model is not None:
-        cfg.model = model
-    if tile_size is not None:
-        cfg.tile_size = tile_size
-    if tile_pad is not None:
-        cfg.tile_pad = tile_pad
-    if fmt is not None:
-        cfg.format = fmt
-    if quality is not None:
-        cfg.quality = quality
-    if denoise is not None:
-        cfg.denoise = denoise
-
-    if cfg.from_dirs is None:
-        raise click.ClickException("--from is required (or set 'upscale.from' in config)")
-    if cfg.to is None:
-        raise click.ClickException("--to is required (or set 'upscale.to' in config)")
-    if cfg.denoise is not None and cfg.scale != 4:
-        raise click.ClickException("--denoise is only available with 4x upscaling")
-    if cfg.denoise is not None and cfg.model is not None:
-        raise click.ClickException("--denoise is not compatible with --model")
-
-    return cfg
-
-
 @click.command("upscale")
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
 @click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
 @click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
@@ -247,7 +196,6 @@ def _resolve_config(
 @click.option("--workers", "-w", type=int, default=None, help="Number of threads for image preloading (default: 4).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be written without processing.")
 def cmd(
-    config: Path | None,
     working_dir: Path | None,
     from_dirs: str | None,
     to: str | None,
@@ -287,21 +235,25 @@ def cmd(
         dtst upscale -d ./project --from faces --to upscaled --model ./custom.pth
         dtst upscale config.yaml --dry-run
     """
-    parsed_from_dirs: list[str] | None = None
-    if from_dirs is not None:
-        parsed_from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-        if not parsed_from_dirs:
-            raise click.ClickException("--from must contain at least one folder name")
+    if not from_dirs:
+        raise click.ClickException("--from is required (or set 'upscale.from' in config)")
+    if not to:
+        raise click.ClickException("--to is required (or set 'upscale.to' in config)")
 
-    parsed_scale: int | None = int(scale) if scale is not None else None
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    scale_val = int(scale) if scale is not None else 4
+    tile_size = tile_size if tile_size is not None else 512
+    tile_pad = tile_pad if tile_pad is not None else 32
+    quality = quality if quality is not None else 95
 
-    cfg = _resolve_config(
-        config, working_dir, parsed_from_dirs, to, parsed_scale, model,
-        tile_size, tile_pad, fmt, quality, denoise,
-    )
+    if denoise is not None and scale_val != 4:
+        raise click.ClickException("--denoise is only available with 4x upscaling")
+    if denoise is not None and model is not None:
+        raise click.ClickException("--denoise is not compatible with --model")
 
-    input_dirs = resolve_dirs(cfg.working_dir, cfg.from_dirs)
-    output_dir = cfg.working_dir / cfg.to
+    input_dirs = resolve_dirs(working, dirs_list)
+    output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -324,10 +276,10 @@ def cmd(
     num_workers = workers if workers is not None else 4
 
     if dry_run:
-        if cfg.denoise is not None:
-            model_label = f"realesr-general-x4v3 (denoise={cfg.denoise:.2f})"
+        if denoise is not None:
+            model_label = f"realesr-general-x4v3 (denoise={denoise:.2f})"
         else:
-            model_path = _resolve_model_path(cfg.model, cfg.scale)
+            model_path = _resolve_model_path(model, scale_val)
             model_label = model_path.name
         click.echo(f"\nDry run -- would upscale {len(images):,} images")
         click.echo(f"  Model: {model_label}")
@@ -337,13 +289,13 @@ def cmd(
 
     device = torch.device(detect_device())
 
-    if cfg.denoise is not None:
-        sr_model, actual_scale = _load_denoise_model(cfg.denoise, device)
-        model_label = f"realesr-general-x4v3 (denoise={cfg.denoise:.2f})"
+    if denoise is not None:
+        sr_model, actual_scale = _load_denoise_model(denoise, device)
+        model_label = f"realesr-general-x4v3 (denoise={denoise:.2f})"
     else:
         import spandrel
 
-        model_path = _resolve_model_path(cfg.model, cfg.scale)
+        model_path = _resolve_model_path(model, scale_val)
         logger.info("Loading model %s on %s", model_path.name, device)
         model_descriptor = spandrel.ModelLoader(device=device).load_from_file(model_path)
         sr_model = model_descriptor.model
@@ -351,12 +303,12 @@ def cmd(
         actual_scale = model_descriptor.scale
         model_label = model_path.name
 
-        if cfg.model is not None and cfg.model != model_path.name:
+        if model is not None and model != model_path.name:
             logger.info("Model scale: %dx (auto-detected from weights)", actual_scale)
 
     logger.info(
         "Upscaling %d images %dx from [%s] (tile=%d, device=%s)",
-        len(images), actual_scale, from_label, cfg.tile_size, device,
+        len(images), actual_scale, from_label, tile_size, device,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -383,7 +335,7 @@ def cmd(
                     try:
                         upscaled_tensor = _tile_upscale(
                             sr_model, tensor, actual_scale,
-                            cfg.tile_size, cfg.tile_pad, device,
+                            tile_size, tile_pad, device,
                         )
 
                         result_arr = (
@@ -395,12 +347,12 @@ def cmd(
                         )
                         result_img = Image.fromarray(result_arr)
 
-                        if cfg.format is not None:
-                            out_name = img_path.stem + "." + cfg.format
+                        if fmt is not None:
+                            out_name = img_path.stem + "." + fmt
                         else:
                             out_name = name
 
-                        save_kwargs = build_save_kwargs(Path(out_name), quality=cfg.quality)
+                        save_kwargs = build_save_kwargs(Path(out_name), quality=quality)
 
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()

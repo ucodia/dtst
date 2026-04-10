@@ -5,40 +5,11 @@ from pathlib import Path
 
 import click
 
-from dtst.config import ReviewConfig, load_review_config
-
-
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dir: str | None,
-    to: str | None,
-    port: int | None,
-) -> ReviewConfig:
-    if config is not None:
-        cfg = load_review_config(config)
-    else:
-        cfg = ReviewConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dir is not None:
-        cfg.from_dir = from_dir
-    if to is not None:
-        cfg.to = to
-    if port is not None:
-        cfg.port = port
-
-    return cfg
+from dtst.config import config_argument
 
 
 @click.command("review")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--from",
     "from_dir",
@@ -49,17 +20,17 @@ def _resolve_config(
 @click.option(
     "--to",
     type=str,
-    default=None,
+    default="rejected",
     help="Subfolder name for filtered images.",
-    show_default="rejected",
+    show_default=True,
 )
 @click.option(
     "--port",
     "-p",
     type=int,
-    default=None,
+    default=8888,
     help="Port for the web server.",
-    show_default="8888",
+    show_default=True,
 )
 @click.option(
     "--no-open",
@@ -74,7 +45,7 @@ def _resolve_config(
     default=None,
     help="Working directory (default: .).",
 )
-def cmd(config, from_dir, to, port, no_open, working_dir):
+def cmd(from_dir, to, port, no_open, working_dir):
     """Launch a web UI for manual image review.
 
     Opens a local web server with an image grid. Click images to
@@ -91,15 +62,13 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
         dtst review -d ./project --from faces --to rejected --port 9000
         dtst review config.yaml --no-open
     """
-    cfg = _resolve_config(config, working_dir, from_dir, to, port)
+    working = (working_dir or Path(".")).resolve()
 
-    working = cfg.working_dir.resolve()
-
-    if cfg.from_dir is not None:
-        source = working / cfg.from_dir
+    if from_dir is not None:
+        source = working / from_dir
         if not source.is_dir():
             raise click.ClickException(f"Source directory does not exist: {source}")
-        filtered = source / cfg.to
+        filtered = source / to
     else:
         source = None
         filtered = None
@@ -110,7 +79,7 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
 
     app = create_app(working, source, filtered)
 
-    url = f"http://localhost:{cfg.port}"
+    url = f"http://localhost:{port}"
     click.echo(f"Starting review server at {url}")
     if source is not None:
         click.echo(f"  Source: {source}")
@@ -123,4 +92,4 @@ def cmd(config, from_dir, to, port, no_open, working_dir):
     if not no_open:
         webbrowser.open(url)
 
-    uvicorn.run(app, host="127.0.0.1", port=cfg.port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

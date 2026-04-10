@@ -7,47 +7,15 @@ from pathlib import Path
 import click
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import DetectConfig, load_detect_config
+from dtst.config import config_argument
 from dtst.files import find_images, resolve_dirs
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_config(
-    config: Path | None,
-    working_dir: Path | None,
-    from_dirs: str | None,
-    classes: str | None,
-    threshold: float | None,
-    max_instances: int | None,
-) -> DetectConfig:
-    if config is not None:
-        cfg = load_detect_config(config)
-    else:
-        cfg = DetectConfig()
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    if classes is not None:
-        cfg.classes = [c.strip() for c in classes.split(",") if c.strip()]
-    if threshold is not None:
-        cfg.threshold = threshold
-    if max_instances is not None:
-        cfg.max_instances = max_instances
-
-    return cfg
-
-
 @click.command("detect")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--from",
     "from_dirs",
@@ -92,7 +60,7 @@ def _resolve_config(
 )
 @click.option("--clear", is_flag=True, help="Remove all detection data from sidecar files.")
 @click.option("--dry-run", is_flag=True, help="Preview what would be detected without writing sidecars.")
-def cmd(config, from_dirs, classes, threshold, working_dir, workers, max_instances, clear, dry_run):
+def cmd(from_dirs, classes, threshold, working_dir, workers, max_instances, clear, dry_run):
     """Detect objects in images using OWL-ViT 2.
 
     Uses open-vocabulary object detection to find specific objects in images
@@ -112,13 +80,15 @@ def cmd(config, from_dirs, classes, threshold, working_dir, workers, max_instanc
     """
     t0 = time.time()
 
-    cfg = _resolve_config(config, working_dir, from_dirs, classes, threshold, max_instances)
-
-    if cfg.from_dirs is None:
+    if from_dirs is None:
         raise click.ClickException("--from is required (or set 'detect.from' in config)")
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
+    classes_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+    threshold = threshold if threshold is not None else 0.2
+    max_instances = max_instances if max_instances is not None else 1
 
-    working = cfg.working_dir.resolve()
-    input_dirs = resolve_dirs(working, cfg.from_dirs)
+    input_dirs = resolve_dirs(working, dirs_list)
 
     all_images: list[Path] = []
     for src in input_dirs:
@@ -164,19 +134,19 @@ def cmd(config, from_dirs, classes, threshold, working_dir, workers, max_instanc
 
     # --- Detect mode ---------------------------------------------------------
 
-    if cfg.classes is None or not cfg.classes:
+    if classes_list is None or not classes_list:
         raise click.ClickException("--classes is required (or set 'detect.classes' in config)")
 
     needs_work = all_images
 
     if dry_run:
-        click.echo(f"[dry-run] Would detect {len(needs_work):,} images for classes: {', '.join(cfg.classes)}")
+        click.echo(f"[dry-run] Would detect {len(needs_work):,} images for classes: {', '.join(classes_list)}")
         return
 
     logger.info(
         "Detecting %d images for %d classes",
         len(needs_work),
-        len(cfg.classes),
+        len(classes_list),
     )
 
     num_workers = workers if workers is not None else 4
@@ -191,9 +161,9 @@ def cmd(config, from_dirs, classes, threshold, working_dir, workers, max_instanc
     with logging_redirect_tqdm():
         detections, valid_paths = backend.detect(
             needs_work,
-            cfg.classes,
-            threshold=cfg.threshold,
-            max_instances=cfg.max_instances,
+            classes_list,
+            threshold=threshold,
+            max_instances=max_instances,
             num_workers=num_workers,
         )
 
@@ -205,7 +175,7 @@ def cmd(config, from_dirs, classes, threshold, working_dir, workers, max_instanc
     # Print detection summary
     if valid_paths:
         click.echo(f"\nDetection summary:")
-        for cls in cfg.classes:
+        for cls in classes_list:
             found = sum(
                 1 for p in valid_paths
                 if p in detections and detections[p].get(cls)

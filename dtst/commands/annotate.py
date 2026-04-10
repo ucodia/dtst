@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from dtst.config import AnnotateConfig, load_annotate_config
+from dtst.config import config_argument
 from dtst.files import find_images, resolve_dirs
 from dtst.sidecar import read_sidecar, write_sidecar
 
@@ -14,12 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.command("annotate")
-@click.argument(
-    "config",
-    type=click.Path(exists=True, path_type=Path),
-    required=False,
-    default=None,
-)
+@config_argument
 @click.option(
     "--from",
     "from_dirs",
@@ -62,7 +57,7 @@ logger = logging.getLogger(__name__)
     help="Working directory (default: .).",
 )
 @click.option("--dry-run", is_flag=True, help="Preview what would be annotated without writing sidecars.")
-def cmd(config, from_dirs, source, license, origin, overwrite, working_dir, dry_run):
+def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
     """Write source and license metadata into image sidecars.
 
     Annotates all images in the given folders with provenance metadata
@@ -83,29 +78,15 @@ def cmd(config, from_dirs, source, license, origin, overwrite, working_dir, dry_
     """
     t0 = time.time()
 
-    cfg = AnnotateConfig()
-    if config is not None:
-        cfg = load_annotate_config(config)
-
-    if working_dir is not None:
-        cfg.working_dir = working_dir
-    if from_dirs is not None:
-        cfg.from_dirs = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    if source is not None:
-        cfg.source = source
-    if license is not None:
-        cfg.license = license
-    if origin is not None:
-        cfg.origin = origin
-
-    if cfg.from_dirs is None:
+    if from_dirs is None:
         raise click.ClickException("--from is required (or set 'annotate.from' in config)")
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    working = (working_dir or Path(".")).resolve()
 
-    if not cfg.source and not cfg.license and not cfg.origin:
+    if not source and not license and not origin:
         raise click.ClickException("At least one of --source, --license, or --origin is required.")
 
-    working = cfg.working_dir.resolve()
-    input_dirs = resolve_dirs(working, cfg.from_dirs)
+    input_dirs = resolve_dirs(working, dirs_list)
 
     all_images: list[Path] = []
     for src in input_dirs:
@@ -118,17 +99,17 @@ def cmd(config, from_dirs, source, license, origin, overwrite, working_dir, dry_
         raise click.ClickException("No images found in source directories.")
 
     annotation: dict[str, str] = {}
-    if cfg.source:
-        annotation["source"] = cfg.source
-    if cfg.license:
-        annotation["license"] = cfg.license
-    if cfg.origin:
-        annotation["origin"] = cfg.origin
+    if source:
+        annotation["source"] = source
+    if license:
+        annotation["license"] = license
+    if origin:
+        annotation["origin"] = origin
 
     logger.info(
         "Found %d images in %s, annotating: %s",
         len(all_images),
-        ", ".join(cfg.from_dirs),
+        ", ".join(dirs_list),
         ", ".join(f"{k}={v}" for k, v in annotation.items()),
     )
 
