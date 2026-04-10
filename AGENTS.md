@@ -41,16 +41,18 @@ Every subcommand is a function decorated with `@click.command()` and registered 
 
 ```python
 import click
+from dtst.config import config_argument
 
 @click.command()
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
 @click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be done without executing.")
-def my_command(config, working_dir, workers, dry_run):
+def my_command(working_dir, workers, dry_run):
     """One-line description of what this command does."""
     if workers is None:
         workers = cpu_count()
+    working = (working_dir or Path(".")).resolve()
     # ...
 ```
 
@@ -60,14 +62,20 @@ After adding or changing any command's options, arguments, or docstring, regener
 uv run scripts/gen_cli_docs.py
 ```
 
-After adding or changing any command's options, arguments, or docstring, regenerate the CLI reference docs:
+### Configuration and CLI Override
 
-```bash
-uv run scripts/gen_cli_docs.py
-```
+Commands can be invoked with just a config file, just CLI options, or both. When both are provided, CLI options override config file values.
 
-Commands can be invoked with just a config file, just CLI options, or both.
-When both are provided, CLI options override config file values.
+This uses Click's `default_map` mechanism (same pattern as Black). The `@config_argument` decorator adds an optional YAML config positional argument with an eager callback. When a config file is passed, the callback parses the YAML, extracts the command's section, and injects values into `ctx.default_map`. Click then uses these as defaults that CLI flags override automatically.
+
+The schema is defined **once** — in the Click decorators. There are no config dataclasses or manual merge logic. YAML keys must match Click parameter names, with mappings for the four known mismatches handled in `_YAML_TO_CLICK` in `dtst/config.py`:
+
+| YAML key | Click parameter | Reason |
+|----------|----------------|--------|
+| `from` | `from_dirs` | `from` is a Python keyword |
+| `format` | `fmt` | `format` is a Python builtin |
+| `input` | `input_file` | `input` is a Python builtin |
+| `license` | `license_filter` | Avoids shadowing the builtin |
 
 Config files use YAML with `working_dir` at the top level and parameters nested under command-specific keys:
 
@@ -85,6 +93,25 @@ extract_faces:
   to: faces
 ```
 
+YAML values are coerced to what Click expects by `_coerce_for_click()` in `dtst/config.py`: lists become comma-separated strings for `type=str` options, dicts become tuples-of-tuples for `type=(str, float), multiple=True` options, etc.
+
+### Required Fields
+
+Since `default_map` values act as defaults, required fields cannot use Click's `required=True` (which would fail when no config is provided). Instead, validate required fields explicitly in the command body:
+
+```python
+if from_dirs is None:
+    raise click.ClickException("--from is required (or set 'my_command.from' in config)")
+```
+
+### Comma-Separated List Options
+
+Options like `--from` accept comma-separated strings from the CLI. YAML lists are coerced to comma strings by the config callback. Commands split them inline:
+
+```python
+dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+```
+
 ### Option Patterns
 
 - Always provide a short flag alias for frequently used options (`-d`, `-w`, `-t`)
@@ -92,10 +119,11 @@ extract_faces:
 - Use `--from` for augmenting commands that accept input folder names (comma-separated, supports globs like `images/*`, maps to `from_dirs` in Python since `from` is a keyword). Glob expansion is handled by `resolve_dirs()` in `dtst/files.py`.
 - Use `--to` for sourcing and augmenting commands that write to an output folder
 - Use `click.Path(path_type=Path)` so paths arrive as `Path` objects
-- Use `click.Path(exists=True)` for inputs that must already exist
 - Default `--workers` to `None` and resolve to `cpu_count()` inside the function body
+- Default options that have config-file defaults to `None` so `default_map` values can take effect. Apply fallback defaults in the command body (e.g. `quality = quality if quality is not None else 95`).
 - Use `show_default=True` on options where the default value is meaningful
-- Use `click.Choice([...])` for options with a fixed set of valid values
+- Use `click.Choice([...])` for enum validation — this replaces manual checks and works with both CLI and config values
+- Use `click.IntRange(min, max)` or `click.FloatRange(min, max)` for range validation
 
 ### Output Style
 
@@ -232,7 +260,7 @@ def find_images(directory: Path, recursive: bool = False) -> list[Path]:
 ```
 
 - Metadata is stored as `metadata.json` in the dataset directory
-- Command configuration is a YAML file loaded with `pyyaml`, with parameters nested under command-specific keys (`search:`, `fetch:`, etc.)
+- Command configuration is a YAML file loaded via `@config_argument` (see **Configuration and CLI Override**). YAML sections are keyed by command name with underscores (`search:`, `fetch:`, `extract_faces:`, etc.)
 - Environment variables are loaded from `.env` with `python-dotenv`
 
 ## Logging
@@ -328,11 +356,11 @@ Since the CLI docs are generated from your Click code, every command must be wri
 
 ```python
 @click.command()
-@click.argument("config", type=click.Path(exists=True, path_type=Path), required=False, default=None)
+@config_argument
 @click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
 @click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is written (default: .).")
 @click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches.")
-def search(config, terms, working_dir, dry_run):
+def search(terms, working_dir, dry_run):
     """Search for images across multiple engines.
 
     Reads an optional YAML config file and generates image URLs from
