@@ -581,8 +581,8 @@ dtst review [OPTIONS] [CONFIG]
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
 | `--from` | text | Source folder name within working directory. | None |
-| `--to` | text | Subfolder name for filtered images. | None |
-| `--port`, `-p` | integer | Port for the web server. | None |
+| `--to` | text | Subfolder name for filtered images. | `rejected` |
+| `--port`, `-p` | integer | Port for the web server. | `8888` |
 | `--no-open` | boolean | Do not open the browser automatically. | `False` |
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
@@ -620,8 +620,9 @@ dtst run [OPTIONS] WORKFLOW CONFIG
 Search for images across multiple engines.
 
 Reads an optional YAML config file and generates image URLs from
-Flickr, Serper (Google Images), Brave and Wikimedia Commons using
-an expanded query matrix of search terms and suffixes.
+Flickr, Serper (Google Images), Brave, Wikimedia Commons, and
+iNaturalist. Text-based engines use an expanded query matrix of
+search terms and suffixes. iNaturalist uses taxon IDs instead.
 Results are deduplicated and written to a JSONL file in the working
 directory (default: results.jsonl) so multiple runs accumulate new
 results.
@@ -640,6 +641,7 @@ Examples:
     dtst search config.yaml --dry-run
     dtst search config.yaml --max-pages 3 --engines flickr,wikimedia
     dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
+    dtst search --taxon-ids 47169,54743 -d ./fungi
 
 **Usage:**
 
@@ -663,6 +665,7 @@ dtst search [OPTIONS] [CONFIG]
 | `--retries`, `-r` | integer | Number of retries per request (with exponential backoff). | `3` |
 | `--timeout`, `-t` | float | Request timeout in seconds. | `30` |
 | `--suffix-only` | boolean | Run only queries that include a suffix (e.g. 'term suffix'). Skip bare term queries. | `False` |
+| `--taxon-ids` | text | Comma-separated iNaturalist taxon IDs (implies --engines inaturalist). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ## dtst select { #dtst-select data-toc-label='select' }

@@ -15,6 +15,10 @@ class DomainPolicy:
 DOMAIN_LIMITS: dict[str, DomainPolicy] = {
     "upload.wikimedia.org": DomainPolicy(max_connections=2, request_delay=0.7),
     "live.staticflickr.com": DomainPolicy(max_connections=6, request_delay=0.0),
+    "inaturalist-open-data.s3.amazonaws.com": DomainPolicy(
+        max_connections=4, request_delay=0.2
+    ),
+    "static.inaturalist.org": DomainPolicy(max_connections=4, request_delay=0.2),
 }
 
 DEFAULT_POLICY = DomainPolicy(max_connections=8, request_delay=0.0)

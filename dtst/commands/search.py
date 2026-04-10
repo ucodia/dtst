@@ -17,9 +17,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_PAGES = {
     "brave": 1,
     "flickr": 40,
+    "inaturalist": 50,
     "serper": 1,
     "wikimedia": 20,
 }
+
+TEXT_ENGINES = {"brave", "flickr", "serper", "wikimedia"}
 
 
 def _run_task(
@@ -143,6 +146,12 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     is_flag=True,
     help="Run only queries that include a suffix (e.g. 'term suffix'). Skip bare term queries.",
 )
+@click.option(
+    "--taxon-ids",
+    type=str,
+    default=None,
+    help="Comma-separated iNaturalist taxon IDs (implies --engines inaturalist).",
+)
 def cmd(
     terms: str | None,
     suffixes: str | None,
@@ -156,12 +165,14 @@ def cmd(
     retries: int,
     timeout: int | float,
     suffix_only: bool,
+    taxon_ids: str | None,
 ) -> None:
     """Search for images across multiple engines.
 
     Reads an optional YAML config file and generates image URLs from
-    Flickr, Serper (Google Images), Brave and Wikimedia Commons using
-    an expanded query matrix of search terms and suffixes.
+    Flickr, Serper (Google Images), Brave, Wikimedia Commons, and
+    iNaturalist. Text-based engines use an expanded query matrix of
+    search terms and suffixes. iNaturalist uses taxon IDs instead.
     Results are deduplicated and written to a JSONL file in the working
     directory (default: results.jsonl) so multiple runs accumulate new
     results.
@@ -181,6 +192,7 @@ def cmd(
         dtst search config.yaml --dry-run
         dtst search config.yaml --max-pages 3 --engines flickr,wikimedia
         dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
+        dtst search --taxon-ids 47169,54743 -d ./fungi
     """
     terms_list = [t.strip() for t in terms.split(",") if t.strip()] if terms else []
     suffixes_list = (
@@ -193,17 +205,39 @@ def cmd(
     output_file = output or "results.jsonl"
     working_dir_path = (working_dir or Path(".")).resolve()
 
-    if not terms_list:
-        raise click.ClickException(
-            "Search terms must be provided via config or --terms."
-        )
-    if not suffixes_list:
-        raise click.ClickException(
-            "Suffixes must be provided via config or --suffixes."
-        )
+    taxon_ids_list: list[int] = []
+    if taxon_ids:
+        for t in taxon_ids.split(","):
+            t = t.strip()
+            if t:
+                try:
+                    taxon_ids_list.append(int(t))
+                except ValueError:
+                    raise click.ClickException(
+                        f"Invalid taxon ID: {t!r}; must be an integer."
+                    )
+        if taxon_ids_list and "inaturalist" not in engine_list:
+            engine_list.append("inaturalist")
+
     if not engine_list:
         raise click.ClickException(
             "At least one engine must be specified via config or --engines."
+        )
+
+    text_engines = [e for e in engine_list if e in TEXT_ENGINES]
+    if text_engines:
+        if not terms_list:
+            raise click.ClickException(
+                "Search terms must be provided via config or --terms."
+            )
+        if not suffixes_list:
+            raise click.ClickException(
+                "Suffixes must be provided via config or --suffixes."
+            )
+
+    if "inaturalist" in engine_list and not taxon_ids_list:
+        raise click.ClickException(
+            "iNaturalist requires taxon IDs via --taxon-ids or config (search.taxon_ids)."
         )
 
     invalid = [e for e in engine_list if e not in ENGINE_REGISTRY]
@@ -224,12 +258,17 @@ def cmd(
         )
         return queries
 
-    queries = query_matrix(suffix_only=suffix_only)
+    queries = query_matrix(suffix_only=suffix_only) if text_engines else []
 
     if dry_run:
-        click.echo("Query matrix:")
-        for q in queries:
-            click.echo(f"  {q}")
+        if queries:
+            click.echo("Query matrix:")
+            for q in queries:
+                click.echo(f"  {q}")
+        if "inaturalist" in engine_list:
+            click.echo(
+                "iNaturalist taxon IDs: " + ", ".join(str(t) for t in taxon_ids_list)
+            )
         click.echo("Engines: " + ", ".join(engine_list))
         click.echo(f"Min size: {min_size_val}px")
         return
@@ -238,7 +277,7 @@ def cmd(
 
     tasks: list[tuple[str, str, int, int, int, int | float]] = []
     for query in queries:
-        for en in engine_list:
+        for en in text_engines:
             if en not in ENGINE_REGISTRY:
                 continue
             limit = (
@@ -247,11 +286,29 @@ def cmd(
             for page in range(1, limit + 1):
                 tasks.append((query, en, page, min_size_val, retries, timeout))
 
+    if "inaturalist" in engine_list:
+        limit = (
+            max_pages
+            if max_pages is not None
+            else DEFAULT_MAX_PAGES.get("inaturalist", 50)
+        )
+        for tid in taxon_ids_list:
+            for page in range(1, limit + 1):
+                tasks.append(
+                    (str(tid), "inaturalist", page, min_size_val, retries, timeout)
+                )
+
+    query_label = (
+        terms_list[0]
+        if terms_list
+        else str(taxon_ids_list[0])
+        if taxon_ids_list
+        else "?"
+    )
     logger.info(
-        'Searching for "%s" across %d engines (%d queries, %d pages, %d workers)',
-        terms_list[0],
+        'Searching for "%s" across %d engines (%d tasks, %d workers)',
+        query_label,
         len(engine_list),
-        len(queries),
         len(tasks),
         num_workers,
     )
@@ -311,7 +368,10 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"Queries run: {len(queries)} x {len(engine_list)} engines")
+    query_count = len(queries)
+    if "inaturalist" in engine_list:
+        query_count += len(taxon_ids_list)
+    click.echo(f"Queries run: {query_count} across {len(engine_list)} engines")
     for en in engine_list:
         click.echo(f"  {en}: {engine_counts.get(en, 0)} results")
     click.echo(f"Total unique results (after dedup): {len(deduped)}")
