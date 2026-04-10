@@ -22,18 +22,82 @@ logger = logging.getLogger(__name__)
 
 @click.command("cluster")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", "-t", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--model", "-m", type=click.Choice(sorted(VALID_MODELS), case_sensitive=False), default=None, help="Embedding model for similarity (default: arcface).")
-@click.option("--top", "-n", type=int, default=None, help="Maximum number of clusters to output; omit for all clusters.")
-@click.option("--min-cluster-size", type=int, default=None, help="Minimum images to form a cluster (default: 5).")
-@click.option("--min-samples", type=int, default=None, help="How many close neighbors a point needs to join a cluster; lower values include more borderline images (default: 2).")
-@click.option("--batch-size", "-b", type=int, default=None, help="Images per inference batch (default: 32).")
-@click.option("--workers", "-w", type=int, default=None, help="Number of workers for image preloading (default: CPU count).")
-@click.option("--no-cache", is_flag=True, help="Skip the embedding cache and recompute from scratch.")
-@click.option("--clean", is_flag=True, help="Remove the output directory before writing new clusters.")
-@click.option("--dry-run", is_flag=True, help="Show image count and configuration without clustering.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    "-t",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--model",
+    "-m",
+    type=click.Choice(sorted(VALID_MODELS), case_sensitive=False),
+    default=None,
+    help="Embedding model for similarity (default: arcface).",
+)
+@click.option(
+    "--top",
+    "-n",
+    type=int,
+    default=None,
+    help="Maximum number of clusters to output; omit for all clusters.",
+)
+@click.option(
+    "--min-cluster-size",
+    type=int,
+    default=None,
+    help="Minimum images to form a cluster (default: 5).",
+)
+@click.option(
+    "--min-samples",
+    type=int,
+    default=None,
+    help="How many close neighbors a point needs to join a cluster; lower values include more borderline images (default: 2).",
+)
+@click.option(
+    "--batch-size",
+    "-b",
+    type=int,
+    default=None,
+    help="Images per inference batch (default: 32).",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of workers for image preloading (default: CPU count).",
+)
+@click.option(
+    "--no-cache",
+    is_flag=True,
+    help="Skip the embedding cache and recompute from scratch.",
+)
+@click.option(
+    "--clean",
+    is_flag=True,
+    help="Remove the output directory before writing new clusters.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show image count and configuration without clustering.",
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -85,7 +149,9 @@ def cmd(
         dtst cluster config.yaml --model arcface --dry-run
     """
     if not from_dirs:
-        raise click.ClickException("--from is required (or set 'cluster.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'cluster.from' in config)"
+        )
     if not to:
         raise click.ClickException("--to is required (or set 'cluster.to' in config)")
 
@@ -122,7 +188,13 @@ def cmd(
 
     logger.info(
         "Clustering %d images from [%s] (model=%s, min_cluster_size=%d, min_samples=%d, top=%s, batch_size=%d)",
-        len(images), from_label, model, min_cluster_size, min_samples, top_label, batch_size,
+        len(images),
+        from_label,
+        model,
+        min_cluster_size,
+        min_samples,
+        top_label,
+        batch_size,
     )
 
     if dry_run:
@@ -165,7 +237,9 @@ def cmd(
     embed_time = time.monotonic() - start_time
     logger.info(
         "Embedded %d / %d images in %.1fs",
-        len(valid_paths), len(images), embed_time,
+        len(valid_paths),
+        len(images),
+        embed_time,
     )
 
     # --- Clustering ----------------------------------------------------------
@@ -195,7 +269,9 @@ def cmd(
 
     logger.info(
         "Found %d clusters + %d noise images in %.1fs",
-        len(cluster_info), noise_count, cluster_time,
+        len(cluster_info),
+        noise_count,
+        cluster_time,
     )
 
     if not cluster_info:
@@ -206,7 +282,7 @@ def cmd(
 
     # Apply --top limit
     if top is not None:
-        cluster_info = cluster_info[: top]
+        cluster_info = cluster_info[:top]
 
     # --- Write output --------------------------------------------------------
 
@@ -222,7 +298,9 @@ def cmd(
     label_to_rank = {label: rank for rank, (label, _) in enumerate(cluster_info)}
 
     with logging_redirect_tqdm():
-        with tqdm(total=len(valid_paths), desc="Writing clusters", unit="image") as pbar:
+        with tqdm(
+            total=len(valid_paths), desc="Writing clusters", unit="image"
+        ) as pbar:
             for i, (path, label) in enumerate(zip(valid_paths, labels)):
                 label_int = int(label)
 
@@ -265,7 +343,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nCluster complete!")
+    click.echo("\nCluster complete!")
     click.echo(f"  Images processed: {len(valid_paths):,} / {len(images):,}")
     click.echo(f"  Clusters: {len(cluster_info):,}")
     for rank, (label, count) in enumerate(cluster_info):

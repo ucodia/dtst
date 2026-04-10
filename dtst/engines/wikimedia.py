@@ -108,15 +108,17 @@ class WikimediaEngine(SearchEngine):
                 if isinstance(date_entry, dict) and date_entry.get("value"):
                     date = _strip_html(date_entry["value"])
 
-                results.append(self._make_result(
-                    url=url,
-                    query=query,
-                    width=int(w) if w is not None else None,
-                    height=int(h) if h is not None else None,
-                    license=license_str,
-                    source_domain="commons.wikimedia.org",
-                    title=page_title or None,
-                    author=author,
-                    date=date,
-                ))
+                results.append(
+                    self._make_result(
+                        url=url,
+                        query=query,
+                        width=int(w) if w is not None else None,
+                        height=int(h) if h is not None else None,
+                        license=license_str,
+                        source_domain="commons.wikimedia.org",
+                        title=page_title or None,
+                        author=author,
+                        date=date,
+                    )
+                )
         return results

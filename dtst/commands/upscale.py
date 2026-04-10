@@ -61,9 +61,12 @@ def _download_model(url: str, dest: Path) -> None:
         resp = requests.get(url, stream=True, timeout=30)
         resp.raise_for_status()
         total = int(resp.headers.get("content-length", 0))
-        with open(tmp, "wb") as f, tqdm(
-            total=total, unit="B", unit_scale=True, desc="Downloading model"
-        ) as pbar:
+        with (
+            open(tmp, "wb") as f,
+            tqdm(
+                total=total, unit="B", unit_scale=True, desc="Downloading model"
+            ) as pbar,
+        ):
             for chunk in resp.iter_content(chunk_size=1024 * 1024):
                 f.write(chunk)
                 pbar.update(len(chunk))
@@ -183,18 +186,85 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
 
 @click.command("upscale")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--scale", "-s", type=click.Choice(["2", "4"]), default=None, help="Upscale factor. Ignored when --model is provided (default: 4).")
-@click.option("--model", "-m", type=str, default=None, help="Model preset name or path to a .pth file. Overrides --scale.")
-@click.option("--tile-size", "-t", type=int, default=None, help="Tile size in pixels for processing; 0 disables tiling (default: 512).")
-@click.option("--tile-pad", type=int, default=None, help="Overlap padding between tiles in pixels (default: 32).")
-@click.option("--format", "-f", "fmt", type=click.Choice(["jpg", "png", "webp"]), default=None, help="Output image format. Default preserves the source format.")
-@click.option("--quality", "-q", type=int, default=None, help="JPEG/WebP output quality, 1-100 (default: 95).")
-@click.option("--denoise", "-n", type=float, default=None, help="Denoise strength 0.0-1.0. Lower preserves more texture. Only available at 4x.")
-@click.option("--workers", "-w", type=int, default=None, help="Number of threads for image preloading (default: 4).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be written without processing.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--scale",
+    "-s",
+    type=click.Choice(["2", "4"]),
+    default=None,
+    help="Upscale factor. Ignored when --model is provided (default: 4).",
+)
+@click.option(
+    "--model",
+    "-m",
+    type=str,
+    default=None,
+    help="Model preset name or path to a .pth file. Overrides --scale.",
+)
+@click.option(
+    "--tile-size",
+    "-t",
+    type=int,
+    default=None,
+    help="Tile size in pixels for processing; 0 disables tiling (default: 512).",
+)
+@click.option(
+    "--tile-pad",
+    type=int,
+    default=None,
+    help="Overlap padding between tiles in pixels (default: 32).",
+)
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["jpg", "png", "webp"]),
+    default=None,
+    help="Output image format. Default preserves the source format.",
+)
+@click.option(
+    "--quality",
+    "-q",
+    type=int,
+    default=None,
+    help="JPEG/WebP output quality, 1-100 (default: 95).",
+)
+@click.option(
+    "--denoise",
+    "-n",
+    type=float,
+    default=None,
+    help="Denoise strength 0.0-1.0. Lower preserves more texture. Only available at 4x.",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of threads for image preloading (default: 4).",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Preview what would be written without processing."
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -236,7 +306,9 @@ def cmd(
         dtst upscale config.yaml --dry-run
     """
     if not from_dirs:
-        raise click.ClickException("--from is required (or set 'upscale.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'upscale.from' in config)"
+        )
     if not to:
         raise click.ClickException("--to is required (or set 'upscale.to' in config)")
 
@@ -297,7 +369,9 @@ def cmd(
 
         model_path = _resolve_model_path(model, scale_val)
         logger.info("Loading model %s on %s", model_path.name, device)
-        model_descriptor = spandrel.ModelLoader(device=device).load_from_file(model_path)
+        model_descriptor = spandrel.ModelLoader(device=device).load_from_file(
+            model_path
+        )
         sr_model = model_descriptor.model
         sr_model.eval()
         actual_scale = model_descriptor.scale
@@ -308,7 +382,11 @@ def cmd(
 
     logger.info(
         "Upscaling %d images %dx from [%s] (tile=%d, device=%s)",
-        len(images), actual_scale, from_label, tile_size, device,
+        len(images),
+        actual_scale,
+        from_label,
+        tile_size,
+        device,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -334,8 +412,12 @@ def cmd(
 
                     try:
                         upscaled_tensor = _tile_upscale(
-                            sr_model, tensor, actual_scale,
-                            tile_size, tile_pad, device,
+                            sr_model,
+                            tensor,
+                            actual_scale,
+                            tile_size,
+                            tile_pad,
+                            device,
                         )
 
                         result_arr = (
@@ -356,11 +438,15 @@ def cmd(
 
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()
-                        copy_sidecar(img_path, output_dir / out_name, exclude={"metrics"})
+                        copy_sidecar(
+                            img_path, output_dir / out_name, exclude={"metrics"}
+                        )
                         classes = read_sidecar(img_path).get("classes")
                         upscale_data = {"upscale": actual_scale}
                         if classes:
-                            upscale_data["classes"] = scale_classes(classes, actual_scale)
+                            upscale_data["classes"] = scale_classes(
+                                classes, actual_scale
+                            )
                         write_sidecar(output_dir / out_name, upscale_data)
                         ok_count += 1
 
@@ -379,7 +465,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nUpscale complete!")
+    click.echo("\nUpscale complete!")
     click.echo(f"  Upscaled: {ok_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Scale: {actual_scale}x ({model_label})")

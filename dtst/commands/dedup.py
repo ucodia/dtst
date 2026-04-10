@@ -174,7 +174,9 @@ def cmd(
             return
 
         if dry_run:
-            click.echo(f"\nDry run -- would restore {len(dup_images):,} images to {source_dir}")
+            click.echo(
+                f"\nDry run -- would restore {len(dup_images):,} images to {source_dir}"
+            )
             return
 
         restored = 0
@@ -183,7 +185,9 @@ def cmd(
                 for path in dup_images:
                     dest = source_dir / path.name
                     if dest.exists():
-                        logger.warning("Skipping %s (already exists in source)", path.name)
+                        logger.warning(
+                            "Skipping %s (already exists in source)", path.name
+                        )
                     else:
                         path.rename(dest)
                         sc = sidecar_path(path)
@@ -197,7 +201,7 @@ def cmd(
         except OSError:
             pass
 
-        click.echo(f"\nRestore complete!")
+        click.echo("\nRestore complete!")
         click.echo(f"  Restored: {restored:,}")
         click.echo(f"  Source: {source_dir}")
         return
@@ -245,7 +249,9 @@ def cmd(
 
     valid_images = [p for p in has_phash if p in image_info]
     if len(valid_images) < 2:
-        click.echo("Fewer than 2 readable images with phash data. Nothing to deduplicate.")
+        click.echo(
+            "Fewer than 2 readable images with phash data. Nothing to deduplicate."
+        )
         return
 
     import imagehash
@@ -272,7 +278,11 @@ def cmd(
         return
 
     total_duplicates = sum(len(m) - 1 for m in dup_groups.values())
-    logger.info("Found %d duplicate groups (%d images to move)", len(dup_groups), total_duplicates)
+    logger.info(
+        "Found %d duplicate groups (%d images to move)",
+        len(dup_groups),
+        total_duplicates,
+    )
 
     losers: list[tuple[Path, str]] = []
     for members in dup_groups.values():
@@ -298,7 +308,9 @@ def cmd(
 
     if dry_run:
         kept = len(valid_images) - len(losers)
-        click.echo(f"\nDry run -- would keep {kept:,}, move {len(losers):,} duplicates from {len(dup_groups):,} groups")
+        click.echo(
+            f"\nDry run -- would keep {kept:,}, move {len(losers):,} duplicates from {len(dup_groups):,} groups"
+        )
         for path, reason in losers[:10]:
             click.echo(f"  {path.name} ({reason})")
         if len(losers) > 10:
@@ -324,7 +336,7 @@ def cmd(
                 pbar.update(1)
 
     elapsed = time.time() - t0
-    click.echo(f"\nDedup complete!")
+    click.echo("\nDedup complete!")
     click.echo(f"  Groups: {len(dup_groups):,}")
     click.echo(f"  Kept: {len(valid_images) - moved:,}")
     click.echo(f"  Moved: {moved:,}")

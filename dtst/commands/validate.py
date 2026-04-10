@@ -42,7 +42,9 @@ def _png_flevel(path_str: str) -> int | None:
         return None
 
 
-def _check_image(args: tuple) -> tuple[str, int, int, str, bool, int | None, str | None]:
+def _check_image(
+    args: tuple,
+) -> tuple[str, int, int, str, bool, int | None, str | None]:
     """Return (filename, width, height, mode, is_png, png_flevel, error)."""
     (path_str,) = args
     try:
@@ -104,7 +106,9 @@ def cmd(from_dirs, working_dir, square, workers):
     if workers is None:
         workers = cpu_count()
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'validate.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'validate.from' in config)"
+        )
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
@@ -195,9 +199,13 @@ def cmd(from_dirs, working_dir, square, workers):
     # PNG compression warning
     if total_png > 0:
         if compressed_png == 0:
-            click.echo(f"  PNG comp:   OK (all {total_png:,} PNGs at compression level 0)")
+            click.echo(
+                f"  PNG comp:   OK (all {total_png:,} PNGs at compression level 0)"
+            )
         else:
-            click.echo(f"  PNG comp:   WARN ({compressed_png:,}/{total_png:,} PNGs are compressed, slower loading)")
+            click.echo(
+                f"  PNG comp:   WARN ({compressed_png:,}/{total_png:,} PNGs are compressed, slower loading)"
+            )
 
     # Errors
     if failed > 0:

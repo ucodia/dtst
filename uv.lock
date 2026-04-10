@@ -613,6 +613,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mkdocs-click" },
+    { name = "ruff" },
     { name = "zensical" },
 ]
 
@@ -647,6 +648,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mkdocs-click", specifier = ">=0.9.0" },
+    { name = "ruff", specifier = ">=0.15.9" },
     { name = "zensical", specifier = ">=0.0.24" },
 ]
 

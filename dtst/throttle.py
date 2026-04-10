@@ -67,7 +67,9 @@ class DomainThrottler:
         with self._lock:
             count = self._consecutive_429s.get(domain, 0) + 1
             self._consecutive_429s[domain] = count
-            if count >= CIRCUIT_BREAKER_THRESHOLD and not self._tripped.get(domain, False):
+            if count >= CIRCUIT_BREAKER_THRESHOLD and not self._tripped.get(
+                domain, False
+            ):
                 self._tripped[domain] = True
                 logger.warning(
                     "Circuit breaker tripped for %s -- skipping remaining URLs (re-run to retry)",

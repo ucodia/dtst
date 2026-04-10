@@ -58,9 +58,17 @@ logger = logging.getLogger(__name__)
     help="Maximum detections per class per image.",
     show_default="1",
 )
-@click.option("--clear", is_flag=True, help="Remove all detection data from sidecar files.")
-@click.option("--dry-run", is_flag=True, help="Preview what would be detected without writing sidecars.")
-def cmd(from_dirs, classes, threshold, working_dir, workers, max_instances, clear, dry_run):
+@click.option(
+    "--clear", is_flag=True, help="Remove all detection data from sidecar files."
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be detected without writing sidecars.",
+)
+def cmd(
+    from_dirs, classes, threshold, working_dir, workers, max_instances, clear, dry_run
+):
     """Detect objects in images using OWL-ViT 2.
 
     Uses open-vocabulary object detection to find specific objects in images
@@ -81,10 +89,14 @@ def cmd(from_dirs, classes, threshold, working_dir, workers, max_instances, clea
     t0 = time.time()
 
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'detect.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'detect.from' in config)"
+        )
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    classes_list = [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+    classes_list = (
+        [c.strip() for c in classes.split(",") if c.strip()] if classes else None
+    )
     threshold = threshold if threshold is not None else 0.2
     max_instances = max_instances if max_instances is not None else 1
 
@@ -126,21 +138,29 @@ def cmd(from_dirs, classes, threshold, working_dir, workers, max_instances, clea
             modified += 1
 
         if dry_run:
-            click.echo(f"[dry-run] Would clear detection data from {modified:,} sidecar files")
+            click.echo(
+                f"[dry-run] Would clear detection data from {modified:,} sidecar files"
+            )
         else:
             elapsed = time.time() - t0
-            click.echo(f"Cleared detection data from {modified:,} sidecar files ({elapsed:.1f}s)")
+            click.echo(
+                f"Cleared detection data from {modified:,} sidecar files ({elapsed:.1f}s)"
+            )
         return
 
     # --- Detect mode ---------------------------------------------------------
 
     if classes_list is None or not classes_list:
-        raise click.ClickException("--classes is required (or set 'detect.classes' in config)")
+        raise click.ClickException(
+            "--classes is required (or set 'detect.classes' in config)"
+        )
 
     needs_work = all_images
 
     if dry_run:
-        click.echo(f"[dry-run] Would detect {len(needs_work):,} images for classes: {', '.join(classes_list)}")
+        click.echo(
+            f"[dry-run] Would detect {len(needs_work):,} images for classes: {', '.join(classes_list)}"
+        )
         return
 
     logger.info(
@@ -174,11 +194,10 @@ def cmd(from_dirs, classes, threshold, working_dir, workers, max_instances, clea
 
     # Print detection summary
     if valid_paths:
-        click.echo(f"\nDetection summary:")
+        click.echo("\nDetection summary:")
         for cls in classes_list:
             found = sum(
-                1 for p in valid_paths
-                if p in detections and detections[p].get(cls)
+                1 for p in valid_paths if p in detections and detections[p].get(cls)
             )
             click.echo(f"  {cls}: found in {found}/{len(valid_paths)} images")
 

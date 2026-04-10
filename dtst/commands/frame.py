@@ -32,7 +32,9 @@ def _parse_hex_color(hex_str: str) -> tuple[int, int, int]:
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
-def _gravity_offset(gravity: str, canvas_w: int, canvas_h: int, img_w: int, img_h: int) -> tuple[int, int]:
+def _gravity_offset(
+    gravity: str, canvas_w: int, canvas_h: int, img_w: int, img_h: int
+) -> tuple[int, int]:
     """Return (x, y) paste offset for placing an image on a canvas according to gravity."""
     gx = {"left": 0, "center": 0.5, "right": 1}
     gy = {"top": 0, "center": 0.5, "bottom": 1}
@@ -45,7 +47,9 @@ def _gravity_offset(gravity: str, canvas_w: int, canvas_h: int, img_w: int, img_
     return x, y
 
 
-def _np_pad_fill(resized, canvas_size: tuple[int, int], paste_x: int, paste_y: int, mode: str) -> Image.Image:
+def _np_pad_fill(
+    resized, canvas_size: tuple[int, int], paste_x: int, paste_y: int, mode: str
+) -> Image.Image:
     """Pad a resized image using numpy's pad with the given mode ('edge' or 'reflect')."""
     import numpy as np
 
@@ -56,7 +60,9 @@ def _np_pad_fill(resized, canvas_size: tuple[int, int], paste_x: int, paste_y: i
     pad_bottom = ch - paste_y - ih
     pad_left = paste_x
     pad_right = cw - paste_x - iw
-    padded = np.pad(arr, ((pad_top, pad_bottom), (pad_left, pad_right), (0, 0)), mode=mode)
+    padded = np.pad(
+        arr, ((pad_top, pad_bottom), (pad_left, pad_right), (0, 0)), mode=mode
+    )
     return Image.fromarray(padded)
 
 
@@ -66,7 +72,18 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
     Returns ``(status, filename, error_message)``.
     Status is one of ``"ok"`` or ``"failed"``.
     """
-    input_path_s, output_dir_s, target_width, target_height, mode, gravity, fill, fill_color, quality, compress_level = args
+    (
+        input_path_s,
+        output_dir_s,
+        target_width,
+        target_height,
+        mode,
+        gravity,
+        fill,
+        fill_color,
+        quality,
+        compress_level,
+    ) = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
     name = input_path.name
@@ -74,7 +91,9 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
     try:
         img = Image.open(input_path)
         orig_w, orig_h = img.size
-        save_kw = build_save_kwargs(input_path, quality=quality, compress_level=compress_level)
+        save_kw = build_save_kwargs(
+            input_path, quality=quality, compress_level=compress_level
+        )
 
         # Single-dimension: proportional resize (mode irrelevant)
         if target_width is None or target_height is None:
@@ -150,19 +169,92 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
 
 @click.command("frame")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--width", "-W", type=int, default=None, help="Target width in pixels. If --height is omitted, aspect ratio is preserved.")
-@click.option("--height", "-H", type=int, default=None, help="Target height in pixels. If --width is omitted, aspect ratio is preserved.")
-@click.option("--mode", "-m", type=click.Choice(FRAME_MODES, case_sensitive=False), default=None, help="Resize mode when both width and height are given (default: crop).")
-@click.option("--gravity", "-g", type=click.Choice(FRAME_GRAVITIES, case_sensitive=False), default=None, help="Anchor position for crop (part to keep) or pad (where to place image). Default: center.")
-@click.option("--fill", "-f", type=click.Choice(FRAME_FILLS, case_sensitive=False), default=None, help="Fill strategy for pad mode: color, edge, reflect, or blur (default: color).")
-@click.option("--fill-color", type=str, default=None, help="Hex color for pad fill when --fill=color (default: #000000).")
-@click.option("--quality", "-q", type=int, default=None, help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.")
-@click.option("--compress-level", type=int, default=None, help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--width",
+    "-W",
+    type=int,
+    default=None,
+    help="Target width in pixels. If --height is omitted, aspect ratio is preserved.",
+)
+@click.option(
+    "--height",
+    "-H",
+    type=int,
+    default=None,
+    help="Target height in pixels. If --width is omitted, aspect ratio is preserved.",
+)
+@click.option(
+    "--mode",
+    "-m",
+    type=click.Choice(FRAME_MODES, case_sensitive=False),
+    default=None,
+    help="Resize mode when both width and height are given (default: crop).",
+)
+@click.option(
+    "--gravity",
+    "-g",
+    type=click.Choice(FRAME_GRAVITIES, case_sensitive=False),
+    default=None,
+    help="Anchor position for crop (part to keep) or pad (where to place image). Default: center.",
+)
+@click.option(
+    "--fill",
+    "-f",
+    type=click.Choice(FRAME_FILLS, case_sensitive=False),
+    default=None,
+    help="Fill strategy for pad mode: color, edge, reflect, or blur (default: color).",
+)
+@click.option(
+    "--fill-color",
+    type=str,
+    default=None,
+    help="Hex color for pad fill when --fill=color (default: #000000).",
+)
+@click.option(
+    "--quality",
+    "-q",
+    type=int,
+    default=None,
+    help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.",
+)
+@click.option(
+    "--compress-level",
+    type=int,
+    default=None,
+    help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel workers (default: CPU count).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be written without creating files.",
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -249,8 +341,12 @@ def cmd(
 
     logger.info(
         "Resizing %d images from [%s] to %sx%s mode=%s (workers=%d)",
-        len(images), from_label, width_label, height_label,
-        mode if both_dims else "proportional", num_workers,
+        len(images),
+        from_label,
+        width_label,
+        height_label,
+        mode if both_dims else "proportional",
+        num_workers,
     )
 
     if dry_run:
@@ -271,7 +367,18 @@ def cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), width, height, mode, gravity, fill, fill_color, quality, compress_level)
+        (
+            str(img_path),
+            str(output_dir),
+            width,
+            height,
+            mode,
+            gravity,
+            fill,
+            fill_color,
+            quality,
+            compress_level,
+        )
         for img_path in images
     ]
 
@@ -289,7 +396,11 @@ def cmd(
                         if status == "ok":
                             ok_count += 1
                             src_path = Path(futures[future][0])
-                            copy_sidecar(src_path, output_dir / name, exclude={"metrics", "classes"})
+                            copy_sidecar(
+                                src_path,
+                                output_dir / name,
+                                exclude={"metrics", "classes"},
+                            )
                         else:
                             failed_count += 1
                             logger.error("Failed to resize %s: %s", name, error)
@@ -302,7 +413,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nFrame complete!")
+    click.echo("\nFrame complete!")
     click.echo(f"  Resized: {ok_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Target: {width_label} x {height_label}")

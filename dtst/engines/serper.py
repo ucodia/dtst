@@ -51,7 +51,9 @@ class SerperEngine(SearchEngine):
         for img in images:
             if not isinstance(img, dict):
                 continue
-            url = img.get("imageUrl") or img.get("image") or img.get("original_image_url")
+            url = (
+                img.get("imageUrl") or img.get("image") or img.get("original_image_url")
+            )
             if not url:
                 continue
             w = img.get("imageWidth") or img.get("original_image_width")
@@ -72,12 +74,14 @@ class SerperEngine(SearchEngine):
             if link:
                 source_domain = urlparse(link).netloc or None
 
-            results.append(self._make_result(
-                url=url,
-                query=query,
-                width=w_int,
-                height=h_int,
-                title=img.get("title"),
-                source_domain=source_domain,
-            ))
+            results.append(
+                self._make_result(
+                    url=url,
+                    query=query,
+                    width=w_int,
+                    height=h_int,
+                    title=img.get("title"),
+                    source_domain=source_domain,
+                )
+            )
         return results

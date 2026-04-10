@@ -28,7 +28,6 @@ class CLIPBackend(EmbeddingBackend):
 
     def load(self, device: str) -> None:
         import open_clip
-        import torch
 
         self._device = device
         self._model, _, self._preprocess = open_clip.create_model_and_transforms(
@@ -64,7 +63,9 @@ class CLIPBackend(EmbeddingBackend):
         skipped = 0
 
         with ThreadPoolExecutor(max_workers=num_workers) as loader:
-            with tqdm(total=len(image_paths), desc="Embedding (clip)", unit="image") as pbar:
+            with tqdm(
+                total=len(image_paths), desc="Embedding (clip)", unit="image"
+            ) as pbar:
                 for batch_start in range(0, len(image_paths), batch_size):
                     batch_paths = image_paths[batch_start : batch_start + batch_size]
                     loaded = list(loader.map(_load_and_preprocess, batch_paths))
@@ -96,4 +97,3 @@ class CLIPBackend(EmbeddingBackend):
         matrix = np.vstack(embeddings).astype(np.float32)
         matrix = normalize(matrix)
         return matrix, valid_paths
-

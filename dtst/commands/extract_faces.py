@@ -23,7 +23,17 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
     Returns ``(status, filename, face_count, error_message)``.
     Status is one of ``"ok"``, ``"no_faces"``, ``"failed"``.
     """
-    input_path_s, output_dir_s, max_size, engine, max_faces, padding, skip_partial, refine_landmarks, debug = args
+    (
+        input_path_s,
+        output_dir_s,
+        max_size,
+        engine,
+        max_faces,
+        padding,
+        skip_partial,
+        refine_landmarks,
+        debug,
+    ) = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
     name = input_path.name
@@ -81,16 +91,69 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
 
 @click.command("extract-faces")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--max-size", "-M", type=int, default=None, help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).")
-@click.option("--engine", "-e", type=click.Choice(["mediapipe", "dlib"], case_sensitive=False), default=None, help="Face detection engine (default: mediapipe).")
-@click.option("--max-faces", "-m", type=int, default=None, help="Max faces to extract per image (default: 1).")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
-@click.option("--padding/--no-padding", default=None, help="Enable/disable reflective padding on crops (default: enabled).")
-@click.option("--skip-partial", is_flag=True, help="Skip faces whose crop extends beyond the image boundary instead of padding them.")
-@click.option("--refine-landmarks", is_flag=True, help="Enable MediaPipe refined landmarks (478 vs 468).")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--max-size",
+    "-M",
+    type=int,
+    default=None,
+    help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).",
+)
+@click.option(
+    "--engine",
+    "-e",
+    type=click.Choice(["mediapipe", "dlib"], case_sensitive=False),
+    default=None,
+    help="Face detection engine (default: mediapipe).",
+)
+@click.option(
+    "--max-faces",
+    "-m",
+    type=int,
+    default=None,
+    help="Max faces to extract per image (default: 1).",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel workers (default: CPU count).",
+)
+@click.option(
+    "--padding/--no-padding",
+    default=None,
+    help="Enable/disable reflective padding on crops (default: enabled).",
+)
+@click.option(
+    "--skip-partial",
+    is_flag=True,
+    help="Skip faces whose crop extends beyond the image boundary instead of padding them.",
+)
+@click.option(
+    "--refine-landmarks",
+    is_flag=True,
+    help="Enable MediaPipe refined landmarks (478 vs 468).",
+)
 @click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
 def cmd(
     working_dir: Path | None,
@@ -130,9 +193,13 @@ def cmd(
         dtst extract-faces config.yaml --max-faces 3 --no-padding
     """
     if not from_dirs:
-        raise click.ClickException("--from is required (or set 'extract_faces.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'extract_faces.from' in config)"
+        )
     if not to:
-        raise click.ClickException("--to is required (or set 'extract_faces.to' in config)")
+        raise click.ClickException(
+            "--to is required (or set 'extract_faces.to' in config)"
+        )
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
@@ -146,7 +213,9 @@ def cmd(
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}")
+        raise click.ClickException(
+            f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
+        )
 
     images: list[Path] = []
     for input_dir in input_dirs:
@@ -155,7 +224,9 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
+        raise click.ClickException(
+            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = workers if workers is not None else cpu_count() or 4
@@ -164,7 +235,12 @@ def cmd(
     from_label = ", ".join(str(d) for d in input_dirs)
     logger.info(
         "Extracting faces from %d images across [%s] (engine=%s, max_size=%s, max_faces=%d, workers=%d)",
-        len(images), from_label, engine, max_size_label, max_faces, num_workers,
+        len(images),
+        from_label,
+        engine,
+        max_size_label,
+        max_faces,
+        num_workers,
     )
 
     work = [
@@ -191,7 +267,9 @@ def cmd(
     with logging_redirect_tqdm():
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_process_image, w): w for w in work}
-            with tqdm(total=len(futures), desc="Extracting faces", unit="image") as pbar:
+            with tqdm(
+                total=len(futures), desc="Extracting faces", unit="image"
+            ) as pbar:
                 try:
                     for future in as_completed(futures):
                         status, name, face_count, error = future.result()
@@ -201,17 +279,27 @@ def cmd(
                             src_path = Path(futures[future][0])
                             stem = src_path.stem
                             if face_count == 1:
-                                copy_sidecar(src_path, output_dir / f"{stem}.jpg", exclude={"metrics", "classes"})
+                                copy_sidecar(
+                                    src_path,
+                                    output_dir / f"{stem}.jpg",
+                                    exclude={"metrics", "classes"},
+                                )
                             else:
                                 for i in range(face_count):
-                                    copy_sidecar(src_path, output_dir / f"{stem}_{i + 1:02d}.jpg", exclude={"metrics", "classes"})
+                                    copy_sidecar(
+                                        src_path,
+                                        output_dir / f"{stem}_{i + 1:02d}.jpg",
+                                        exclude={"metrics", "classes"},
+                                    )
                         elif status == "no_faces":
                             no_faces_count += 1
                             logger.debug("No faces detected in %s", name)
                         else:
                             failed_count += 1
                             logger.error("Failed to process %s: %s", name, error)
-                        pbar.set_postfix(ok=ok_count, noface=no_faces_count, fail=failed_count)
+                        pbar.set_postfix(
+                            ok=ok_count, noface=no_faces_count, fail=failed_count
+                        )
                         pbar.update(1)
                 except KeyboardInterrupt:
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -220,7 +308,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nExtract faces complete!")
+    click.echo("\nExtract faces complete!")
     click.echo(f"  Processed: {ok_count:,}")
     click.echo(f"  Faces extracted: {total_faces:,}")
     click.echo(f"  No faces detected: {no_faces_count:,}")

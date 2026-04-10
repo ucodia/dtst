@@ -71,7 +71,9 @@ def compute_iqa_metrics(
 
         errors = 0
         with ThreadPoolExecutor(max_workers=NUM_WORKERS) as loader:
-            with tqdm(total=len(image_paths), desc=f"Scoring {metric_name}", unit="image") as pbar:
+            with tqdm(
+                total=len(image_paths), desc=f"Scoring {metric_name}", unit="image"
+            ) as pbar:
                 for batch_start in range(0, len(image_paths), batch_size):
                     batch_paths = image_paths[batch_start : batch_start + batch_size]
                     loaded = list(loader.map(_load_image, batch_paths))
@@ -80,7 +82,9 @@ def compute_iqa_metrics(
                     batch_valid: list[Path] = []
                     for path, tensor in loaded:
                         if tensor is None:
-                            logger.error("%s: could not read image: %s", metric_name, path.name)
+                            logger.error(
+                                "%s: could not read image: %s", metric_name, path.name
+                            )
                             errors += 1
                             pbar.update(1)
                             continue
@@ -98,16 +102,26 @@ def compute_iqa_metrics(
                             for path, score in zip(batch_valid, scores):
                                 results[path][metric_name] = round(score.item(), 4)
                         except Exception as exc:
-                            logger.error("%s: batch scoring failed: %s", metric_name, exc)
+                            logger.error(
+                                "%s: batch scoring failed: %s", metric_name, exc
+                            )
                             errors += len(batch_valid)
 
                     pbar.update(len(batch_valid))
-                    pbar.set_postfix(scored=sum(1 for r in results.values() if metric_name in r), errors=errors)
+                    pbar.set_postfix(
+                        scored=sum(1 for r in results.values() if metric_name in r),
+                        errors=errors,
+                    )
 
         del model
         if device != "cpu":
             torch.cuda.empty_cache() if device == "cuda" else None
 
-        logger.info("Finished %s: %d scored, %d errors", metric_name, len(image_paths) - errors, errors)
+        logger.info(
+            "Finished %s: %d scored, %d errors",
+            metric_name,
+            len(image_paths) - errors,
+            errors,
+        )
 
     return results

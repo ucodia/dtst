@@ -78,15 +78,49 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
 
 @click.command("augment")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
 @click.option("--flipX", "flip_x", is_flag=True, help="Apply horizontal flip.")
 @click.option("--flipY", "flip_y", is_flag=True, help="Apply vertical flip.")
-@click.option("--flipXY", "flip_xy", is_flag=True, help="Apply both horizontal and vertical flip (180-degree rotation).")
-@click.option("--no-copy", is_flag=True, help="Do not copy original images to the output folder.")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
+@click.option(
+    "--flipXY",
+    "flip_xy",
+    is_flag=True,
+    help="Apply both horizontal and vertical flip (180-degree rotation).",
+)
+@click.option(
+    "--no-copy", is_flag=True, help="Do not copy original images to the output folder."
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel workers (default: CPU count).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be written without creating files.",
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -124,7 +158,9 @@ def cmd(
         dtst augment config.yaml --dry-run
     """
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'augment.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'augment.from' in config)"
+        )
     if to is None:
         raise click.ClickException("--to is required (or set 'augment.to' in config)")
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
@@ -168,8 +204,11 @@ def cmd(
     from_label = ", ".join(str(d) for d in input_dirs)
     logger.info(
         "Augmenting %d images from [%s] with transforms [%s] (copy_original=%s, workers=%d expected output=%d)",
-        len(images), from_label, ", ".join(transforms),
-        not no_copy, workers if workers is not None else cpu_count() or 4,
+        len(images),
+        from_label,
+        ", ".join(transforms),
+        not no_copy,
+        workers if workers is not None else cpu_count() or 4,
         total_output,
     )
 
@@ -215,7 +254,11 @@ def cmd(
                             total_files += len(created)
                             src_path = Path(futures[future][0])
                             for out_name in created:
-                                copy_sidecar(src_path, output_dir / out_name, exclude={"metrics", "classes"})
+                                copy_sidecar(
+                                    src_path,
+                                    output_dir / out_name,
+                                    exclude={"metrics", "classes"},
+                                )
                         else:
                             failed_count += 1
                             total_files += len(created)
@@ -229,7 +272,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nAugment complete!")
+    click.echo("\nAugment complete!")
     click.echo(f"  Images processed: {ok_count:,}")
     click.echo(f"  Files written: {total_files:,}")
     click.echo(f"  Failed: {failed_count:,}")

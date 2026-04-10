@@ -21,8 +21,16 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
 
     Returns (status, output_filename, error_message).
     """
-    (input_path_s, output_dir_s, fmt, quality, compress_level,
-     strip_metadata, channels, background) = args
+    (
+        input_path_s,
+        output_dir_s,
+        fmt,
+        quality,
+        compress_level,
+        strip_metadata,
+        channels,
+        background,
+    ) = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
 
@@ -72,7 +80,9 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
                 save_kwargs["icc_profile"] = icc
 
         save_kwargs.update(
-            build_save_kwargs(Path(out_name), quality=quality, compress_level=compress_level)
+            build_save_kwargs(
+                Path(out_name), quality=quality, compress_level=compress_level
+            )
         )
 
         if fmt is not None:
@@ -89,17 +99,78 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
 
 @click.command("format")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs).")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--format", "-f", "fmt", type=click.Choice(["jpg", "png", "webp"]), default=None, help="Output image format. When omitted the source format is preserved.")
-@click.option("--quality", "-q", type=int, default=None, help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.")
-@click.option("--compress-level", type=int, default=None, help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.")
-@click.option("--strip-metadata", is_flag=True, default=False, help="Remove EXIF data and embedded ICC profiles from output images.")
-@click.option("--channels", "-c", type=click.Choice(["rgb", "grayscale"]), default=None, help="Enforce channel mode. 'rgb' converts to 3-channel RGB (drops alpha). 'grayscale' converts to single-channel.")
-@click.option("--background", type=str, default=None, help="Background color for alpha compositing (default: white). Accepts named colors or hex codes.")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be written without creating files.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs).",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["jpg", "png", "webp"]),
+    default=None,
+    help="Output image format. When omitted the source format is preserved.",
+)
+@click.option(
+    "--quality",
+    "-q",
+    type=int,
+    default=None,
+    help="JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG.",
+)
+@click.option(
+    "--compress-level",
+    type=int,
+    default=None,
+    help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.",
+)
+@click.option(
+    "--strip-metadata",
+    is_flag=True,
+    default=False,
+    help="Remove EXIF data and embedded ICC profiles from output images.",
+)
+@click.option(
+    "--channels",
+    "-c",
+    type=click.Choice(["rgb", "grayscale"]),
+    default=None,
+    help="Enforce channel mode. 'rgb' converts to 3-channel RGB (drops alpha). 'grayscale' converts to single-channel.",
+)
+@click.option(
+    "--background",
+    type=str,
+    default=None,
+    help="Background color for alpha compositing (default: white). Accepts named colors or hex codes.",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel workers (default: CPU count).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be written without creating files.",
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -173,8 +244,11 @@ def cmd(
 
     logger.info(
         "Formatting %d images from [%s] → %s (%s, workers=%d)",
-        len(images), from_label, output_dir,
-        ", ".join(ops) if ops else "copy", num_workers,
+        len(images),
+        from_label,
+        output_dir,
+        ", ".join(ops) if ops else "copy",
+        num_workers,
     )
 
     if dry_run:
@@ -184,7 +258,7 @@ def cmd(
         if channels:
             click.echo(f"  Channels: {channels}")
         if strip_metadata:
-            click.echo(f"  Strip metadata: yes")
+            click.echo("  Strip metadata: yes")
         if fmt in ("jpg", "webp"):
             click.echo(f"  Quality: {quality}")
         if fmt == "png" or fmt is None:
@@ -195,8 +269,16 @@ def cmd(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     work = [
-        (str(img_path), str(output_dir), fmt, quality, compress_level,
-         strip_metadata, channels, background)
+        (
+            str(img_path),
+            str(output_dir),
+            fmt,
+            quality,
+            compress_level,
+            strip_metadata,
+            channels,
+            background,
+        )
         for img_path in images
     ]
 
@@ -214,7 +296,9 @@ def cmd(
                         if status == "ok":
                             ok_count += 1
                             src_path = Path(futures[future][0])
-                            copy_sidecar(src_path, output_dir / name, exclude={"metrics"})
+                            copy_sidecar(
+                                src_path, output_dir / name, exclude={"metrics"}
+                            )
                         else:
                             failed_count += 1
                             logger.error("Failed to format %s: %s", name, error)
@@ -227,7 +311,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nFormat complete!")
+    click.echo("\nFormat complete!")
     click.echo(f"  Converted: {ok_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Time: {minutes}m {seconds}s")

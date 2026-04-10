@@ -16,8 +16,42 @@ logger = logging.getLogger(__name__)
 
 VALID_ENGINES = frozenset({"mediapipe", "dlib"})
 
-MP_EYE_LEFT_IDX = [33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173]
-MP_EYE_RIGHT_IDX = [263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398]
+MP_EYE_LEFT_IDX = [
+    33,
+    7,
+    163,
+    144,
+    145,
+    153,
+    154,
+    155,
+    133,
+    246,
+    161,
+    160,
+    159,
+    158,
+    157,
+    173,
+]
+MP_EYE_RIGHT_IDX = [
+    263,
+    249,
+    390,
+    373,
+    374,
+    380,
+    381,
+    382,
+    362,
+    466,
+    388,
+    387,
+    386,
+    385,
+    384,
+    398,
+]
 MP_MOUTH_IDX = [61, 291]
 
 DLIB_EYE_LEFT_IDX = list(range(36, 42))
@@ -113,7 +147,9 @@ def align_face(
         radius = int(np.linalg.norm(eye_to_eye) * 0.02)
         for idx in key_points:
             px, py = lm[idx]
-            draw.ellipse((px - radius, py - radius, px + radius, py + radius), fill=(0, 255, 0))
+            draw.ellipse(
+                (px - radius, py - radius, px + radius, py + radius), fill=(0, 255, 0)
+            )
 
     x = eye_to_eye - np.flipud(eye_to_mouth) * [-1, 1]
     x /= np.hypot(*x)
@@ -133,7 +169,10 @@ def align_face(
 
     shrink = int(np.floor(qsize / output_size * 0.5))
     if shrink > 1:
-        rsize = (int(np.rint(float(img.size[0]) / shrink)), int(np.rint(float(img.size[1]) / shrink)))
+        rsize = (
+            int(np.rint(float(img.size[0]) / shrink)),
+            int(np.rint(float(img.size[1]) / shrink)),
+        )
         img = img.resize(rsize, PIL.Image.Resampling.LANCZOS)
         quad /= shrink
         qsize /= shrink
@@ -171,7 +210,9 @@ def align_face(
         return None
     if enable_padding and max(pad) > border - 4:
         pad = np.maximum(pad, int(np.rint(qsize * 0.3)))
-        img_arr = np.pad(np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), "reflect")
+        img_arr = np.pad(
+            np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), "reflect"
+        )
         h, w, _ = img_arr.shape
         yy, xx, _ = np.ogrid[:h, :w, :1]
         mask = np.maximum(
@@ -179,9 +220,10 @@ def align_face(
             1.0 - np.minimum(np.float32(yy) / pad[1], np.float32(h - 1 - yy) / pad[3]),
         )
         blur_sigma = qsize * 0.02
-        img_arr += (scipy.ndimage.gaussian_filter(img_arr, [blur_sigma, blur_sigma, 0]) - img_arr) * np.clip(
-            mask * 3.0 + 1.0, 0.0, 1.0
-        )
+        img_arr += (
+            scipy.ndimage.gaussian_filter(img_arr, [blur_sigma, blur_sigma, 0])
+            - img_arr
+        ) * np.clip(mask * 3.0 + 1.0, 0.0, 1.0)
         img_arr += (np.median(img_arr, axis=(0, 1)) - img_arr) * np.clip(mask, 0.0, 1.0)
         img = PIL.Image.fromarray(np.uint8(np.clip(np.rint(img_arr), 0, 255)), "RGB")
         quad += pad[:2]
@@ -209,7 +251,9 @@ class FaceAligner:
     ) -> None:
         self.engine = engine.lower()
         if self.engine not in VALID_ENGINES:
-            raise ValueError(f"Unsupported engine: {self.engine!r}; valid: {sorted(VALID_ENGINES)}")
+            raise ValueError(
+                f"Unsupported engine: {self.engine!r}; valid: {sorted(VALID_ENGINES)}"
+            )
 
         if self.engine == "mediapipe":
             import mediapipe as mp
@@ -221,7 +265,9 @@ class FaceAligner:
                 min_face_detection_confidence=0.5,
             )
             self._mp = mp
-            self._landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
+            self._landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
+                options
+            )
         else:
             try:
                 import dlib

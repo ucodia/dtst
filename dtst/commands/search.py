@@ -38,9 +38,7 @@ def _run_task(
         results = engine.search(query, page)
         return engine_name, results, None
     except Exception as e:
-        logger.error(
-            "Task failed %s %s page %s: %s", query[:40], engine_name, page, e
-        )
+        logger.error("Task failed %s %s page %s: %s", query[:40], engine_name, page, e)
         return engine_name, [], str(e)
 
 
@@ -63,15 +61,67 @@ def _dedup_results(results: list[dict]) -> list[dict]:
 
 @click.command("search")
 @config_argument
-@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
-@click.option("--suffixes", type=str, default=None, help="Comma-separated query suffixes (override config).")
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results are written (default: .).")
-@click.option("--output", "-o", type=str, default=None, help="Output filename within the working directory (default: results.jsonl).")
-@click.option("--max-pages", "-m", type=int, default=None, help="Limit pages per engine per query.")
-@click.option("--engines", "-e", type=str, default=None, help="Comma-separated engine list (override config).")
-@click.option("--dry-run", "-n", is_flag=True, help="Print query matrix and exit without searching.")
-@click.option("--workers", "-w", type=int, default=None, show_default=True, help="Parallel workers (default: CPU count).")
-@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels (default: 512).")
+@click.option(
+    "--terms",
+    type=str,
+    default=None,
+    help="Comma-separated search terms (override config).",
+)
+@click.option(
+    "--suffixes",
+    type=str,
+    default=None,
+    help="Comma-separated query suffixes (override config).",
+)
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory where results are written (default: .).",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=str,
+    default=None,
+    help="Output filename within the working directory (default: results.jsonl).",
+)
+@click.option(
+    "--max-pages",
+    "-m",
+    type=int,
+    default=None,
+    help="Limit pages per engine per query.",
+)
+@click.option(
+    "--engines",
+    "-e",
+    type=str,
+    default=None,
+    help="Comma-separated engine list (override config).",
+)
+@click.option(
+    "--dry-run",
+    "-n",
+    is_flag=True,
+    help="Print query matrix and exit without searching.",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    show_default=True,
+    help="Parallel workers (default: CPU count).",
+)
+@click.option(
+    "--min-size",
+    "-s",
+    type=int,
+    default=None,
+    help="Minimum image dimension in pixels (default: 512).",
+)
 @click.option(
     "--retries",
     "-r",
@@ -133,18 +183,28 @@ def cmd(
         dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
     """
     terms_list = [t.strip() for t in terms.split(",") if t.strip()] if terms else []
-    suffixes_list = [s.strip() for s in suffixes.split(",") if s.strip()] if suffixes else []
-    engine_list = [e.strip().lower() for e in engines.split(",") if e.strip()] if engines else []
+    suffixes_list = (
+        [s.strip() for s in suffixes.split(",") if s.strip()] if suffixes else []
+    )
+    engine_list = (
+        [e.strip().lower() for e in engines.split(",") if e.strip()] if engines else []
+    )
     min_size_val = min_size if min_size is not None else 512
     output_file = output or "results.jsonl"
     working_dir_path = (working_dir or Path(".")).resolve()
 
     if not terms_list:
-        raise click.ClickException("Search terms must be provided via config or --terms.")
+        raise click.ClickException(
+            "Search terms must be provided via config or --terms."
+        )
     if not suffixes_list:
-        raise click.ClickException("Suffixes must be provided via config or --suffixes.")
+        raise click.ClickException(
+            "Suffixes must be provided via config or --suffixes."
+        )
     if not engine_list:
-        raise click.ClickException("At least one engine must be specified via config or --engines.")
+        raise click.ClickException(
+            "At least one engine must be specified via config or --engines."
+        )
 
     invalid = [e for e in engine_list if e not in ENGINE_REGISTRY]
     if invalid:
@@ -158,7 +218,9 @@ def cmd(
             queries.extend(terms_list)
         queries.extend(
             f"{term} {suffix}".strip()
-            for term in terms_list for suffix in suffixes_list if suffix
+            for term in terms_list
+            for suffix in suffixes_list
+            if suffix
         )
         return queries
 
@@ -179,13 +241,19 @@ def cmd(
         for en in engine_list:
             if en not in ENGINE_REGISTRY:
                 continue
-            limit = max_pages if max_pages is not None else DEFAULT_MAX_PAGES.get(en, 10)
+            limit = (
+                max_pages if max_pages is not None else DEFAULT_MAX_PAGES.get(en, 10)
+            )
             for page in range(1, limit + 1):
                 tasks.append((query, en, page, min_size_val, retries, timeout))
 
     logger.info(
         'Searching for "%s" across %d engines (%d queries, %d pages, %d workers)',
-        terms_list[0], len(engine_list), len(queries), len(tasks), num_workers,
+        terms_list[0],
+        len(engine_list),
+        len(queries),
+        len(tasks),
+        num_workers,
     )
 
     start_time = time.monotonic()
@@ -197,13 +265,20 @@ def cmd(
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             futures = {executor.submit(_run_task, t): t for t in tasks}
-            with tqdm(total=len(futures), desc="Searching", unit="page", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
+            with tqdm(
+                total=len(futures),
+                desc="Searching",
+                unit="page",
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]",
+            ) as pbar:
                 try:
                     for fut in as_completed(futures):
                         engine_name, results, error = fut.result()
                         if error:
                             error_count += 1
-                        engine_counts[engine_name] = engine_counts.get(engine_name, 0) + len(results)
+                        engine_counts[engine_name] = engine_counts.get(
+                            engine_name, 0
+                        ) + len(results)
                         all_results.extend(results)
                         total_found += len(results)
                         pbar.set_postfix(results=total_found, errors=error_count)

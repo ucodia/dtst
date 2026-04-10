@@ -56,7 +56,11 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Working directory (default: .).",
 )
-@click.option("--dry-run", is_flag=True, help="Preview what would be annotated without writing sidecars.")
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be annotated without writing sidecars.",
+)
 def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
     """Write source and license metadata into image sidecars.
 
@@ -79,12 +83,16 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
     t0 = time.time()
 
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'annotate.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'annotate.from' in config)"
+        )
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
 
     if not source and not license and not origin:
-        raise click.ClickException("At least one of --source, --license, or --origin is required.")
+        raise click.ClickException(
+            "At least one of --source, --license, or --origin is required."
+        )
 
     input_dirs = resolve_dirs(working, dirs_list)
 
@@ -139,6 +147,8 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
     elapsed = time.time() - t0
 
     if dry_run:
-        click.echo(f"[dry-run] Would annotate {annotated} images, skip {skipped} (already set)")
+        click.echo(
+            f"[dry-run] Would annotate {annotated} images, skip {skipped} (already set)"
+        )
     else:
         click.echo(f"Done: {annotated} annotated, {skipped} skipped ({elapsed:.1f}s)")

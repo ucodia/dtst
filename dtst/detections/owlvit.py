@@ -23,7 +23,6 @@ class OwlViT2Backend:
         self._device = "cpu"
 
     def load(self, device: str) -> None:
-        import torch
         from transformers import Owlv2ForObjectDetection, Owlv2Processor
 
         self._device = device
@@ -65,7 +64,9 @@ class OwlViT2Backend:
         skipped = 0
 
         with ThreadPoolExecutor(max_workers=num_workers) as loader:
-            with tqdm(total=len(image_paths), desc="Detecting (owlv2)", unit="image") as pbar:
+            with tqdm(
+                total=len(image_paths), desc="Detecting (owlv2)", unit="image"
+            ) as pbar:
                 futures = {loader.submit(_load_image, p): p for p in image_paths}
                 for future in futures:
                     path, image = future.result()
@@ -83,13 +84,17 @@ class OwlViT2Backend:
                         outputs = self._model(**inputs)
 
                     target_sizes = torch.tensor([image.size[::-1]])
-                    proc_results = self._processor.post_process_grounded_object_detection(
-                        outputs,
-                        threshold=threshold,
-                        target_sizes=target_sizes,
+                    proc_results = (
+                        self._processor.post_process_grounded_object_detection(
+                            outputs,
+                            threshold=threshold,
+                            target_sizes=target_sizes,
+                        )
                     )
 
-                    detections = self._parse_detections(proc_results[0], class_names, max_instances)
+                    detections = self._parse_detections(
+                        proc_results[0], class_names, max_instances
+                    )
                     results[path] = detections
                     valid_paths.append(path)
                     pbar.update(1)
@@ -122,7 +127,9 @@ class OwlViT2Backend:
         parsed: dict[str, list[Detection]] = {}
         for cls in class_names:
             if all_dets[cls]:
-                parsed[cls] = sorted(all_dets[cls], key=lambda d: d["score"], reverse=True)[:max_instances]
+                parsed[cls] = sorted(
+                    all_dets[cls], key=lambda d: d["score"], reverse=True
+                )[:max_instances]
             else:
                 parsed[cls] = []
 

@@ -63,7 +63,9 @@ def create_app(
             "sidecar": sidecar or None,
         }
 
-    def move_selected(from_dir: Path, to_dir: Path, filenames: set[str]) -> tuple[int, list[str]]:
+    def move_selected(
+        from_dir: Path, to_dir: Path, filenames: set[str]
+    ) -> tuple[int, list[str]]:
         """Move images matching *filenames* from one directory to another.
 
         Returns (moved_count, error_list).
@@ -110,8 +112,7 @@ def create_app(
         for dirpath, dirnames, filenames in os.walk(working_dir, followlinks=False):
             dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
             has_img = any(
-                os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS
-                for f in filenames
+                os.path.splitext(f)[1].lower() in IMAGE_EXTENSIONS for f in filenames
             )
             if not has_img:
                 continue
@@ -148,16 +149,20 @@ def create_app(
             }
 
         target = resolve_dir(view)
-        images = [
-            image_info(p, view) for p in find_images(target)
-        ] if target is not None and target.is_dir() else []
+        images = (
+            [image_info(p, view) for p in find_images(target)]
+            if target is not None and target.is_dir()
+            else []
+        )
 
         return {
             "configured": True,
             "view": view,
             "images": images,
             "source_count": len(find_images(src)) if src.is_dir() else 0,
-            "filtered_count": len(find_images(flt)) if flt is not None and flt.is_dir() else 0,
+            "filtered_count": len(find_images(flt))
+            if flt is not None and flt.is_dir()
+            else 0,
         }
 
     @app.get("/images/{view}/{filename}")
@@ -166,7 +171,9 @@ def create_app(
         if directory is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         file_path = directory / filename
-        if not file_path.is_file() or not file_path.resolve().is_relative_to(directory.resolve()):
+        if not file_path.is_file() or not file_path.resolve().is_relative_to(
+            directory.resolve()
+        ):
             return JSONResponse({"error": "not found"}, status_code=404)
 
         content_type, _ = mimetypes.guess_type(str(file_path))

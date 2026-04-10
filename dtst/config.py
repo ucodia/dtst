@@ -176,17 +176,11 @@ def load_workflow_config(path: str | Path, workflow_name: str) -> WorkflowConfig
                     )
                 inherit = overrides.pop("inherit", True)
                 if not isinstance(inherit, bool):
-                    raise click.ClickException(
-                        f"Step {i}: 'inherit' must be a boolean"
-                    )
+                    raise click.ClickException(f"Step {i}: 'inherit' must be a boolean")
                 steps.append(
-                    WorkflowStep(
-                        command=cmd_name, inherit=inherit, overrides=overrides
-                    )
+                    WorkflowStep(command=cmd_name, inherit=inherit, overrides=overrides)
                 )
         else:
-            raise click.ClickException(
-                f"Step {i}: must be a command name or mapping"
-            )
+            raise click.ClickException(f"Step {i}: must be a command name or mapping")
 
     return WorkflowConfig(working_dir=resolved_working_dir, steps=steps)

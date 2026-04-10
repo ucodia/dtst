@@ -62,7 +62,9 @@ def cmd(from_dirs, prefix, digits, working_dir, dry_run):
     t0 = time.time()
 
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'rename.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'rename.from' in config)"
+        )
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     prefix = prefix or ""

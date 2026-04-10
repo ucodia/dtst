@@ -59,19 +59,16 @@ class FlickrEngine(SearchEngine):
         r.raise_for_status()
         data = r.json()
         if data.get("stat") != "ok":
-            logger.warning("Flickr API error for %r: %s", query, data.get("message", data))
+            logger.warning(
+                "Flickr API error for %r: %s", query, data.get("message", data)
+            )
             return []
         photos = data.get("photos", {}).get("photo") or []
         results: list[dict] = []
         for p in photos:
             if not isinstance(p, dict):
                 continue
-            url = (
-                p.get("url_o")
-                or p.get("url_k")
-                or p.get("url_h")
-                or p.get("url_m")
-            )
+            url = p.get("url_o") or p.get("url_k") or p.get("url_h") or p.get("url_m")
             if not url:
                 continue
             w: int | None = None
@@ -101,15 +98,17 @@ class FlickrEngine(SearchEngine):
                 except (TypeError, ValueError):
                     pass
 
-            results.append(self._make_result(
-                url=url,
-                query=query,
-                width=w,
-                height=h,
-                license=license_str,
-                source_domain="flickr.com",
-                title=p.get("title"),
-                author=p.get("ownername"),
-                date=p.get("datetaken"),
-            ))
+            results.append(
+                self._make_result(
+                    url=url,
+                    query=query,
+                    width=w,
+                    height=h,
+                    license=license_str,
+                    source_domain="flickr.com",
+                    title=p.get("title"),
+                    author=p.get("ownername"),
+                    date=p.get("datetaken"),
+                )
+            )
         return results

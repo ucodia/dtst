@@ -18,7 +18,9 @@ def get_backend(name: str) -> EmbeddingBackend:
         from dtst.embeddings.clip import CLIPBackend
 
         return CLIPBackend()
-    raise ValueError(f"Unknown embedding model: {name!r}; valid: {sorted(VALID_MODELS)}")
+    raise ValueError(
+        f"Unknown embedding model: {name!r}; valid: {sorted(VALID_MODELS)}"
+    )
 
 
 __all__ = ["VALID_MODELS", "detect_device", "get_backend", "EmbeddingBackend"]

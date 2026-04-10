@@ -328,6 +328,15 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("PIL").setLevel(logging.WARNING)
 ```
 
+## Code Quality
+
+Use **ruff** for formatting and linting. Run both before every commit:
+
+```bash
+uv run ruff format dtst/
+uv run ruff check --fix dtst/
+```
+
 ## Error Handling
 
 - Commands should not abort on individual item failures — log the error and continue

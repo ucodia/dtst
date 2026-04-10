@@ -29,9 +29,12 @@ def _probe_duration(video_path: str) -> float | None:
         result = subprocess.run(
             [
                 "ffprobe",
-                "-v", "error",
-                "-show_entries", "format=duration",
-                "-of", "default=noprint_wrappers=1:nokey=1",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
                 video_path,
             ],
             capture_output=True,
@@ -45,7 +48,9 @@ def _probe_duration(video_path: str) -> float | None:
     return None
 
 
-def _extract_frames(args: tuple, progress_callback=None) -> tuple[str, str, int, str | None]:
+def _extract_frames(
+    args: tuple, progress_callback=None
+) -> tuple[str, str, int, str | None]:
     """Extract keyframes from a single video using ffmpeg.
 
     Only I-frames (keyframes) are decoded, and a minimum interval
@@ -78,29 +83,41 @@ def _extract_frames(args: tuple, progress_callback=None) -> tuple[str, str, int,
         # -vsync vfr: variable frame rate output (no duplicate frames)
         # select filter: keep the first frame (prev_selected_t is NaN)
         #   plus any frame at least N seconds after the last selected one
-        select_expr = f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{keyframes_interval})"
+        select_expr = (
+            f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{keyframes_interval})"
+        )
 
         cmd = [
             "ffmpeg",
-            "-skip_frame", "nokey",
-            "-i", video_path_s,
-            "-vf", f"select='{select_expr}'",
-            "-vsync", "vfr",
-            "-q:v", "2" if fmt == "jpg" else "0",
+            "-skip_frame",
+            "nokey",
+            "-i",
+            video_path_s,
+            "-vf",
+            f"select='{select_expr}'",
+            "-vsync",
+            "vfr",
+            "-q:v",
+            "2" if fmt == "jpg" else "0",
             "-y",
-            "-progress", "pipe:1",
+            "-progress",
+            "pipe:1",
             "-nostats",
             output_pattern,
         ]
 
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
 
         # Read stderr in a daemon thread to prevent pipe buffer deadlock
         stderr_chunks: list[str] = []
         stderr_thread = threading.Thread(
-            target=lambda: stderr_chunks.extend(proc.stderr), daemon=True,
+            target=lambda: stderr_chunks.extend(proc.stderr),
+            daemon=True,
         )
         stderr_thread.start()
 
@@ -138,13 +155,53 @@ def _check_ffmpeg() -> bool:
 
 @click.command("extract-frames")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory containing source folders and where output is written (default: .).")
-@click.option("--from", "from_dirs", type=str, default=None, help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--keyframes", "-k", type=float, default=None, help="Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10).")
-@click.option("--format", "-F", "fmt", type=click.Choice(sorted(VALID_FRAME_FORMATS), case_sensitive=False), default=None, help="Output image format (default: jpg).")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel workers (default: CPU count).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be done without extracting frames.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory containing source folders and where output is written (default: .).",
+)
+@click.option(
+    "--from",
+    "from_dirs",
+    type=str,
+    default=None,
+    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--keyframes",
+    "-k",
+    type=float,
+    default=None,
+    help="Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10).",
+)
+@click.option(
+    "--format",
+    "-F",
+    "fmt",
+    type=click.Choice(sorted(VALID_FRAME_FORMATS), case_sensitive=False),
+    default=None,
+    help="Output image format (default: jpg).",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel workers (default: CPU count).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be done without extracting frames.",
+)
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -186,9 +243,13 @@ def cmd(
         raise click.ClickException("--keyframes must be a positive number")
 
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'extract_frames.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'extract_frames.from' in config)"
+        )
     if to is None:
-        raise click.ClickException("--to is required (or set 'extract_frames.to' in config)")
+        raise click.ClickException(
+            "--to is required (or set 'extract_frames.to' in config)"
+        )
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
     keyframes = keyframes if keyframes is not None else 10.0
@@ -224,7 +285,11 @@ def cmd(
 
     logger.info(
         "Extracting keyframes from %d videos in [%s] (interval=%.1fs, format=%s, workers=%d)",
-        len(videos), from_label, keyframes, fmt, num_workers,
+        len(videos),
+        from_label,
+        keyframes,
+        fmt,
+        num_workers,
     )
 
     if dry_run:
@@ -243,7 +308,13 @@ def cmd(
         durations[str(video_path)] = _probe_duration(str(video_path))
 
     work = [
-        (str(video_path), str(output_dir), keyframes, fmt, durations.get(str(video_path)))
+        (
+            str(video_path),
+            str(output_dir),
+            keyframes,
+            fmt,
+            durations.get(str(video_path)),
+        )
         for video_path in videos
     ]
 
@@ -264,8 +335,7 @@ def cmd(
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             all_futures = {
-                executor.submit(_extract_frames, w, _on_progress): w
-                for w in work
+                executor.submit(_extract_frames, w, _on_progress): w for w in work
             }
             done_futures: set = set()
             total_videos = len(all_futures)
@@ -288,13 +358,21 @@ def cmd(
                                 total_frames += frame_count
                                 video_path = Path(video_path_s)
                                 stem = video_path.stem
-                                for frame_path in sorted(output_dir.glob(f"{stem}_*.{fmt}")):
-                                    copy_sidecar(video_path, frame_path, exclude={"metrics", "classes"})
+                                for frame_path in sorted(
+                                    output_dir.glob(f"{stem}_*.{fmt}")
+                                ):
+                                    copy_sidecar(
+                                        video_path,
+                                        frame_path,
+                                        exclude={"metrics", "classes"},
+                                    )
                             elif status == "skipped":
                                 skipped_count += 1
                             else:
                                 failed_count += 1
-                                logger.error("Failed to extract frames from %s: %s", name, error)
+                                logger.error(
+                                    "Failed to extract frames from %s: %s", name, error
+                                )
                             with _progress_lock:
                                 _progress.pop(video_path_s, None)
                             pbar.update(0)  # force refresh after postfix update
@@ -303,9 +381,7 @@ def cmd(
                         # count as 1.0, active ones contribute their
                         # current fraction (0..1).
                         with _progress_lock:
-                            active_frac = sum(
-                                p / 100.0 for p in _progress.values()
-                            )
+                            active_frac = sum(p / 100.0 for p in _progress.values())
                         current = len(done_futures) + active_frac
                         delta = current - prev_frac
                         if delta > 0:
@@ -314,7 +390,10 @@ def cmd(
                             prev_frac = current
 
                         pbar.set_postfix(
-                            ok=ok_count, skip=skipped_count, fail=failed_count, frames=total_frames,
+                            ok=ok_count,
+                            skip=skipped_count,
+                            fail=failed_count,
+                            frames=total_frames,
                         )
 
                         if len(done_futures) < total_videos:
@@ -326,7 +405,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nExtract-frames complete!")
+    click.echo("\nExtract-frames complete!")
     click.echo(f"  Processed: {ok_count:,} videos")
     click.echo(f"  Frames extracted: {total_frames:,}")
     click.echo(f"  Skipped (existing): {skipped_count:,}")

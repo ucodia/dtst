@@ -1,21 +1,39 @@
 from urllib.parse import parse_qs, unquote, urlencode, urlparse, urlunparse
 
 
-RESIZE_PARAMS = frozenset({
-    "w", "h", "width", "height",
-    "q", "quality",
-    "format", "fm", "auto", "webp",
-    "crop", "strip", "fit", "dpr",
-    "resize", "lossy", "vtcrop",
-    "cs", "disable", "smart",
-    "get_thumbnail",
-})
+RESIZE_PARAMS = frozenset(
+    {
+        "w",
+        "h",
+        "width",
+        "height",
+        "q",
+        "quality",
+        "format",
+        "fm",
+        "auto",
+        "webp",
+        "crop",
+        "strip",
+        "fit",
+        "dpr",
+        "resize",
+        "lossy",
+        "vtcrop",
+        "cs",
+        "disable",
+        "smart",
+        "get_thumbnail",
+    }
+)
 
-KEEP_ALL_DOMAINS = frozenset({
-    "media.gettyimages.com",
-    "lookaside.fbsbx.com",
-    "media.licdn.com",
-})
+KEEP_ALL_DOMAINS = frozenset(
+    {
+        "media.gettyimages.com",
+        "lookaside.fbsbx.com",
+        "media.licdn.com",
+    }
+)
 
 
 def clean_image_url(url: str) -> str:
@@ -33,14 +51,16 @@ def clean_image_url(url: str) -> str:
     if len(kept) == len(params):
         return url
 
-    cleaned = urlunparse((
-        parsed.scheme,
-        parsed.netloc,
-        parsed.path,
-        parsed.params,
-        urlencode([(k, v) for k, vals in kept.items() for v in vals]),
-        parsed.fragment,
-    ))
+    cleaned = urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            parsed.params,
+            urlencode([(k, v) for k, vals in kept.items() for v in vals]),
+            parsed.fragment,
+        )
+    )
     return cleaned
 
 

@@ -15,8 +15,6 @@ from dtst.config import (
 logger = logging.getLogger(__name__)
 
 
-
-
 def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_working_dir):
     """Build a ctx.params dict for a Click command from workflow step overrides.
 
@@ -116,9 +114,7 @@ def cmd(ctx, workflow, config, working_dir, dry_run):
 
     for i, step in enumerate(workflow_cfg.steps, 1):
         if step.command and step.command not in registered:
-            raise click.ClickException(
-                f"Step {i}: unknown command '{step.command}'"
-            )
+            raise click.ClickException(f"Step {i}: unknown command '{step.command}'")
 
     total = len(workflow_cfg.steps)
 

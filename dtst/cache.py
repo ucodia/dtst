@@ -53,7 +53,9 @@ def load_embeddings(
             logger.warning("Cache stale: %s no longer in input set", name)
             return None
 
-    logger.info("Loaded cached embeddings from %s (%d images)", cache_path, len(valid_paths))
+    logger.info(
+        "Loaded cached embeddings from %s (%d images)", cache_path, len(valid_paths)
+    )
     return embeddings, valid_paths
 
 

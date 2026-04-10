@@ -74,12 +74,14 @@ class BraveSearchEngine(SearchEngine):
                             continue
                     except (TypeError, ValueError):
                         pass
-            results.append(self._make_result(
-                url=url,
-                query=query,
-                width=w,
-                height=h,
-                title=result.get("title"),
-                source_domain=result.get("source"),
-            ))
+            results.append(
+                self._make_result(
+                    url=url,
+                    query=query,
+                    width=w,
+                    height=h,
+                    title=result.get("title"),
+                    source_domain=result.get("source"),
+                )
+            )
         return results

@@ -26,8 +26,12 @@ from dtst.user_agent import get_user_agent
 
 logger = logging.getLogger(__name__)
 
-IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"})
-VIDEO_EXTENSIONS = frozenset({".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v"})
+IMAGE_EXTENSIONS = frozenset(
+    {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
+)
+VIDEO_EXTENSIONS = frozenset(
+    {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv", ".m4v"}
+)
 
 UNSUPPORTED_EXTENSIONS = frozenset({".djvu", ".svg", ".gif"})
 
@@ -44,30 +48,32 @@ MAX_RETRIES = 3
 
 # Domains where yt-dlp should be used instead of direct HTTP download.
 # These are video hosting platforms whose URLs require extraction logic.
-YTDLP_DOMAINS = frozenset({
-    "youtube.com",
-    "www.youtube.com",
-    "m.youtube.com",
-    "youtu.be",
-    "vimeo.com",
-    "www.vimeo.com",
-    "player.vimeo.com",
-    "dailymotion.com",
-    "www.dailymotion.com",
-    "twitch.tv",
-    "www.twitch.tv",
-    "clips.twitch.tv",
-    "streamable.com",
-    "rumble.com",
-    "bitchute.com",
-    "www.bitchute.com",
-    "odysee.com",
-    "peertube.social",
-    "bilibili.com",
-    "www.bilibili.com",
-    "nicovideo.jp",
-    "www.nicovideo.jp",
-})
+YTDLP_DOMAINS = frozenset(
+    {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "youtu.be",
+        "vimeo.com",
+        "www.vimeo.com",
+        "player.vimeo.com",
+        "dailymotion.com",
+        "www.dailymotion.com",
+        "twitch.tv",
+        "www.twitch.tv",
+        "clips.twitch.tv",
+        "streamable.com",
+        "rumble.com",
+        "bitchute.com",
+        "www.bitchute.com",
+        "odysee.com",
+        "peertube.social",
+        "bilibili.com",
+        "www.bilibili.com",
+        "nicovideo.jp",
+        "www.nicovideo.jp",
+    }
+)
 
 
 _YTDLP_PROGRESS_RE = re.compile(r"\[download\]\s+([\d.]+)%")
@@ -88,7 +94,11 @@ def _is_ytdlp_url(url: str) -> bool:
 
 
 def _attempt_download(
-    url: str, timeout: int, throttler: DomainThrottler, domain: str, max_wait: float | None,
+    url: str,
+    timeout: int,
+    throttler: DomainThrottler,
+    domain: str,
+    max_wait: float | None,
 ) -> requests.Response | None:
     url_clean = clean_image_url(url)
     if url_clean == url:
@@ -125,16 +135,25 @@ def _attempt_download(
                     except ValueError:
                         pass
 
-                if retry_secs is not None and (max_wait is None or retry_secs <= max_wait):
+                if retry_secs is not None and (
+                    max_wait is None or retry_secs <= max_wait
+                ):
                     backoff = retry_secs
                     logger.warning(
                         "Rate limited by %s, waiting %ds (Retry-After). Ctrl+C to abort.",
-                        domain, int(backoff),
+                        domain,
+                        int(backoff),
                     )
                 else:
-                    backoff = (1.0 * (2 ** retry)) + random.uniform(0, 1)
+                    backoff = (1.0 * (2**retry)) + random.uniform(0, 1)
 
-                logger.debug("Rate limited on %s, retrying in %.1fs (attempt %d/%d)", domain, backoff, retry + 1, MAX_RETRIES)
+                logger.debug(
+                    "Rate limited on %s, retrying in %.1fs (attempt %d/%d)",
+                    domain,
+                    backoff,
+                    retry + 1,
+                    MAX_RETRIES,
+                )
                 time.sleep(backoff)
                 continue
 
@@ -223,7 +242,9 @@ def _download_url(args: tuple) -> tuple[str, str, str | None, Path | None]:
         return "failed", url, str(e), None
 
 
-def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str | None, Path | None]:
+def _download_ytdlp(
+    args: tuple, progress_callback=None
+) -> tuple[str, str, str | None, Path | None]:
     """Download a URL using yt-dlp as a subprocess.
 
     When *progress_callback* is provided it is called with
@@ -239,15 +260,20 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
             "yt-dlp",
             "--no-playlist",
             "--newline",
-            "--socket-timeout", "60",
+            "--socket-timeout",
+            "60",
             # Video-only (no audio) with fallback to best combined
             # if separate video streams are unavailable. Prefer highest
             # resolution, best codecs (H.264 > AV1 > VP9), highest bitrate.
-            "-f", "bv/b",
-            "-S", "res,vcodec:h264:av01:vp9,br",
-            "-o", str(dest_dir / "%(id)s.%(ext)s"),
+            "-f",
+            "bv/b",
+            "-S",
+            "res,vcodec:h264:av01:vp9,br",
+            "-o",
+            str(dest_dir / "%(id)s.%(ext)s"),
             "--no-overwrites",
-            "--print", "after_move:filepath",
+            "--print",
+            "after_move:filepath",
         ]
 
         if not force and archive_path_s:
@@ -256,13 +282,17 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
         cmd.append(url)
 
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
         )
 
         # Read stderr in a daemon thread to prevent pipe buffer deadlock
         stderr_chunks: list[str] = []
         stderr_thread = threading.Thread(
-            target=lambda: stderr_chunks.extend(proc.stderr), daemon=True,
+            target=lambda: stderr_chunks.extend(proc.stderr),
+            daemon=True,
         )
         stderr_thread.start()
 
@@ -290,7 +320,10 @@ def _download_ytdlp(args: tuple, progress_callback=None) -> tuple[str, str, str 
         # yt-dlp returns 0 even for "already recorded", but some
         # versions may use a non-zero exit code; treat archive
         # hits as skips
-        if "has already been recorded" in stderr or "has already been recorded" in stdout_full:
+        if (
+            "has already been recorded" in stderr
+            or "has already been recorded" in stdout_full
+        ):
             return "skipped", url, None, None
 
         return "failed", url, stderr[-200:] if len(stderr) > 200 else stderr, None
@@ -377,16 +410,72 @@ def _check_ytdlp() -> bool:
 
 @click.command("fetch")
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where input is read from and media is written to (default: .).")
-@click.option("--to", type=str, default=None, help="Destination folder name within the working directory.")
-@click.option("--input", "-i", "input_file", type=str, default=None, help="Input file name relative to the working directory. Supports .jsonl and .txt formats.")
-@click.option("--min-size", "-s", type=int, default=None, help="Minimum image dimension in pixels; only applies to .jsonl input (default: 512).")
-@click.option("--workers", "-w", type=int, default=None, help="Number of parallel download threads (default: CPU count for images, 2 for video).")
-@click.option("--timeout", "-t", type=int, default=30, show_default=True, help="Per-request timeout in seconds.")
-@click.option("--force", "-f", is_flag=True, help="Re-download files even if they already exist.")
-@click.option("--max-wait", "-W", type=int, default=None, help="Max seconds to honor a Retry-After header (default: unlimited).")
-@click.option("--no-wait", is_flag=True, help="Never wait for Retry-After headers; use fast exponential backoff instead.")
-@click.option("--license", "-l", "license_filter", type=str, default=None, help="Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input.")
+@click.option(
+    "--working-dir",
+    "-d",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Working directory where input is read from and media is written to (default: .).",
+)
+@click.option(
+    "--to",
+    type=str,
+    default=None,
+    help="Destination folder name within the working directory.",
+)
+@click.option(
+    "--input",
+    "-i",
+    "input_file",
+    type=str,
+    default=None,
+    help="Input file name relative to the working directory. Supports .jsonl and .txt formats.",
+)
+@click.option(
+    "--min-size",
+    "-s",
+    type=int,
+    default=None,
+    help="Minimum image dimension in pixels; only applies to .jsonl input (default: 512).",
+)
+@click.option(
+    "--workers",
+    "-w",
+    type=int,
+    default=None,
+    help="Number of parallel download threads (default: CPU count for images, 2 for video).",
+)
+@click.option(
+    "--timeout",
+    "-t",
+    type=int,
+    default=30,
+    show_default=True,
+    help="Per-request timeout in seconds.",
+)
+@click.option(
+    "--force", "-f", is_flag=True, help="Re-download files even if they already exist."
+)
+@click.option(
+    "--max-wait",
+    "-W",
+    type=int,
+    default=None,
+    help="Max seconds to honor a Retry-After header (default: unlimited).",
+)
+@click.option(
+    "--no-wait",
+    is_flag=True,
+    help="Never wait for Retry-After headers; use fast exponential backoff instead.",
+)
+@click.option(
+    "--license",
+    "-l",
+    "license_filter",
+    type=str,
+    default=None,
+    help="Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input.",
+)
 def cmd(
     working_dir: Path | None,
     to: str | None,
@@ -443,7 +532,9 @@ def cmd(
 
     # Determine input file and format
     if input_file is None:
-        raise click.ClickException("--input is required (or set 'fetch.input' in config)")
+        raise click.ClickException(
+            "--input is required (or set 'fetch.input' in config)"
+        )
     input_name = input_file
     input_path = working / input_name
     input_ext = Path(input_name).suffix.lower()
@@ -455,7 +546,9 @@ def cmd(
     skipped_unsupported = 0
     sidecar_lookup: dict[str, dict] = {}
     if input_ext == ".jsonl":
-        urls, skipped_unsupported, sidecar_lookup = _load_urls_from_jsonl(input_path, min_size, license_filter)
+        urls, skipped_unsupported, sidecar_lookup = _load_urls_from_jsonl(
+            input_path, min_size, license_filter
+        )
         logger.info("Loaded URLs from %s (jsonl mode)", input_path)
     elif input_ext == ".txt":
         urls, sidecar_lookup = _load_urls_from_txt(input_path)
@@ -466,7 +559,9 @@ def cmd(
         )
 
     if skipped_unsupported > 0:
-        logger.info("Skipped %d URLs with unsupported format (.djvu).", skipped_unsupported)
+        logger.info(
+            "Skipped %d URLs with unsupported format (.djvu).", skipped_unsupported
+        )
 
     if not urls:
         raise click.ClickException("No URLs to fetch after filtering")
@@ -491,7 +586,10 @@ def cmd(
 
     logger.info(
         "Fetching %d URLs to %s (%d direct, %d yt-dlp)",
-        len(urls), dest_dir, len(direct_urls), len(ytdlp_urls),
+        len(urls),
+        dest_dir,
+        len(direct_urls),
+        len(ytdlp_urls),
     )
 
     start_time = time.monotonic()
@@ -509,17 +607,28 @@ def cmd(
         for domain, policy in throttler.active_policies().items():
             logger.info(
                 "Throttle policy for %s: max_connections=%d, request_delay=%.1fs",
-                domain, policy.max_connections, policy.request_delay,
+                domain,
+                policy.max_connections,
+                policy.request_delay,
             )
 
-        logger.info("Downloading %d URLs via HTTP (workers=%d)", len(direct_urls), num_workers)
+        logger.info(
+            "Downloading %d URLs via HTTP (workers=%d)", len(direct_urls), num_workers
+        )
 
-        work = [(url, dest_dir, timeout, force, throttler, max_wait) for url in direct_urls]
+        work = [
+            (url, dest_dir, timeout, force, throttler, max_wait) for url in direct_urls
+        ]
 
         with logging_redirect_tqdm():
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = {executor.submit(_download_url, w): w for w in work}
-                with tqdm(total=len(futures), desc="Fetching", unit="url", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]") as pbar:
+                with tqdm(
+                    total=len(futures),
+                    desc="Fetching",
+                    unit="url",
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]",
+                ) as pbar:
                     try:
                         for future in as_completed(futures):
                             status, url, error, final_path = future.result()
@@ -538,7 +647,12 @@ def cmd(
                             else:
                                 failed += 1
                                 logger.error("Failed to download %s: %s", url, error)
-                            pbar.set_postfix(ok=downloaded, skip=skipped, fail=failed, limited=rate_limited)
+                            pbar.set_postfix(
+                                ok=downloaded,
+                                skip=skipped,
+                                fail=failed,
+                                limited=rate_limited,
+                            )
                             pbar.update(1)
                     except KeyboardInterrupt:
                         executor.shutdown(wait=False, cancel_futures=True)
@@ -550,7 +664,11 @@ def cmd(
         ytdlp_workers = workers if workers is not None else 2
         archive_path = str(dest_dir / ".ytdl-archive") if not force else None
 
-        logger.info("Downloading %d URLs via yt-dlp (workers=%d)", len(ytdlp_urls), ytdlp_workers)
+        logger.info(
+            "Downloading %d URLs via yt-dlp (workers=%d)",
+            len(ytdlp_urls),
+            ytdlp_workers,
+        )
 
         # Shared progress state updated by worker threads
         _ytdlp_progress: dict[str, float] = {}
@@ -560,10 +678,7 @@ def cmd(
             with _progress_lock:
                 _ytdlp_progress[url] = pct
 
-        work_yt = [
-            (url, str(dest_dir), archive_path, force)
-            for url in ytdlp_urls
-        ]
+        work_yt = [(url, str(dest_dir), archive_path, force) for url in ytdlp_urls]
 
         with logging_redirect_tqdm():
             with ThreadPoolExecutor(max_workers=ytdlp_workers) as executor:
@@ -582,7 +697,9 @@ def cmd(
                     try:
                         prev_frac = 0.0
                         while len(done_futures) < total_videos:
-                            newly_done = {f for f in all_futures if f.done()} - done_futures
+                            newly_done = {
+                                f for f in all_futures if f.done()
+                            } - done_futures
                             for f in newly_done:
                                 done_futures.add(f)
                                 status, url, error, final_path = f.result()
@@ -596,7 +713,9 @@ def cmd(
                                     skipped += 1
                                 else:
                                     failed += 1
-                                    logger.error("Failed to download %s: %s", url, error)
+                                    logger.error(
+                                        "Failed to download %s: %s", url, error
+                                    )
                                 with _progress_lock:
                                     _ytdlp_progress.pop(url, None)
 
@@ -627,7 +746,7 @@ def cmd(
     elapsed = time.monotonic() - start_time
     minutes, seconds = divmod(int(elapsed), 60)
 
-    click.echo(f"\nFetch complete!")
+    click.echo("\nFetch complete!")
     click.echo(f"  Downloaded: {downloaded:,}")
     click.echo(f"  Skipped (existing): {skipped:,}")
     if skipped_unsupported > 0:

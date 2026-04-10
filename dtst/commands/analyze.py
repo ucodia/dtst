@@ -98,8 +98,14 @@ _CPU_COMPUTE_FNS = {
     type=int,
     help="Number of parallel workers for CPU metrics (default: CPU count).",
 )
-@click.option("--clear", is_flag=True, help="Remove all sidecar files from source folders.")
-@click.option("--dry-run", is_flag=True, help="Preview what would be computed without writing sidecars.")
+@click.option(
+    "--clear", is_flag=True, help="Remove all sidecar files from source folders."
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview what would be computed without writing sidecars.",
+)
 def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     """Compute image metrics and write JSON sidecars.
 
@@ -122,9 +128,13 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     t0 = time.time()
 
     if from_dirs is None:
-        raise click.ClickException("--from is required (or set 'analyze.from' in config)")
+        raise click.ClickException(
+            "--from is required (or set 'analyze.from' in config)"
+        )
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    metrics_list = [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
+    metrics_list = (
+        [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
+    )
     working = (working_dir or Path(".")).resolve()
     input_dirs = resolve_dirs(working, dirs_list)
 
@@ -139,7 +149,9 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
         if not all_images:
             raise click.ClickException("No images found in source directories.")
 
-        sidecars = [sidecar_path(img) for img in all_images if sidecar_path(img).exists()]
+        sidecars = [
+            sidecar_path(img) for img in all_images if sidecar_path(img).exists()
+        ]
 
         if not sidecars:
             click.echo("No sidecar files found. Nothing to clear.")
@@ -221,13 +233,17 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
             skipped += 1
 
     if dry_run:
-        click.echo(f"[dry-run] Would analyze {len(needs_work)} images, skip {skipped} (already computed)")
+        click.echo(
+            f"[dry-run] Would analyze {len(needs_work)} images, skip {skipped} (already computed)"
+        )
         for img, pending in needs_work.items():
             click.echo(f"  {img.name}: {', '.join(pending)}")
         return
 
     if not needs_work:
-        click.echo(f"All {len(all_images)} images already have requested metrics. Nothing to do.")
+        click.echo(
+            f"All {len(all_images)} images already have requested metrics. Nothing to do."
+        )
         return
 
     logger.info("Analyzing %d images (%d skipped)", len(needs_work), skipped)
@@ -239,19 +255,25 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     with logging_redirect_tqdm():
         for metric_name in requested_cpu:
             compute_fn = _CPU_COMPUTE_FNS[metric_name]
-            metric_images = [img for img, pending in needs_work.items() if metric_name in pending]
+            metric_images = [
+                img for img, pending in needs_work.items() if metric_name in pending
+            ]
             if not metric_images:
                 continue
 
             work = [(str(img),) for img in metric_images]
             with ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {executor.submit(compute_fn, w): w for w in work}
-                with tqdm(total=len(work), desc=f"Computing {metric_name}", unit="image") as pbar:
+                with tqdm(
+                    total=len(work), desc=f"Computing {metric_name}", unit="image"
+                ) as pbar:
                     for future in as_completed(futures):
                         path_str, value, err = future.result()
                         img_path = Path(path_str)
                         if err:
-                            logger.error("%s failed for %s: %s", metric_name, img_path.name, err)
+                            logger.error(
+                                "%s failed for %s: %s", metric_name, img_path.name, err
+                            )
                             errors += 1
                         else:
                             if isinstance(value, float):
@@ -263,7 +285,9 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     if requested_iqa:
         iqa_images_by_metric: dict[str, list[Path]] = {}
         for metric_name in requested_iqa:
-            imgs = [img for img, pending in needs_work.items() if metric_name in pending]
+            imgs = [
+                img for img, pending in needs_work.items() if metric_name in pending
+            ]
             if imgs:
                 iqa_images_by_metric[metric_name] = imgs
 
