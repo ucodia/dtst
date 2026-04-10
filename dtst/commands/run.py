@@ -24,10 +24,12 @@ def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_workin
     """
     param_info = {p.name: p for p in click_cmd.params}
 
-    # Start with defaults for all params
+    # Start with defaults for all params (skip expose_value=False arguments)
     params = {}
     for p in click_cmd.params:
         if isinstance(p, click.Argument):
+            if not p.expose_value:
+                continue
             params[p.name] = p.default
         elif isinstance(p, click.Option):
             if p.multiple:
@@ -58,8 +60,7 @@ def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_workin
     # Apply step overrides with type coercion
     for key, value in step.overrides.items():
         param_name = key.replace("-", "_")
-        if param_name == "from":
-            param_name = "from_dirs"
+        param_name = _YAML_TO_CLICK.get(param_name, param_name)
 
         p = param_info.get(param_name)
         if p is None:
