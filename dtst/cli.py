@@ -10,6 +10,7 @@ from dtst.commands import (
     cluster,
     dedup,
     detect,
+    extract_classes,
     extract_faces,
     extract_frames,
     fetch,
@@ -43,6 +44,7 @@ cli.add_command(cluster.cmd, "cluster")
 cli.add_command(review.cmd, "review")
 cli.add_command(dedup.cmd, "dedup")
 cli.add_command(detect.cmd, "detect")
+cli.add_command(extract_classes.cmd, "extract-classes")
 cli.add_command(extract_faces.cmd, "extract-faces")
 cli.add_command(extract_frames.cmd, "extract-frames")
 cli.add_command(fetch.cmd, "fetch")

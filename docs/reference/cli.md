@@ -280,6 +280,44 @@ dtst detect [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be detected without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
+## dtst extract-classes { #dtst-extract-classes data-toc-label='extract-classes' }
+
+Extract image crops from class detection bounding boxes.
+
+Reads class detections from sidecar JSON files (produced by
+``dtst detect``) and crops the corresponding regions from each
+image. Supports expanding the bounding box with a margin ratio
+and squaring the crop.
+
+Examples:
+
+    dtst extract-classes config.yaml
+    dtst extract-classes config.yaml --classes flower --square --margin 0.1
+    dtst extract-classes -d ./dahlias --from images --to flowers --classes flower
+    dtst extract-classes config.yaml --min-score 0.5 --skip-partial
+
+**Usage:**
+
+```text
+dtst extract-classes [OPTIONS] [CONFIG]
+```
+
+**Options:**
+
+| Name | Type | Description | Default |
+| ---- | ---- | ----------- | ------- |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--from` | text | Comma-separated source folders within the working directory (supports globs, e.g. 'images/*'). | None |
+| `--to` | text | Destination folder name within the working directory. | None |
+| `--classes`, `-c` | text | Comma-separated class names to extract (must match classes in sidecar data). | None |
+| `--margin` | float | Margin ratio added around the bounding box, based on the larger side (default: 0). | None |
+| `--square` | boolean | Extend the shorter side of the bounding box to match the larger side. | `False` |
+| `--min-score` | float | Minimum detection confidence score to include (default: 0). | None |
+| `--skip-partial` | boolean | Skip detections whose crop extends beyond the image boundary after applying --square and --margin. | `False` |
+| `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
+| `--dry-run` | boolean | Preview what would be extracted without writing files. | `False` |
+| `--help` | boolean | Show this message and exit. | `False` |
+
 ## dtst extract-faces { #dtst-extract-faces data-toc-label='extract-faces' }
 
 Extract aligned face crops from images.
