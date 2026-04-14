@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import mimetypes
 import os
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import cpu_count
 from pathlib import Path
 
 from PIL import Image
@@ -41,6 +43,9 @@ def create_app(
         "filtered_dir": filtered_dir,
     }
 
+    dim_cache: dict[tuple[str, int, int], tuple[int, int]] = {}
+    DIM_CACHE_MAX = 50000
+
     def resolve_dir(view: str) -> Path | None:
         if view == "filtered":
             return state["filtered_dir"]
@@ -48,12 +53,24 @@ def create_app(
 
     def image_info(img_path: Path, view: str) -> dict:
         sidecar = read_sidecar(img_path)
-        file_size = img_path.stat().st_size
         try:
-            with Image.open(img_path) as im:
-                width, height = im.size
-        except Exception:
-            width, height = 0, 0
+            st = img_path.stat()
+            file_size = st.st_size
+            cache_key = (str(img_path), st.st_mtime_ns, file_size)
+        except OSError:
+            file_size = 0
+            cache_key = None
+
+        dims = dim_cache.get(cache_key) if cache_key is not None else None
+        if dims is None:
+            try:
+                with Image.open(img_path) as im:
+                    dims = im.size
+            except Exception:
+                dims = (0, 0)
+            if cache_key is not None and len(dim_cache) < DIM_CACHE_MAX:
+                dim_cache[cache_key] = dims
+        width, height = dims
         return {
             "filename": img_path.name,
             "url": f"/images/{view}/{img_path.name}",
@@ -149,20 +166,36 @@ def create_app(
             }
 
         target = resolve_dir(view)
-        images = (
-            [image_info(p, view) for p in find_images(target)]
-            if target is not None and target.is_dir()
-            else []
-        )
+        source_paths = find_images(src) if src.is_dir() else []
+        if flt is not None and flt.is_dir():
+            filtered_paths = (
+                source_paths if target == src and flt == src else find_images(flt)
+            )
+        else:
+            filtered_paths = []
+
+        if target is None or not target.is_dir():
+            target_paths = []
+        elif target == src:
+            target_paths = source_paths
+        elif target == flt:
+            target_paths = filtered_paths
+        else:
+            target_paths = find_images(target)
+
+        if target_paths:
+            workers = min(32, (cpu_count() or 4) * 4)
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                images = list(executor.map(lambda p: image_info(p, view), target_paths))
+        else:
+            images = []
 
         return {
             "configured": True,
             "view": view,
             "images": images,
-            "source_count": len(find_images(src)) if src.is_dir() else 0,
-            "filtered_count": len(find_images(flt))
-            if flt is not None and flt.is_dir()
-            else 0,
+            "source_count": len(source_paths),
+            "filtered_count": len(filtered_paths),
         }
 
     @app.get("/images/{view}/{filename}")

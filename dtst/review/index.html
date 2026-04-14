@@ -732,26 +732,58 @@ function renderSortButtons() {
     });
 }
 
+var cellObserver = null;
+
+function hydrateCell(cell) {
+    if (cell.dataset.hydrated === "1") return;
+    var index = parseInt(cell.dataset.index, 10);
+    var img = state.images[index];
+    if (!img) return;
+    cell.innerHTML =
+        '<img src="' + escapeAttr(img.url) + '" loading="lazy" alt="' + escapeAttr(img.filename) + '">' +
+        '<button class="expand-btn" onclick="event.stopPropagation(); openLightbox(' + index + ')">&#x26F6;</button>' +
+        '<div class="meta-overlay">' + renderMeta(img.sidecar, img) + '</div>';
+    var cellImg = cell.querySelector("img");
+    cellImg.addEventListener("load", function() { updateCellBboxes(cell, img); });
+    if (cellImg.complete && cellImg.naturalWidth > 0) updateCellBboxes(cell, img);
+    cell.dataset.hydrated = "1";
+}
+
+function dehydrateCell(cell) {
+    if (cell.dataset.hydrated !== "1") return;
+    cell.innerHTML = "";
+    cell.dataset.hydrated = "0";
+}
+
+function ensureCellObserver() {
+    if (cellObserver) return cellObserver;
+    if (typeof IntersectionObserver === "undefined") return null;
+    cellObserver = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+            if (entry.isIntersecting) hydrateCell(entry.target);
+            else dehydrateCell(entry.target);
+        });
+    }, { rootMargin: "800px 0px", threshold: 0 });
+    return cellObserver;
+}
+
 function renderGrid() {
     const grid = document.getElementById("grid");
+    if (cellObserver) cellObserver.disconnect();
     grid.innerHTML = "";
+
+    var observer = ensureCellObserver();
 
     state.images.forEach((img, index) => {
         const cell = document.createElement("div");
         cell.className = "cell" + (state.selected.has(img.filename) ? " selected" : "");
         cell.dataset.filename = img.filename;
-
-        cell.innerHTML =
-            '<img src="' + escapeAttr(img.url) + '" loading="lazy" alt="' + escapeAttr(img.filename) + '">' +
-            '<button class="expand-btn" onclick="event.stopPropagation(); openLightbox(' + index + ')">&#x26F6;</button>' +
-            '<div class="meta-overlay">' + renderMeta(img.sidecar, img) + '</div>';
-
+        cell.dataset.index = String(index);
+        cell.dataset.hydrated = "0";
         cell.addEventListener("click", function() { toggleSelect(img.filename); });
-        var cellImg = cell.querySelector("img");
-        (function(c, d) {
-            cellImg.addEventListener("load", function() { updateCellBboxes(c, d); });
-        })(cell, img);
         grid.appendChild(cell);
+        if (observer) observer.observe(cell);
+        else hydrateCell(cell);
     });
 }
 
