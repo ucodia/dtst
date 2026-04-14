@@ -178,31 +178,34 @@ def cmd(
     backend = OwlViT2Backend()
     backend.load(device)
 
+    written = 0
+    class_counts = {cls: 0 for cls in classes_list}
+    valid = 0
+
     with logging_redirect_tqdm():
-        detections, valid_paths = backend.detect(
+        for img_path, img_detections in backend.detect(
             needs_work,
             classes_list,
             threshold=threshold,
             max_instances=max_instances,
             num_workers=num_workers,
-        )
+        ):
+            if img_detections is None:
+                continue
+            write_sidecar(img_path, {"classes": img_detections})
+            written += 1
+            valid += 1
+            for cls in classes_list:
+                if img_detections.get(cls):
+                    class_counts[cls] += 1
 
-    written = 0
-    for img_path, img_detections in detections.items():
-        write_sidecar(img_path, {"classes": img_detections})
-        written += 1
-
-    # Print detection summary
-    if valid_paths:
+    if valid:
         click.echo("\nDetection summary:")
         for cls in classes_list:
-            found = sum(
-                1 for p in valid_paths if p in detections and detections[p].get(cls)
-            )
-            click.echo(f"  {cls}: found in {found}/{len(valid_paths)} images")
+            click.echo(f"  {cls}: found in {class_counts[cls]}/{valid} images")
 
     elapsed = time.time() - t0
     click.echo(
         f"\nDone: {written:,} processed, "
-        f"{len(needs_work) - len(valid_paths):,} failed ({elapsed:.1f}s)"
+        f"{len(needs_work) - valid:,} failed ({elapsed:.1f}s)"
     )

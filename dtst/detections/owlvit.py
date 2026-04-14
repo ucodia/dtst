@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Iterator
 from pathlib import Path
 
 from PIL import Image
@@ -39,11 +40,11 @@ class OwlViT2Backend:
         threshold: float = 0.2,
         max_instances: int = 1,
         num_workers: int = 4,
-    ) -> tuple[dict[Path, dict[str, list[Detection]]], list[Path]]:
+    ) -> Iterator[tuple[Path, dict[str, list[Detection]] | None]]:
         """Detect objects in images using open-vocabulary detection.
 
-        Returns a tuple of (results, valid_paths) where results maps each
-        image to a dict of class -> list of detections (up to max_instances).
+        Yields (path, detections) per image as it is processed. `detections`
+        is None for images that could not be read.
         """
         import torch
 
@@ -59,8 +60,7 @@ class OwlViT2Backend:
             except Exception:
                 return path, None
 
-        results: dict[Path, dict[str, Detection | None]] = {}
-        valid_paths: list[Path] = []
+        detected = 0
         skipped = 0
 
         with ThreadPoolExecutor(max_workers=num_workers) as loader:
@@ -74,6 +74,8 @@ class OwlViT2Backend:
                         logger.warning("Could not read image: %s", path.name)
                         skipped += 1
                         pbar.update(1)
+                        pbar.set_postfix(detected=detected, skipped=skipped)
+                        yield path, None
                         continue
 
                     inputs = self._processor(
@@ -95,12 +97,10 @@ class OwlViT2Backend:
                     detections = self._parse_detections(
                         proc_results[0], class_names, max_instances
                     )
-                    results[path] = detections
-                    valid_paths.append(path)
+                    detected += 1
                     pbar.update(1)
-                    pbar.set_postfix(detected=len(valid_paths), skipped=skipped)
-
-        return results, valid_paths
+                    pbar.set_postfix(detected=detected, skipped=skipped)
+                    yield path, detections
 
     def _parse_detections(
         self,
