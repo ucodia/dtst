@@ -998,6 +998,14 @@ function toggleBboxes(on) {
     document.body.classList.toggle("show-bboxes", on);
 }
 
+function colorForClass(name) {
+    var h = 5381;
+    for (var i = 0; i < name.length; i++) {
+        h = ((h << 5) + h + name.charCodeAt(i)) | 0;
+    }
+    return "hsl(" + (((h % 360) + 360) % 360) + ", 70%, 55%)";
+}
+
 function updateCellBboxes(cell, imgData) {
     cell.querySelectorAll(".bbox-box").forEach(function(el) { el.remove(); });
     if (!imgData.sidecar || !imgData.sidecar.classes || !imgData.width || !imgData.height) return;
@@ -1029,7 +1037,9 @@ function updateCellBboxes(cell, imgData) {
             div.style.top = top + "px";
             div.style.width = w + "px";
             div.style.height = h + "px";
-            div.innerHTML = '<span class="bbox-label">' + escapeHtml(cls) + '</span>';
+            var color = colorForClass(cls);
+            div.style.borderColor = color;
+            div.innerHTML = '<span class="bbox-label" style="background:' + color + '">' + escapeHtml(cls) + '</span>';
             cell.appendChild(div);
         });
     });
@@ -1059,7 +1069,9 @@ function updateLightboxBboxes(img) {
             div.style.top = top + "px";
             div.style.width = w + "px";
             div.style.height = h + "px";
-            div.innerHTML = '<span class="bbox-label">' + escapeHtml(cls) + ' ' + det.score.toFixed(2) + '</span>';
+            var color = colorForClass(cls);
+            div.style.borderColor = color;
+            div.innerHTML = '<span class="bbox-label" style="background:' + color + '">' + escapeHtml(cls) + ' ' + det.score.toFixed(2) + '</span>';
             wrapper.appendChild(div);
         });
     });
