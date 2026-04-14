@@ -2,7 +2,7 @@
 
 This tutorial walks you through building a curated image dataset from scratch. By the end you will have searched for images, downloaded them alongside video footage, clustered by similarity, refined quality, and produced final resized outputs — all within a single working directory.
 
-The example uses "crowd" as the subject. Along the way the tutorial shows two paths through the pipeline: one that extracts and clusters faces by identity (using ArcFace), and one that clusters images directly by visual similarity (using CLIP). Pick whichever fits your use case, or combine both.
+The example uses "crowd" as the subject. Along the way the tutorial shows three paths through the pipeline: one that extracts and clusters faces by identity (using ArcFace), one that clusters images directly by visual similarity (using CLIP), and one that detects and crops specific object classes (using OWL-ViT). Pick whichever fits your use case, or combine them.
 
 ## What you will build
 
@@ -11,7 +11,7 @@ A curated image dataset starting from the search term "crowd". The pipeline uses
 1. **Search** for images across multiple engines
 2. **Fetch** images and videos from the collected URLs
 3. **Extract frames** from downloaded videos
-4. **Extract faces** from all collected images *(optional — for face datasets)*
+4. **Extract faces** from all collected images *(optional — for face datasets)* or **extract classes** from object detections *(optional — for object datasets)*
 5. **Cluster** by similarity (ArcFace for faces, CLIP for general images)
 6. **Copy** selected clusters into a curation folder
 7. **Analyze** images for metadata (hashes, blur scores)
