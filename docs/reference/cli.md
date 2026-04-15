@@ -189,7 +189,7 @@ dtst cluster [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
-| `--to`, `-t` | text | Destination folder. | None |
+| `--to` | text | Destination folder. | None |
 | `--model`, `-m` | choice (`arcface` &#x7C; `clip`) | Embedding model for similarity (default: arcface). | None |
 | `--top`, `-n` | integer | Maximum number of clusters to output; omit for all clusters. | None |
 | `--min-cluster-size` | integer | Minimum images to form a cluster (default: 5). | None |
@@ -236,7 +236,7 @@ dtst dedup [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--from` | text | Folder to deduplicate. | None |
-| `--to` | text | Subfolder name for duplicate images. | None |
+| `--to` | text | Subfolder name for duplicate images (default: duplicated). | None |
 | `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--clear` | boolean | Restore all deduplicated images back to the source folder. | `False` |

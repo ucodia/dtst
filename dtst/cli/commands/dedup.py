@@ -10,6 +10,8 @@ from dtst.cli.config import (
     apply_working_dir,
     config_argument,
     dry_run_option,
+    from_dir_option,
+    to_dir_option,
     working_dir_option,
     workers_option,
 )
@@ -20,20 +22,8 @@ from dtst.errors import DtstError
 @click.command("dedup")
 @config_argument
 @working_dir_option()
-@click.option(
-    "--from",
-    "from_dir",
-    type=str,
-    default=None,
-    help="Folder to deduplicate.",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Subfolder name for duplicate images.",
-    show_default="duplicated",
-)
+@from_dir_option(help="Folder to deduplicate.")
+@to_dir_option(help="Subfolder name for duplicate images (default: duplicated).")
 @click.option(
     "--threshold",
     "-t",

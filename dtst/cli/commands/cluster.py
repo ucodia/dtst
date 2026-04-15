@@ -11,6 +11,7 @@ from dtst.cli.config import (
     config_argument,
     dry_run_option,
     from_dirs_option,
+    to_dir_option,
     working_dir_option,
     workers_option,
 )
@@ -24,13 +25,7 @@ from dtst.files import format_elapsed
 @config_argument
 @working_dir_option()
 @from_dirs_option()
-@click.option(
-    "--to",
-    "-t",
-    type=str,
-    default=None,
-    help="Destination folder.",
-)
+@to_dir_option()
 @click.option(
     "--model",
     "-m",

@@ -182,6 +182,26 @@ def from_dirs_option(
     return wrap
 
 
+def from_dir_option(help: str = "Source folder."):
+    """``--from`` option decorator for single-folder commands.
+
+    Bound to the ``from_dir`` Python name.  Use this for filtering
+    commands (e.g. ``dedup``) that operate on exactly one folder;
+    use :func:`from_dirs_option` for augmenting commands.
+    """
+
+    def wrap(f):
+        return click.option(
+            "--from",
+            "from_dir",
+            type=str,
+            default=None,
+            help=help,
+        )(f)
+
+    return wrap
+
+
 def to_dir_option(help: str = "Destination folder."):
     """``--to`` option decorator."""
 
