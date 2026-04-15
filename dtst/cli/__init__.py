@@ -1,9 +1,18 @@
+"""Click CLI layer for dtst.
+
+Exposes the top-level ``cli`` group and the ``main`` entry point used by
+the ``dtst`` console script.  Library callers should import from
+:mod:`dtst` or :mod:`dtst.core` instead.
+"""
+
+from __future__ import annotations
+
 import logging
 
 import click
 from dotenv import load_dotenv
 
-from dtst.commands import (
+from dtst.cli.commands import (
     analyze,
     annotate,
     augment,
@@ -17,13 +26,12 @@ from dtst.commands import (
     format,
     frame,
     rename,
-    review,
-    run,
     search,
     select,
     upscale,
     validate,
 )
+from dtst.commands import review, run
 
 
 @click.group()
@@ -41,7 +49,6 @@ cli.add_command(analyze.cmd, "analyze")
 cli.add_command(annotate.cmd, "annotate")
 cli.add_command(augment.cmd, "augment")
 cli.add_command(cluster.cmd, "cluster")
-cli.add_command(review.cmd, "review")
 cli.add_command(dedup.cmd, "dedup")
 cli.add_command(detect.cmd, "detect")
 cli.add_command(extract_classes.cmd, "extract-classes")
@@ -51,6 +58,7 @@ cli.add_command(fetch.cmd, "fetch")
 cli.add_command(format.cmd, "format")
 cli.add_command(frame.cmd, "frame")
 cli.add_command(rename.cmd, "rename")
+cli.add_command(review.cmd, "review")
 cli.add_command(run.cmd, "run")
 cli.add_command(search.cmd, "search")
 cli.add_command(select.cmd, "select")
@@ -60,3 +68,6 @@ cli.add_command(validate.cmd, "validate")
 
 def main() -> None:
     cli()
+
+
+__all__ = ["cli", "main"]

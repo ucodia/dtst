@@ -15,6 +15,7 @@ nav = [
   { "Advanced" = [
     { "Configuration" = "advanced/configuration.md" },
     { "Workflows" = "advanced/workflows.md" },
+    { "Python API" = "advanced/python-api.md" },
   ] },
   { "Reference" = [
     { "CLI" = "reference/cli.md" },

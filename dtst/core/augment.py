@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst augment``."""
+
 from __future__ import annotations
 
 import logging
@@ -6,35 +8,21 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
-
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
 from dtst.executor import run_pool
 from dtst.files import (
     build_save_kwargs,
     find_images,
-    format_elapsed,
     resolve_dirs,
     resolve_workers,
 )
+from dtst.results import AugmentResult
 from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 logger = logging.getLogger(__name__)
 
 
 def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
-    """Top-level worker function for ProcessPoolExecutor.
-
-    Returns ``(status, filename, output_files, error_message)``.
-    Status is one of ``"ok"`` or ``"failed"``.
-    """
     (
         input_path_s,
         output_dir_s,
@@ -87,81 +75,37 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
         return "failed", name, created, str(e)
 
 
-@click.command("augment")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option("--flipX", "flip_x", is_flag=True, help="Apply horizontal flip.")
-@click.option("--flipY", "flip_y", is_flag=True, help="Apply vertical flip.")
-@click.option(
-    "--flipXY",
-    "flip_xy",
-    is_flag=True,
-    help="Apply both horizontal and vertical flip (180-degree rotation).",
-)
-@click.option(
-    "--no-copy", is_flag=True, help="Do not copy original images to the output folder."
-)
-@workers_option()
-@dry_run_option(help="Preview what would be written without creating files.")
-def cmd(
+def augment(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    flip_x: bool,
-    flip_y: bool,
-    flip_xy: bool,
-    no_copy: bool,
-    workers: int | None,
-    dry_run: bool,
-) -> None:
-    """Augment a dataset by applying image transformations.
-
-    Reads images from one or more source folders and writes transformed
-    copies to a destination folder. By default the original images are
-    also copied to the output; use --no-copy to write only the
-    transformed versions.
-
-    At least one transform flag (--flipX, --flipY, --flipXY) is
-    required. Multiple flags can be combined in a single run to
-    produce several variants of each image.
-
-    Transformed files are named with a suffix indicating the transform:
-    photo.jpg becomes photo_flipX.jpg, photo_flipY.jpg, photo_flipXY.jpg.
-
-    Can be invoked with just a config file, just CLI options, or both.
-    When both are provided, CLI options override config file values.
-
-    \b
-    Examples:
-
-        dtst augment -d ./project --from faces --to augmented --flipX
-        dtst augment -d ./project --from faces --to augmented --flipX --flipY --flipXY
-        dtst augment -d ./project --from faces --to augmented --flipX --no-copy
-        dtst augment config.yaml --dry-run
-    """
-    if from_dirs is None:
-        raise click.ClickException(
-            "--from is required (or set 'augment.from' in config)"
+    from_dirs: str,
+    to: str,
+    flip_x: bool = False,
+    flip_y: bool = False,
+    flip_xy: bool = False,
+    no_copy: bool = False,
+    workers: int | None = None,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> AugmentResult:
+    """Augment a dataset with image flips."""
+    if not from_dirs:
+        raise InputError("from_dirs is required")
+    if not to:
+        raise InputError("to is required")
+    if not flip_x and not flip_y and not flip_xy:
+        raise InputError(
+            "At least one transform flag is required (flip_x, flip_y, flip_xy)"
         )
-    if to is None:
-        raise click.ClickException("--to is required (or set 'augment.to' in config)")
+
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    if not flip_x and not flip_y and not flip_xy:
-        raise click.ClickException(
-            "At least one transform flag is required (--flipX, --flipY, --flipXY)"
-        )
-
     input_dirs = resolve_dirs(working, dirs_list)
     output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
+        raise InputError(
             f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
         )
 
@@ -172,9 +116,7 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(
-            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
-        )
+        raise InputError(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
     transforms = []
     if flip_x:
@@ -188,27 +130,31 @@ def cmd(
     total_output = len(images) * copies_per_image
 
     from_label = ", ".join(str(d) for d in input_dirs)
+    num_workers = resolve_workers(workers)
     logger.info(
         "Augmenting %d images from [%s] with transforms [%s] (copy_original=%s, workers=%d expected output=%d)",
         len(images),
         from_label,
         ", ".join(transforms),
         not no_copy,
-        resolve_workers(workers),
+        num_workers,
         total_output,
     )
 
     if dry_run:
-        click.echo(f"\nDry run -- would augment {len(images):,} images")
-        click.echo(f"  Transforms: {', '.join(transforms)}")
-        click.echo(f"  Copy originals: {not no_copy}")
-        click.echo(f"  Files per image: {copies_per_image}")
-        click.echo(f"  Total output files: {total_output:,}")
-        click.echo(f"  Output: {output_dir}")
-        return
+        return AugmentResult(
+            ok=0,
+            failed=0,
+            files_written=0,
+            transforms=transforms,
+            copy_originals=not no_copy,
+            total_output_estimate=total_output,
+            output_dir=output_dir,
+            dry_run=True,
+            elapsed=0.0,
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    num_workers = resolve_workers(workers)
     copy_original = not no_copy
 
     work = [
@@ -251,15 +197,17 @@ def cmd(
         unit="image",
         on_result=handle,
         postfix_keys=("ok", "fail"),
+        progress=progress,
     )
-    ok_count = counts.get("ok", 0)
-    failed_count = counts.get("fail", 0)
 
-    elapsed = time.monotonic() - start_time
-
-    click.echo("\nAugment complete!")
-    click.echo(f"  Images processed: {ok_count:,}")
-    click.echo(f"  Files written: {total_files:,}")
-    click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return AugmentResult(
+        ok=counts.get("ok", 0),
+        failed=counts.get("fail", 0),
+        files_written=total_files,
+        transforms=transforms,
+        copy_originals=copy_original,
+        total_output_estimate=total_output,
+        output_dir=output_dir,
+        dry_run=False,
+        elapsed=time.monotonic() - start_time,
+    )

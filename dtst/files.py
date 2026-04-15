@@ -3,8 +3,7 @@ import shutil
 from multiprocessing import cpu_count
 from pathlib import Path
 
-import click
-
+from dtst.errors import InputError
 from dtst.sidecar import sidecar_path
 
 logger = logging.getLogger(__name__)
@@ -143,7 +142,7 @@ def _gather_files(
         items.extend(finder(src, recursive=recursive))
 
     if not items:
-        raise click.ClickException(f"No {kind} found in source directories.")
+        raise InputError(f"No {kind} found in source directories.")
     return working, input_dirs, items
 
 
@@ -156,7 +155,7 @@ def gather_images(
     """Resolve a comma-separated ``--from`` value into images.
 
     Returns ``(working_dir, input_dirs, images)``.  Non-existent source
-    directories are logged and skipped.  Raises ``click.ClickException``
+    directories are logged and skipped.  Raises :class:`InputError`
     if no images are found across all inputs.
     """
     return _gather_files(

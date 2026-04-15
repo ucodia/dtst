@@ -185,7 +185,7 @@ dtst cluster [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
+| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: . | None |
 | `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
 | `--to`, `-t` | text | Destination folder name within the working directory. | None |
 | `--model`, `-m` | choice (`arcface` &#x7C; `clip`) | Embedding model for similarity (default: arcface). | None |

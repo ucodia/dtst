@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst extract-faces``."""
+
 from __future__ import annotations
 
 import logging
@@ -5,28 +7,16 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
-
-from dtst.config import (
-    config_argument,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
 from dtst.executor import run_pool
-from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
+from dtst.files import find_images, resolve_dirs, resolve_workers
+from dtst.results import ExtractFacesResult
 from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 logger = logging.getLogger(__name__)
 
 
 def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
-    """Top-level worker function for ProcessPoolExecutor.
-
-    Returns ``(status, filename, face_count, error_message)``.
-    Status is one of ``"ok"``, ``"no_faces"``, ``"failed"``.
-    """
     (
         input_path_s,
         output_dir_s,
@@ -44,16 +34,15 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
 
     try:
         import os
+
         import cv2
+
         from dtst.face_align import FaceAligner
 
         image = cv2.imread(str(input_path))
         if image is None:
             return "failed", name, 0, "could not read image"
 
-        # MediaPipe emits verbose C++ startup messages to stderr on first use.
-        # Redirect fd 2 at the OS level so nothing gets through regardless of
-        # how glog is configured.
         _devnull = os.open(os.devnull, os.O_WRONLY)
         _saved_stderr = os.dup(2)
         os.dup2(_devnull, 2)
@@ -93,110 +82,36 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
         return "failed", name, 0, str(e)
 
 
-@click.command("extract-faces")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option(
-    "--max-size",
-    "-M",
-    type=int,
-    default=None,
-    help="Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit).",
-)
-@click.option(
-    "--engine",
-    "-e",
-    type=click.Choice(["mediapipe", "dlib"], case_sensitive=False),
-    default=None,
-    help="Face detection engine (default: mediapipe).",
-)
-@click.option(
-    "--max-faces",
-    "-m",
-    type=int,
-    default=None,
-    help="Max faces to extract per image (default: 1).",
-)
-@workers_option()
-@click.option(
-    "--padding/--no-padding",
-    default=None,
-    help="Enable/disable reflective padding on crops (default: enabled).",
-)
-@click.option(
-    "--skip-partial",
-    is_flag=True,
-    help="Skip faces whose crop extends beyond the image boundary instead of padding them.",
-)
-@click.option(
-    "--refine-landmarks",
-    is_flag=True,
-    help="Enable MediaPipe refined landmarks (478 vs 468).",
-)
-@click.option("--debug", is_flag=True, help="Overlay landmark points on output images.")
-def cmd(
+def extract_faces(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    max_size: int | None,
-    engine: str | None,
-    max_faces: int | None,
-    workers: int | None,
-    padding: bool | None,
-    skip_partial: bool,
-    refine_landmarks: bool,
-    debug: bool,
-) -> None:
-    """Extract aligned face crops from images.
-
-    Detects faces in each image using MediaPipe (default) or dlib,
-    then produces an aligned and cropped face image for each detection.
-    The alignment normalises eye and mouth positions for consistent
-    face crops.
-
-    Reads images from one or more source folders within the working
-    directory and writes face crops to a destination folder. Multiple
-    source folders can be specified as a comma-separated list with
-    --from.
-
-    Can be invoked with just a config file, just CLI options, or both.
-    When both are provided, CLI options override config file values.
-
-    \b
-    Examples:
-
-        dtst extract-faces config.yaml
-        dtst extract-faces config.yaml --engine dlib --max-size 512
-        dtst extract-faces -d ./crowd --from raw --to faces
-        dtst extract-faces -d ./crowd --from raw,extra --to faces
-        dtst extract-faces config.yaml --max-faces 3 --no-padding
-    """
+    from_dirs: str,
+    to: str,
+    max_size: int | None = None,
+    engine: str = "mediapipe",
+    max_faces: int = 1,
+    workers: int | None = None,
+    padding: bool = True,
+    skip_partial: bool = False,
+    refine_landmarks: bool = False,
+    debug: bool = False,
+    progress: bool = True,
+) -> ExtractFacesResult:
+    """Detect and align face crops from images."""
     if not from_dirs:
-        raise click.ClickException(
-            "--from is required (or set 'extract_faces.from' in config)"
-        )
+        raise InputError("from_dirs is required")
     if not to:
-        raise click.ClickException(
-            "--to is required (or set 'extract_faces.to' in config)"
-        )
+        raise InputError("to is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    engine = engine or "mediapipe"
-    max_faces = max_faces if max_faces is not None else 1
-    if padding is None:
-        padding = True
 
     input_dirs = resolve_dirs(working, dirs_list)
     output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
+        raise InputError(
             f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
         )
 
@@ -207,9 +122,7 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(
-            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
-        )
+        raise InputError(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     num_workers = resolve_workers(workers)
@@ -280,17 +193,14 @@ def cmd(
         unit="image",
         on_result=handle,
         postfix_keys=("ok", "noface", "fail"),
+        progress=progress,
     )
-    ok_count = counts.get("ok", 0)
-    no_faces_count = counts.get("noface", 0)
-    failed_count = counts.get("fail", 0)
 
-    elapsed = time.monotonic() - start_time
-
-    click.echo("\nExtract faces complete!")
-    click.echo(f"  Processed: {ok_count:,}")
-    click.echo(f"  Faces extracted: {total_faces:,}")
-    click.echo(f"  No faces detected: {no_faces_count:,}")
-    click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return ExtractFacesResult(
+        processed=counts.get("ok", 0),
+        faces_extracted=total_faces,
+        no_faces=counts.get("noface", 0),
+        failed=counts.get("fail", 0),
+        output_dir=output_dir,
+        elapsed=time.monotonic() - start_time,
+    )

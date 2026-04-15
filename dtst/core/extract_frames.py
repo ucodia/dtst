@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst extract-frames``."""
+
 from __future__ import annotations
 
 import logging
@@ -9,20 +11,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import (
-    VALID_FRAME_FORMATS,
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
-from dtst.files import find_videos, format_elapsed, resolve_dirs, resolve_workers
+from dtst.errors import InputError
+from dtst.files import find_videos, resolve_dirs, resolve_workers
+from dtst.results import ExtractFramesResult
 from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 logger = logging.getLogger(__name__)
@@ -31,7 +25,6 @@ _FFMPEG_TIME_RE = re.compile(r"out_time_us=(\d+)")
 
 
 def _probe_duration(video_path: str) -> float | None:
-    """Return video duration in seconds via ffprobe, or None on failure."""
     try:
         result = subprocess.run(
             [
@@ -55,41 +48,22 @@ def _probe_duration(video_path: str) -> float | None:
     return None
 
 
-def _extract_frames(
+def _extract_frames_worker(
     args: tuple, progress_callback=None
 ) -> tuple[str, str, int, str | None]:
-    """Extract keyframes from a single video using ffmpeg.
-
-    Only I-frames (keyframes) are decoded, and a minimum interval
-    of *keyframes* seconds is enforced between extracted frames.
-
-    When *progress_callback* is provided it is called with
-    ``(video_path, percentage)`` each time ffmpeg reports encoding
-    progress via ``-progress pipe:1``.
-
-    Returns ``(status, filename, frame_count, error_message)``.
-    Status is one of ``"ok"``, ``"skipped"``, or ``"failed"``.
-    """
     video_path_s, output_dir_s, keyframes_interval, fmt, duration = args
     video_path = Path(video_path_s)
     output_dir = Path(output_dir_s)
     stem = video_path.stem
     name = video_path.name
 
-    # Build output pattern: {stem}_{frame_number:04d}.{format}
     output_pattern = str(output_dir / f"{stem}_%04d.{fmt}")
 
     try:
-        # Check if any frames already exist for this video
         existing = list(output_dir.glob(f"{stem}_*.{fmt}"))
         if existing:
             return "skipped", name, 0, None
 
-        # Extract only keyframes with a minimum interval between them.
-        # -skip_frame nokey: decode only I-frames (keyframes)
-        # -vsync vfr: variable frame rate output (no duplicate frames)
-        # select filter: keep the first frame (prev_selected_t is NaN)
-        #   plus any frame at least N seconds after the last selected one
         select_expr = (
             f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{keyframes_interval})"
         )
@@ -120,7 +94,6 @@ def _extract_frames(
             text=True,
         )
 
-        # Read stderr in a daemon thread to prevent pipe buffer deadlock
         stderr_chunks: list[str] = []
         stderr_thread = threading.Thread(
             target=lambda: stderr_chunks.extend(proc.stderr),
@@ -128,7 +101,6 @@ def _extract_frames(
         )
         stderr_thread.start()
 
-        # Parse structured progress from stdout
         duration_us = duration * 1_000_000 if duration and duration > 0 else None
         for line in proc.stdout:
             if progress_callback is not None and duration_us:
@@ -145,7 +117,6 @@ def _extract_frames(
             stderr = "".join(stderr_chunks).strip()
             return "failed", name, 0, stderr[-200:] if len(stderr) > 200 else stderr
 
-        # Count how many frames were actually written
         extracted = list(output_dir.glob(f"{stem}_*.{fmt}"))
         return "ok", name, len(extracted), None
 
@@ -156,89 +127,33 @@ def _extract_frames(
 
 
 def _check_ffmpeg() -> bool:
-    """Return True if ffmpeg is available on PATH."""
     return shutil.which("ffmpeg") is not None
 
 
-@click.command("extract-frames")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option(
-    "--keyframes",
-    "-k",
-    type=float,
-    default=None,
-    help="Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10).",
-)
-@click.option(
-    "--format",
-    "-F",
-    "fmt",
-    type=click.Choice(sorted(VALID_FRAME_FORMATS), case_sensitive=False),
-    default=None,
-    help="Output image format (default: jpg).",
-)
-@workers_option()
-@dry_run_option(help="Preview what would be done without extracting frames.")
-def cmd(
+def extract_frames(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    keyframes: float | None,
-    fmt: str | None,
-    workers: int | None,
-    dry_run: bool,
-) -> None:
-    """Extract keyframes from video files using ffmpeg.
+    from_dirs: str,
+    to: str,
+    keyframes: float = 10.0,
+    fmt: str = "jpg",
+    workers: int | None = None,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> ExtractFramesResult:
+    """Extract keyframes from video files using ffmpeg."""
+    if keyframes <= 0:
+        raise InputError("keyframes must be a positive number")
+    if not from_dirs:
+        raise InputError("from_dirs is required")
+    if not to:
+        raise InputError("to is required")
 
-    Reads video files from one or more source folders and extracts
-    keyframes (I-frames) to a destination folder. Each video produces
-    a set of numbered images named as
-    ``{video_stem}_{frame_number}.{format}``.
-
-    Only I-frames are decoded, which avoids interpolated or blurry
-    frames and produces the sharpest possible output. The --keyframes
-    option sets the minimum interval between extracted frames: with
-    the default of 10, at most one keyframe every 10 seconds is kept.
-    Lower values produce more frames, higher values produce fewer.
-
-    Supported video formats: .mp4, .mkv, .avi, .mov, .webm, .flv,
-    .wmv, .m4v.
-
-    Can be invoked with just a config file, just CLI options, or both.
-    When both are provided, CLI options override config file values.
-
-    \b
-    Examples:
-
-        dtst extract-frames -d ./project --from videos --to frames
-        dtst extract-frames -d ./project --from videos --to frames --keyframes 5
-        dtst extract-frames -d ./project --from videos --to frames --keyframes 30 --format png
-        dtst extract-frames config.yaml
-        dtst extract-frames config.yaml --keyframes 20 --dry-run
-    """
-    if keyframes is not None and keyframes <= 0:
-        raise click.ClickException("--keyframes must be a positive number")
-
-    if from_dirs is None:
-        raise click.ClickException(
-            "--from is required (or set 'extract_frames.from' in config)"
-        )
-    if to is None:
-        raise click.ClickException(
-            "--to is required (or set 'extract_frames.to' in config)"
-        )
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    keyframes = keyframes if keyframes is not None else 10.0
-    fmt = fmt or "jpg"
 
     if not _check_ffmpeg():
-        raise click.ClickException(
+        raise InputError(
             "ffmpeg is not installed or not on PATH. Install it with: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         )
 
@@ -247,7 +162,7 @@ def cmd(
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
+        raise InputError(
             f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
         )
 
@@ -258,7 +173,7 @@ def cmd(
         videos.extend(found)
 
     if not videos:
-        raise click.ClickException(
+        raise InputError(
             f"No video files found in: {', '.join(str(d) for d in input_dirs)}"
         )
 
@@ -275,15 +190,21 @@ def cmd(
     )
 
     if dry_run:
-        click.echo(f"\nDry run -- would extract keyframes from {len(videos):,} videos")
-        click.echo(f"  Min interval: {keyframes}s")
-        click.echo(f"  Format: {fmt}")
-        click.echo(f"  Output: {output_dir}")
-        return
+        return ExtractFramesResult(
+            processed=0,
+            frames_extracted=0,
+            skipped=0,
+            failed=0,
+            output_dir=output_dir,
+            dry_run=True,
+            total_videos=len(videos),
+            keyframes=keyframes,
+            fmt=fmt,
+            elapsed=0.0,
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Probe durations upfront so we can compute per-video progress
     logger.info("Probing video durations...")
     durations: dict[str, float | None] = {}
     for video_path in videos:
@@ -300,7 +221,6 @@ def cmd(
         for video_path in videos
     ]
 
-    # Shared progress state updated by worker threads
     _progress: dict[str, float] = {}
     _progress_lock = threading.Lock()
 
@@ -317,7 +237,8 @@ def cmd(
     with logging_redirect_tqdm():
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             all_futures = {
-                executor.submit(_extract_frames, w, _on_progress): w for w in work
+                executor.submit(_extract_frames_worker, w, _on_progress): w
+                for w in work
             }
             done_futures: set = set()
             total_videos = len(all_futures)
@@ -326,6 +247,7 @@ def cmd(
                 desc="Extracting keyframes",
                 unit="video",
                 bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}{postfix}]",
+                disable=not progress,
             ) as pbar:
                 try:
                     prev_frac = 0.0
@@ -357,11 +279,8 @@ def cmd(
                                 )
                             with _progress_lock:
                                 _progress.pop(video_path_s, None)
-                            pbar.update(0)  # force refresh after postfix update
+                            pbar.update(0)
 
-                        # Smoothly advance the bar: completed videos
-                        # count as 1.0, active ones contribute their
-                        # current fraction (0..1).
                         with _progress_lock:
                             active_frac = sum(p / 100.0 for p in _progress.values())
                         current = len(done_futures) + active_frac
@@ -384,12 +303,15 @@ def cmd(
                     executor.shutdown(wait=False, cancel_futures=True)
                     raise
 
-    elapsed = time.monotonic() - start_time
-
-    click.echo("\nExtract-frames complete!")
-    click.echo(f"  Processed: {ok_count:,} videos")
-    click.echo(f"  Frames extracted: {total_frames:,}")
-    click.echo(f"  Skipped (existing): {skipped_count:,}")
-    click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return ExtractFramesResult(
+        processed=ok_count,
+        frames_extracted=total_frames,
+        skipped=skipped_count,
+        failed=failed_count,
+        output_dir=output_dir,
+        dry_run=False,
+        total_videos=len(videos),
+        keyframes=keyframes,
+        fmt=fmt,
+        elapsed=time.monotonic() - start_time,
+    )

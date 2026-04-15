@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst extract-classes``."""
+
 from __future__ import annotations
 
 import json
@@ -6,18 +8,10 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
-
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
 from dtst.executor import run_pool
-from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
+from dtst.files import find_images, resolve_dirs, resolve_workers
+from dtst.results import ExtractClassesResult
 from dtst.sidecar import read_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)
@@ -26,7 +20,6 @@ logger = logging.getLogger(__name__)
 def _shift_classes(
     classes: dict, crop_x1: int, crop_y1: int, img_w: int, img_h: int
 ) -> dict:
-    """Shift bounding-box coordinates by the crop offset and clamp to new image size."""
     shifted: dict[str, list[dict]] = {}
     for cls, detections in classes.items():
         shifted[cls] = []
@@ -45,12 +38,6 @@ def _shift_classes(
 def _process_image(
     args: tuple,
 ) -> tuple[str, str, int, list[tuple[str, str, dict]], str | None]:
-    """Top-level worker function for ProcessPoolExecutor.
-
-    Returns ``(status, filename, crop_count, outputs, error_message)``.
-    Each entry in *outputs* is ``(out_name, class_name, shifted_classes)``.
-    Status is one of ``"ok"``, ``"no_detections"``, ``"failed"``.
-    """
     (
         input_path_s,
         output_dir_s,
@@ -80,7 +67,6 @@ def _process_image(
         if not detections:
             return "no_detections", name, 0, [], None
 
-        # Count detections per class for naming
         class_counts: dict[str, int] = {}
         for cls, _ in detections:
             class_counts[cls] = class_counts.get(cls, 0) + 1
@@ -149,96 +135,38 @@ def _process_image(
         return "failed", name, 0, [], str(e)
 
 
-@click.command("extract-classes")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option(
-    "--classes",
-    "-c",
-    type=str,
-    default=None,
-    help="Comma-separated class names to extract (must match classes in sidecar data).",
-)
-@click.option(
-    "--margin",
-    type=float,
-    default=None,
-    help="Margin ratio added around the bounding box, based on the larger side (default: 0).",
-)
-@click.option(
-    "--square",
-    is_flag=True,
-    help="Extend the shorter side of the bounding box to match the larger side.",
-)
-@click.option(
-    "--min-score",
-    type=float,
-    default=None,
-    help="Minimum detection confidence score to include (default: 0).",
-)
-@click.option(
-    "--skip-partial",
-    is_flag=True,
-    help="Skip detections whose crop extends beyond the image boundary after applying --square and --margin.",
-)
-@workers_option()
-@dry_run_option(help="Preview what would be extracted without writing files.")
-def cmd(
+def extract_classes(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    classes: str | None,
-    margin: float | None,
-    square: bool,
-    min_score: float | None,
-    skip_partial: bool,
-    workers: int | None,
-    dry_run: bool,
-) -> None:
-    """Extract image crops from class detection bounding boxes.
-
-    Reads class detections from sidecar JSON files (produced by
-    ``dtst detect``) and crops the corresponding regions from each
-    image. Supports expanding the bounding box with a margin ratio
-    and squaring the crop.
-
-    \b
-    Examples:
-
-        dtst extract-classes config.yaml
-        dtst extract-classes config.yaml --classes flower --square --margin 0.1
-        dtst extract-classes -d ./dahlias --from images --to flowers --classes flower
-        dtst extract-classes config.yaml --min-score 0.5 --skip-partial
-    """
+    from_dirs: str,
+    to: str,
+    classes: str,
+    margin: float = 0.0,
+    square: bool = False,
+    min_score: float = 0.0,
+    skip_partial: bool = False,
+    workers: int | None = None,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> ExtractClassesResult:
+    """Extract image crops from class-detection bounding boxes."""
     if not from_dirs:
-        raise click.ClickException(
-            "--from is required (or set 'extract_classes.from' in config)"
-        )
+        raise InputError("from_dirs is required")
     if not to:
-        raise click.ClickException(
-            "--to is required (or set 'extract_classes.to' in config)"
-        )
+        raise InputError("to is required")
     if not classes:
-        raise click.ClickException(
-            "--classes is required (or set 'extract_classes.classes' in config)"
-        )
+        raise InputError("classes is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     classes_list = [c.strip() for c in classes.split(",") if c.strip()]
     working = (working_dir or Path(".")).resolve()
-    margin = margin if margin is not None else 0.0
-    min_score = min_score if min_score is not None else 0.0
 
     input_dirs = resolve_dirs(working, dirs_list)
     output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
+        raise InputError(
             f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
         )
 
@@ -249,11 +177,8 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(
-            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
-        )
+        raise InputError(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
-    # Pre-read sidecars and filter to images that have class detections
     work_items: list[tuple[Path, dict]] = []
     no_sidecar = 0
     for img_path in images:
@@ -269,10 +194,11 @@ def cmd(
         work_items.append((img_path, classes_data))
 
     if not work_items:
-        raise click.ClickException(
+        raise InputError(
             f"No images with detections for classes [{', '.join(classes_list)}] found"
         )
 
+    num_workers = resolve_workers(workers)
     classes_label = ", ".join(classes_list)
     margin_label = f"{margin:.1%}" if margin else "none"
     logger.info(
@@ -282,7 +208,7 @@ def cmd(
         margin_label,
         square,
         min_score,
-        resolve_workers(workers),
+        num_workers,
     )
 
     if dry_run:
@@ -292,13 +218,18 @@ def cmd(
                 total_dets += sum(
                     1 for d in classes_data.get(cls, []) if d["score"] >= min_score
                 )
-        click.echo(
-            f"Dry run: would extract {total_dets} crops from {len(work_items)} images"
+        return ExtractClassesResult(
+            processed=len(work_items),
+            crops_extracted=0,
+            no_detections=no_sidecar,
+            failed=0,
+            output_dir=output_dir,
+            dry_run=True,
+            dry_run_dets=total_dets,
+            elapsed=0.0,
         )
-        return
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    num_workers = resolve_workers(workers)
 
     work = [
         (
@@ -315,7 +246,6 @@ def cmd(
     ]
 
     start_time = time.monotonic()
-    ok_count = 0
     total_crops = 0
 
     def handle(result, work_item):
@@ -350,17 +280,15 @@ def cmd(
         unit="image",
         on_result=handle,
         postfix_keys=("ok", "nodet", "fail"),
+        progress=progress,
     )
-    ok_count = counts.get("ok", 0)
-    no_det_count = no_sidecar + counts.get("nodet", 0)
-    failed_count = counts.get("fail", 0)
 
-    elapsed = time.monotonic() - start_time
-
-    click.echo("\nExtract classes complete!")
-    click.echo(f"  Processed: {ok_count:,}")
-    click.echo(f"  Crops extracted: {total_crops:,}")
-    click.echo(f"  No detections: {no_det_count:,}")
-    click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return ExtractClassesResult(
+        processed=counts.get("ok", 0),
+        crops_extracted=total_crops,
+        no_detections=no_sidecar + counts.get("nodet", 0),
+        failed=counts.get("fail", 0),
+        output_dir=output_dir,
+        dry_run=False,
+        elapsed=time.monotonic() - start_time,
+    )

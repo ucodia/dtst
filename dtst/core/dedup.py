@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst dedup``."""
+
 from __future__ import annotations
 
 import logging
@@ -6,18 +8,13 @@ from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
 from dtst.executor import run_pool
 from dtst.files import find_images, resolve_workers
+from dtst.results import DedupResult
 from dtst.sidecar import read_all_sidecars, sidecar_path
 
 logger = logging.getLogger(__name__)
@@ -65,111 +62,71 @@ class _UnionFind:
         return result
 
 
-@click.command("dedup")
-@config_argument
-@working_dir_option()
-@click.option(
-    "--from",
-    "from_dir",
-    type=str,
-    default=None,
-    help="Folder name to deduplicate within the working directory.",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Subfolder name for duplicate images.",
-    show_default="duplicated",
-)
-@click.option(
-    "--threshold",
-    "-t",
-    type=int,
-    default=None,
-    help="Phash hamming distance threshold for near-duplicate detection.",
-    show_default="8",
-)
-@workers_option()
-@click.option(
-    "--clear",
-    is_flag=True,
-    help="Restore all deduplicated images back to the source folder.",
-)
-@dry_run_option(help="Show what would be deduplicated without moving anything.")
-@click.option(
-    "--prefer-upscaled",
-    is_flag=True,
-    help="Prefer upscaled images over originals when deduplicating.",
-)
-def cmd(
+def dedup(
+    *,
     working_dir: Path | None,
-    from_dir: str | None,
-    to: str | None,
-    threshold: int | None,
-    workers: int | None,
-    clear: bool,
-    dry_run: bool,
-    prefer_upscaled: bool,
-) -> None:
-    """Deduplicate images by perceptual hash similarity.
-
-    Groups images by phash hamming distance and keeps the best image
-    from each duplicate group. By default, original (non-upscaled)
-    images are preferred; use --prefer-upscaled to reverse this. Within
-    each preference tier, the winner is chosen by resolution
-    (width x height), then file size, then blur sharpness. Losers are
-    moved to a duplicated/ subdirectory within the source folder
-    (configurable with --to).
-
-    Requires phash sidecar data from ``dtst analyze --metrics phash``. Blur
-    scores (from ``dtst analyze --metrics blur``) are used as a tiebreaker
-    when available.
-
-    \b
-    Examples:
-      dtst dedup -d ./project --from faces
-      dtst dedup -d ./project --from faces --threshold 4
-      dtst dedup -d ./project --from faces --to my-dupes
-      dtst dedup config.yaml --dry-run
-      dtst dedup -d ./project --from faces --clear
-    """
+    from_dir: str,
+    to: str = "duplicated",
+    threshold: int = 8,
+    workers: int | None = None,
+    clear: bool = False,
+    dry_run: bool = False,
+    prefer_upscaled: bool = False,
+    progress: bool = True,
+) -> DedupResult:
+    """Deduplicate images by perceptual hash similarity."""
     t0 = time.time()
 
-    if from_dir is None:
-        raise click.ClickException("--from is required (or set 'dedup.from' in config)")
-    to = to or "duplicated"
-    threshold = threshold if threshold is not None else 8
+    if not from_dir:
+        raise InputError("from_dir is required")
+
     working = (working_dir or Path(".")).resolve()
     source_dir = working / from_dir
     duplicated_dir = source_dir / to
 
     if not source_dir.is_dir():
-        raise click.ClickException(f"Source directory not found: {source_dir}")
+        raise InputError(f"Source directory not found: {source_dir}")
 
-    workers = resolve_workers(workers)
-
-    # --- Clear mode ----------------------------------------------------------
+    num_workers = resolve_workers(workers)
 
     if clear:
         if not duplicated_dir.is_dir():
-            click.echo("Nothing to restore (no duplicated/ directory found).")
-            return
+            return DedupResult(
+                mode="restore",
+                message="Nothing to restore (no duplicated/ directory found).",
+                source_dir=source_dir,
+                duplicated_dir=duplicated_dir,
+                elapsed=time.time() - t0,
+            )
 
         dup_images = find_images(duplicated_dir)
         if not dup_images:
-            click.echo("Nothing to restore (duplicated/ is empty).")
-            return
+            return DedupResult(
+                mode="restore",
+                message="Nothing to restore (duplicated/ is empty).",
+                source_dir=source_dir,
+                duplicated_dir=duplicated_dir,
+                elapsed=time.time() - t0,
+            )
 
         if dry_run:
-            click.echo(
-                f"\nDry run -- would restore {len(dup_images):,} images to {source_dir}"
+            return DedupResult(
+                mode="restore",
+                total_losers=len(dup_images),
+                dry_run=True,
+                source_dir=source_dir,
+                duplicated_dir=duplicated_dir,
+                elapsed=time.time() - t0,
             )
-            return
 
         restored = 0
         with logging_redirect_tqdm():
-            with tqdm(total=len(dup_images), desc="Restoring", unit="image") as pbar:
+            with tqdm(
+                total=len(dup_images),
+                desc="Restoring",
+                unit="image",
+                disable=not progress,
+            ) as pbar:
                 for path in dup_images:
                     dest = source_dir / path.name
                     if dest.exists():
@@ -189,16 +146,17 @@ def cmd(
         except OSError:
             pass
 
-        click.echo("\nRestore complete!")
-        click.echo(f"  Restored: {restored:,}")
-        click.echo(f"  Source: {source_dir}")
-        return
-
-    # --- Dedup mode ----------------------------------------------------------
+        return DedupResult(
+            mode="restore",
+            restored=restored,
+            source_dir=source_dir,
+            duplicated_dir=duplicated_dir,
+            elapsed=time.time() - t0,
+        )
 
     images = find_images(source_dir)
     if not images:
-        raise click.ClickException(f"No images found in: {source_dir}")
+        raise InputError(f"No images found in: {source_dir}")
 
     logger.info("Found %d images in %s", len(images), source_dir)
 
@@ -214,8 +172,13 @@ def cmd(
             logger.warning("No phash data for %s, skipping", img.name)
 
     if len(has_phash) < 2:
-        click.echo("Fewer than 2 images with phash data. Nothing to deduplicate.")
-        return
+        return DedupResult(
+            mode="noop",
+            message="Fewer than 2 images with phash data. Nothing to deduplicate.",
+            source_dir=source_dir,
+            duplicated_dir=duplicated_dir,
+            elapsed=time.time() - t0,
+        )
 
     logger.info("Reading image metadata for %d images", len(has_phash))
     image_info: dict[Path, tuple[int, int, int]] = {}
@@ -234,19 +197,24 @@ def cmd(
         ProcessPoolExecutor,
         _read_image_info,
         work,
-        max_workers=workers,
+        max_workers=num_workers,
         desc="Reading metadata",
         unit="image",
         on_result=handle,
+        progress=progress,
     )
     errors = counts.get("fail", 0)
 
     valid_images = [p for p in has_phash if p in image_info]
     if len(valid_images) < 2:
-        click.echo(
-            "Fewer than 2 readable images with phash data. Nothing to deduplicate."
+        return DedupResult(
+            mode="noop",
+            message="Fewer than 2 readable images with phash data. Nothing to deduplicate.",
+            errors=errors,
+            source_dir=source_dir,
+            duplicated_dir=duplicated_dir,
+            elapsed=time.time() - t0,
         )
-        return
 
     import imagehash
 
@@ -267,9 +235,14 @@ def cmd(
     dup_groups = {root: members for root, members in groups.items() if len(members) > 1}
 
     if not dup_groups:
-        elapsed = time.time() - t0
-        click.echo(f"No duplicates found among {n:,} images ({elapsed:.1f}s)")
-        return
+        return DedupResult(
+            mode="noop",
+            message=f"No duplicates found among {n:,} images",
+            kept=n,
+            source_dir=source_dir,
+            duplicated_dir=duplicated_dir,
+            elapsed=time.time() - t0,
+        )
 
     total_duplicates = sum(len(m) - 1 for m in dup_groups.values())
     logger.info(
@@ -302,20 +275,30 @@ def cmd(
 
     if dry_run:
         kept = len(valid_images) - len(losers)
-        click.echo(
-            f"\nDry run -- would keep {kept:,}, move {len(losers):,} duplicates from {len(dup_groups):,} groups"
+        preview = [(p.name, r) for p, r in losers[:10]]
+        return DedupResult(
+            mode="dedup",
+            groups=len(dup_groups),
+            kept=kept,
+            total_losers=len(losers),
+            losers_preview=preview,
+            dry_run=True,
+            errors=errors,
+            source_dir=source_dir,
+            duplicated_dir=duplicated_dir,
+            elapsed=time.time() - t0,
         )
-        for path, reason in losers[:10]:
-            click.echo(f"  {path.name} ({reason})")
-        if len(losers) > 10:
-            click.echo(f"  ... and {len(losers) - 10:,} more")
-        return
 
     duplicated_dir.mkdir(parents=True, exist_ok=True)
     moved = 0
 
     with logging_redirect_tqdm():
-        with tqdm(total=len(losers), desc="Moving duplicates", unit="image") as pbar:
+        with tqdm(
+            total=len(losers),
+            desc="Moving duplicates",
+            unit="image",
+            disable=not progress,
+        ) as pbar:
             for path, reason in losers:
                 try:
                     dest = duplicated_dir / path.name
@@ -329,13 +312,14 @@ def cmd(
                     logger.error("Failed to move %s: %s", path.name, e)
                 pbar.update(1)
 
-    elapsed = time.time() - t0
-    click.echo("\nDedup complete!")
-    click.echo(f"  Groups: {len(dup_groups):,}")
-    click.echo(f"  Kept: {len(valid_images) - moved:,}")
-    click.echo(f"  Moved: {moved:,}")
-    if errors > 0:
-        click.echo(f"  Errors: {errors:,}")
-    click.echo(f"  Source: {source_dir}")
-    click.echo(f"  Duplicates: {duplicated_dir}")
-    click.echo(f"  Time: {elapsed:.1f}s")
+    return DedupResult(
+        mode="dedup",
+        groups=len(dup_groups),
+        kept=len(valid_images) - moved,
+        moved=moved,
+        errors=errors,
+        total_losers=len(losers),
+        source_dir=source_dir,
+        duplicated_dir=duplicated_dir,
+        elapsed=time.time() - t0,
+    )

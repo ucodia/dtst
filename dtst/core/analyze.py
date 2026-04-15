@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst analyze``."""
+
 from __future__ import annotations
 
 import logging
@@ -5,18 +7,12 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
 from dtst.executor import run_pool
 from dtst.files import gather_images, resolve_workers
+from dtst.results import AnalyzeResult
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -67,53 +63,22 @@ _CPU_COMPUTE_FNS = {
 }
 
 
-@click.command("analyze")
-@config_argument
-@from_dirs_option()
-@click.option(
-    "--metrics",
-    "-m",
-    type=str,
-    default=None,
-    help="Comma-separated metric names (e.g. 'phash,blur,musiq,clipiqa').",
-)
-@click.option(
-    "--force",
-    is_flag=True,
-    default=False,
-    help="Recompute all metrics even if sidecar data already exists.",
-)
-@working_dir_option()
-@workers_option(help="Number of parallel workers for CPU metrics (default: CPU count).")
-@click.option(
-    "--clear", is_flag=True, help="Remove all sidecar files from source folders."
-)
-@dry_run_option(help="Preview what would be computed without writing sidecars.")
-def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
-    """Compute image metrics and write JSON sidecars.
-
-    Analyzes images in the source folders and writes per-image sidecar
-    JSON files containing the requested metrics. Sidecars are merged
-    incrementally — running with different metrics accumulates results.
-
-    CPU metrics: phash, blur.
-    IQA metrics (GPU-accelerated): any metric from IQA-PyTorch (e.g.
-    musiq, clipiqa, topiq_nr, dbcnn, hyperiqa, niqe, brisque).
-
-    \b
-    Examples:
-      dtst analyze --from raw --metrics phash,blur -d ./my-dataset
-      dtst analyze config.yaml --metrics phash
-      dtst analyze --from raw --metrics musiq,clipiqa -d ./my-dataset
-      dtst analyze --from raw --metrics phash,blur,musiq --force
-      dtst analyze --from raw --clear -d ./my-dataset
-    """
+def analyze(
+    *,
+    working_dir: Path | None,
+    from_dirs: str,
+    metrics: str | None = None,
+    force: bool = False,
+    workers: int | None = None,
+    clear: bool = False,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> AnalyzeResult:
+    """Compute image metrics and write per-image sidecar JSON files."""
     t0 = time.time()
 
-    if from_dirs is None:
-        raise click.ClickException(
-            "--from is required (or set 'analyze.from' in config)"
-        )
+    if not from_dirs:
+        raise InputError("from_dirs is required")
     metrics_list = (
         [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
     )
@@ -126,12 +91,24 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
         ]
 
         if not sidecars:
-            click.echo("No sidecar files found. Nothing to clear.")
-            return
+            return AnalyzeResult(
+                analyzed=0,
+                skipped=0,
+                failed=0,
+                cleared=0,
+                dry_run=dry_run,
+                elapsed=time.time() - t0,
+            )
 
         if dry_run:
-            click.echo(f"[dry-run] Would remove {len(sidecars):,} sidecar files")
-            return
+            return AnalyzeResult(
+                analyzed=0,
+                skipped=0,
+                failed=0,
+                cleared=len(sidecars),
+                dry_run=True,
+                elapsed=time.time() - t0,
+            )
 
         removed = 0
         for sc in sidecars:
@@ -141,20 +118,25 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
             except OSError as e:
                 logger.error("Failed to remove %s: %s", sc.name, e)
 
-        elapsed = time.time() - t0
-        click.echo(f"Removed {removed:,} sidecar files ({elapsed:.1f}s)")
-        return
+        return AnalyzeResult(
+            analyzed=0,
+            skipped=0,
+            failed=0,
+            cleared=removed,
+            dry_run=False,
+            elapsed=time.time() - t0,
+        )
 
     if not metrics_list:
-        raise click.ClickException(
-            "At least one metric is required via --metrics (e.g. --metrics phash,blur,musiq)."
+        raise InputError(
+            "At least one metric is required via metrics (e.g. phash,blur,musiq)."
         )
 
     iqa_metrics = _get_iqa_metrics()
     known_metrics = CPU_METRICS | iqa_metrics
     unknown = [m for m in metrics_list if m not in known_metrics]
     if unknown:
-        raise click.ClickException(
+        raise InputError(
             f"Unknown metric(s): {', '.join(unknown)}. "
             f"CPU metrics: {', '.join(sorted(CPU_METRICS))}. "
             f"IQA metrics: use any name from pyiqa.list_models()."
@@ -168,12 +150,12 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
 
         fr_metrics = validate_iqa_metrics(requested_iqa)
         if fr_metrics:
-            raise click.ClickException(
+            raise InputError(
                 f"Full-reference (FR) metrics are not supported: {', '.join(fr_metrics)}. "
                 f"The analyze command only supports no-reference (NR) metrics."
             )
 
-    workers = resolve_workers(workers)
+    num_workers = resolve_workers(workers)
 
     logger.info(
         "Found %d images in %s, metrics: %s",
@@ -194,25 +176,32 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
             skipped += 1
 
     if dry_run:
-        click.echo(
-            f"[dry-run] Would analyze {len(needs_work)} images, skip {skipped} (already computed)"
-        )
         for img, pending in needs_work.items():
-            click.echo(f"  {img.name}: {', '.join(pending)}")
-        return
+            logger.debug("%s: %s", img.name, ", ".join(pending))
+        return AnalyzeResult(
+            analyzed=len(needs_work),
+            skipped=skipped,
+            failed=0,
+            cleared=0,
+            dry_run=True,
+            elapsed=time.time() - t0,
+        )
 
     if not needs_work:
-        click.echo(
-            f"All {len(all_images)} images already have requested metrics. Nothing to do."
+        return AnalyzeResult(
+            analyzed=0,
+            skipped=skipped,
+            failed=0,
+            cleared=0,
+            dry_run=False,
+            elapsed=time.time() - t0,
         )
-        return
 
     logger.info("Analyzing %d images (%d skipped)", len(needs_work), skipped)
 
     results: dict[Path, dict] = {img: {} for img in needs_work}
     errors = 0
 
-    # --- CPU metrics via ProcessPoolExecutor ---
     for metric_name in requested_cpu:
         compute_fn = _CPU_COMPUTE_FNS[metric_name]
         metric_images = [
@@ -238,15 +227,15 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
             ProcessPoolExecutor,
             compute_fn,
             work,
-            max_workers=workers,
+            max_workers=num_workers,
             desc=f"Computing {metric_name}",
             unit="image",
             on_result=handle,
             postfix_keys=("ok", "fail"),
+            progress=progress,
         )
         errors += counts.get("fail", 0)
 
-    # --- IQA metrics via batched GPU inference ---
     if requested_iqa:
         iqa_images_by_metric: dict[str, list[Path]] = {}
         for metric_name in requested_iqa:
@@ -278,7 +267,11 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
             write_sidecar(img, {"metrics": merged_metrics})
             written += 1
 
-    elapsed = time.time() - t0
-    click.echo(
-        f"Done: {written} analyzed, {skipped} skipped, {errors} failed ({elapsed:.1f}s)"
+    return AnalyzeResult(
+        analyzed=written,
+        skipped=skipped,
+        failed=errors,
+        cleared=0,
+        dry_run=False,
+        elapsed=time.time() - t0,
     )

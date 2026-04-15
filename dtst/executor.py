@@ -32,6 +32,7 @@ def run_pool(
     on_result: Callable[[R, W], str | None],
     postfix_keys: Iterable[str] | None = None,
     bar_format: str | None = None,
+    progress: bool = True,
 ) -> dict[str, int]:
     """Run ``worker_fn`` over ``work_items`` with a tqdm-tracked pool.
 
@@ -47,6 +48,9 @@ def run_pool(
     before re-raising.  The whole run is wrapped in
     ``logging_redirect_tqdm()`` so log lines do not collide with the bar.
 
+    Set ``progress=False`` to silence the tqdm bar — useful for library
+    callers that want no terminal output.
+
     Returns the final counter dict so callers can build their summary.
     """
     counts: Counter[str] = Counter()
@@ -58,7 +62,13 @@ def run_pool(
     with logging_redirect_tqdm():
         with executor_cls(max_workers=max_workers) as executor:
             futures = {executor.submit(worker_fn, w): w for w in work_items}
-            with tqdm(total=len(futures), desc=desc, unit=unit, **tqdm_kwargs) as pbar:
+            with tqdm(
+                total=len(futures),
+                desc=desc,
+                unit=unit,
+                disable=not progress,
+                **tqdm_kwargs,
+            ) as pbar:
                 try:
                     for future in as_completed(futures):
                         work_item = futures[future]

@@ -1,3 +1,5 @@
+"""Library-layer implementation of ``dtst upscale``."""
+
 from __future__ import annotations
 
 import logging
@@ -5,23 +7,16 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import click
 import numpy as np
 import torch
 from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
 from dtst.embeddings.base import detect_device
-from dtst.files import build_save_kwargs, find_images, format_elapsed, resolve_dirs
+from dtst.errors import InputError
+from dtst.files import build_save_kwargs, find_images, resolve_dirs
+from dtst.results import UpscaleResult
 from dtst.sidecar import (
     EXCLUDE_METRICS,
     copy_sidecar,
@@ -63,7 +58,7 @@ DENOISE_MODELS = {
 MODELS_DIR = Path.home() / ".cache" / "dtst" / "models"
 
 
-def _download_model(url: str, dest: Path) -> None:
+def _download_model(url: str, dest: Path, progress: bool = True) -> None:
     import requests
 
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +72,11 @@ def _download_model(url: str, dest: Path) -> None:
         with (
             open(tmp, "wb") as f,
             tqdm(
-                total=total, unit="B", unit_scale=True, desc="Downloading model"
+                total=total,
+                unit="B",
+                unit_scale=True,
+                desc="Downloading model",
+                disable=not progress,
             ) as pbar,
         ):
             for chunk in resp.iter_content(chunk_size=1024 * 1024):
@@ -90,12 +89,12 @@ def _download_model(url: str, dest: Path) -> None:
         raise
 
 
-def _resolve_model_path(model: str | None, scale: int) -> Path:
+def _resolve_model_path(model: str | None, scale: int, progress: bool = True) -> Path:
     if model is None:
         preset = MODEL_PRESETS[scale]
         dest = MODELS_DIR / preset["filename"]
         if not dest.exists():
-            _download_model(preset["url"], dest)
+            _download_model(preset["url"], dest, progress=progress)
         return dest
 
     path = Path(model)
@@ -106,17 +105,17 @@ def _resolve_model_path(model: str | None, scale: int) -> Path:
         preset = PRESET_BY_NAME[model]
         dest = MODELS_DIR / preset["filename"]
         if not dest.exists():
-            _download_model(preset["url"], dest)
+            _download_model(preset["url"], dest, progress=progress)
         return dest
 
-    raise click.ClickException(
+    raise InputError(
         f"Model not found: {model!r}. "
         f"Provide a path to a .pth file or use a preset: {sorted(PRESET_BY_NAME)}"
     )
 
 
 def _load_denoise_model(
-    denoise: float, device: torch.device
+    denoise: float, device: torch.device, progress: bool = True
 ) -> tuple[torch.nn.Module, int]:
     import spandrel
 
@@ -127,9 +126,9 @@ def _load_denoise_model(
     wdn_path = MODELS_DIR / wdn_info["filename"]
 
     if not general_path.exists():
-        _download_model(general_info["url"], general_path)
+        _download_model(general_info["url"], general_path, progress=progress)
     if not wdn_path.exists():
-        _download_model(wdn_info["url"], wdn_path)
+        _download_model(wdn_info["url"], wdn_path, progress=progress)
 
     logger.info("Loading denoise models (strength=%.2f) on %s", denoise, device)
 
@@ -197,130 +196,44 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
         return path, None, str(e)
 
 
-@click.command("upscale")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option(
-    "--scale",
-    "-s",
-    type=click.Choice(["2", "4"]),
-    default=None,
-    help="Upscale factor. Ignored when --model is provided (default: 4).",
-)
-@click.option(
-    "--model",
-    "-m",
-    type=str,
-    default=None,
-    help="Model preset name or path to a .pth file. Overrides --scale.",
-)
-@click.option(
-    "--tile-size",
-    "-t",
-    type=int,
-    default=None,
-    help="Tile size in pixels for processing; 0 disables tiling (default: 512).",
-)
-@click.option(
-    "--tile-pad",
-    type=int,
-    default=None,
-    help="Overlap padding between tiles in pixels (default: 32).",
-)
-@click.option(
-    "--format",
-    "-f",
-    "fmt",
-    type=click.Choice(["jpg", "png", "webp"]),
-    default=None,
-    help="Output image format. Default preserves the source format.",
-)
-@click.option(
-    "--quality",
-    "-q",
-    type=int,
-    default=None,
-    help="JPEG/WebP output quality, 1-100 (default: 95).",
-)
-@click.option(
-    "--denoise",
-    "-n",
-    type=float,
-    default=None,
-    help="Denoise strength 0.0-1.0. Lower preserves more texture. Only available at 4x.",
-)
-@workers_option(help="Number of threads for image preloading (default: 4).")
-@dry_run_option(help="Preview what would be written without processing.")
-def cmd(
+def upscale(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    scale: str | None,
-    model: str | None,
-    tile_size: int | None,
-    tile_pad: int | None,
-    fmt: str | None,
-    quality: int | None,
-    denoise: float | None,
-    workers: int | None,
-    dry_run: bool,
-) -> None:
-    """Upscale images using AI super-resolution models.
-
-    Reads images from one or more source folders and writes upscaled
-    copies to a destination folder. Uses spandrel to load PyTorch
-    super-resolution models (Real-ESRGAN, SwinIR, HAT, etc.).
-
-    By default uses a 4x Real-ESRGAN model. Use --scale to choose
-    between 2x and 4x upscaling, or --model to provide a custom
-    .pth weights file (scale is auto-detected from the model).
-
-    Use --denoise to control how much denoising is applied (4x only).
-    0.0 preserves the most texture, 1.0 applies full denoising.
-    This activates a lighter general-purpose model with controllable
-    denoise strength via weight interpolation.
-
-    Large images are processed in tiles to avoid GPU memory issues.
-    Adjust --tile-size to control memory usage (smaller = less VRAM).
-
-    \b
-    Examples:
-        dtst upscale -d ./project --from faces --to upscaled
-        dtst upscale -d ./project --from faces --to upscaled --scale 2
-        dtst upscale -d ./project --from faces --to upscaled --denoise 0.5
-        dtst upscale -d ./project --from faces --to upscaled --model ./custom.pth
-        dtst upscale config.yaml --dry-run
-    """
+    from_dirs: str,
+    to: str,
+    scale: int = 4,
+    model: str | None = None,
+    tile_size: int = 512,
+    tile_pad: int = 32,
+    fmt: str | None = None,
+    quality: int = 95,
+    denoise: float | None = None,
+    workers: int = 4,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> UpscaleResult:
+    """Upscale images using AI super-resolution models."""
     if not from_dirs:
-        raise click.ClickException(
-            "--from is required (or set 'upscale.from' in config)"
-        )
+        raise InputError("from_dirs is required")
     if not to:
-        raise click.ClickException("--to is required (or set 'upscale.to' in config)")
+        raise InputError("to is required")
+
+    if denoise is not None and scale != 4:
+        raise InputError("denoise is only available with 4x upscaling")
+    if denoise is not None and model is not None:
+        raise InputError("denoise is not compatible with model")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    scale_val = int(scale) if scale is not None else 4
-    tile_size = tile_size if tile_size is not None else 512
-    tile_pad = tile_pad if tile_pad is not None else 32
-    quality = quality if quality is not None else 95
-
-    if denoise is not None and scale_val != 4:
-        raise click.ClickException("--denoise is only available with 4x upscaling")
-    if denoise is not None and model is not None:
-        raise click.ClickException("--denoise is not compatible with --model")
 
     input_dirs = resolve_dirs(working, dirs_list)
     output_dir = working / to
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
-            f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
+        raise InputError(
+            f"Source director{'y' if len(missing) == 1 else 'ies'} not found: "
+            f"{', '.join(missing)}"
         )
 
     images: list[Path] = []
@@ -330,34 +243,37 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(
-            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
-        )
+        raise InputError(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
     from_label = ", ".join(str(d) for d in input_dirs)
-    num_workers = workers if workers is not None else 4
 
     if dry_run:
         if denoise is not None:
             model_label = f"realesr-general-x4v3 (denoise={denoise:.2f})"
         else:
-            model_path = _resolve_model_path(model, scale_val)
+            model_path = _resolve_model_path(model, scale, progress=progress)
             model_label = model_path.name
-        click.echo(f"\nDry run -- would upscale {len(images):,} images")
-        click.echo(f"  Model: {model_label}")
-        click.echo(f"  Source: {from_label}")
-        click.echo(f"  Output: {output_dir}")
-        return
+        return UpscaleResult(
+            ok=0,
+            failed=0,
+            scale=scale,
+            model_label=model_label,
+            output_dir=output_dir,
+            dry_run=True,
+            total_images=len(images),
+            from_label=from_label,
+            elapsed=0.0,
+        )
 
     device = torch.device(detect_device())
 
     if denoise is not None:
-        sr_model, actual_scale = _load_denoise_model(denoise, device)
+        sr_model, actual_scale = _load_denoise_model(denoise, device, progress=progress)
         model_label = f"realesr-general-x4v3 (denoise={denoise:.2f})"
     else:
         import spandrel
 
-        model_path = _resolve_model_path(model, scale_val)
+        model_path = _resolve_model_path(model, scale, progress=progress)
         logger.info("Loading model %s on %s", model_path.name, device)
         model_descriptor = spandrel.ModelLoader(device=device).load_from_file(
             model_path
@@ -386,10 +302,15 @@ def cmd(
     failed_count = 0
 
     with logging_redirect_tqdm():
-        with ThreadPoolExecutor(max_workers=num_workers) as loader:
+        with ThreadPoolExecutor(max_workers=workers) as loader:
             results_iter = loader.map(_load_and_preprocess, images)
 
-            with tqdm(total=len(images), desc="Upscaling", unit="image") as pbar:
+            with tqdm(
+                total=len(images),
+                desc="Upscaling",
+                unit="image",
+                disable=not progress,
+            ) as pbar:
                 for img_path, tensor, load_error in results_iter:
                     name = img_path.name
 
@@ -419,10 +340,9 @@ def cmd(
                         )
                         result_img = Image.fromarray(result_arr)
 
-                        if fmt is not None:
-                            out_name = img_path.stem + "." + fmt
-                        else:
-                            out_name = name
+                        out_name = (
+                            img_path.stem + "." + fmt if fmt is not None else name
+                        )
 
                         save_kwargs = build_save_kwargs(Path(out_name), quality=quality)
 
@@ -443,7 +363,7 @@ def cmd(
                     except torch.cuda.OutOfMemoryError:
                         failed_count += 1
                         logger.error(
-                            "GPU out of memory on %s -- try reducing --tile-size", name
+                            "GPU out of memory on %s -- try reducing tile_size", name
                         )
                     except Exception as e:
                         failed_count += 1
@@ -452,11 +372,14 @@ def cmd(
                     pbar.set_postfix(ok=ok_count, fail=failed_count)
                     pbar.update(1)
 
-    elapsed = time.monotonic() - start_time
-
-    click.echo("\nUpscale complete!")
-    click.echo(f"  Upscaled: {ok_count:,}")
-    click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Scale: {actual_scale}x ({model_label})")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return UpscaleResult(
+        ok=ok_count,
+        failed=failed_count,
+        scale=actual_scale,
+        model_label=model_label,
+        output_dir=output_dir,
+        dry_run=False,
+        total_images=len(images),
+        from_label=from_label,
+        elapsed=time.monotonic() - start_time,
+    )

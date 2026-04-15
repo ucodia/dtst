@@ -1,40 +1,31 @@
+"""Library-layer implementation of ``dtst select``."""
+
 from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import (
-    config_argument,
-    dry_run_option,
-    from_dirs_option,
-    to_dir_option,
-    working_dir_option,
-    workers_option,
-)
+from dtst.errors import InputError
+from dtst.executor import run_pool
 from dtst.files import (
     copy_image,
     find_images,
-    format_elapsed,
     move_image,
     resolve_dirs,
     resolve_workers,
 )
+from dtst.results import SelectResult
 from dtst.sidecar import read_sidecar
 
 logger = logging.getLogger(__name__)
 
 
 def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None]:
-    """Check image dimensions against all criteria.
-
-    Returns (status, filename, width, height, reject_reason_or_error).
-    Must be a top-level function for ProcessPoolExecutor.
-    """
     input_path_s, min_side, max_side, min_width, max_width, min_height, max_height = (
         args
     )
@@ -90,156 +81,39 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
         return "failed", name, 0, 0, str(e)
 
 
-@click.command("select")
-@config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
-@from_dirs_option()
-@to_dir_option()
-@click.option(
-    "--move", is_flag=True, help="Move images instead of copying (removes originals)."
-)
-@click.option(
-    "--min-side",
-    "-s",
-    type=int,
-    default=None,
-    help="Minimum largest side in pixels; images with max(w,h) below this are excluded.",
-)
-@click.option(
-    "--max-side",
-    type=int,
-    default=None,
-    help="Maximum largest side in pixels; images with max(w,h) above this are excluded.",
-)
-@click.option(
-    "--min-width",
-    type=int,
-    default=None,
-    help="Minimum width in pixels; narrower images are excluded.",
-)
-@click.option(
-    "--max-width",
-    type=int,
-    default=None,
-    help="Maximum width in pixels; wider images are excluded.",
-)
-@click.option(
-    "--min-height",
-    type=int,
-    default=None,
-    help="Minimum height in pixels; shorter images are excluded.",
-)
-@click.option(
-    "--max-height",
-    type=int,
-    default=None,
-    help="Maximum height in pixels; taller images are excluded.",
-)
-@click.option(
-    "--min-metric",
-    type=(str, float),
-    multiple=True,
-    default=(),
-    help="Minimum metric threshold (e.g. --min-metric blur 5). Can be repeated.",
-)
-@click.option(
-    "--max-metric",
-    type=(str, float),
-    multiple=True,
-    default=(),
-    help="Maximum metric threshold (e.g. --max-metric brisque 40). Can be repeated.",
-)
-@click.option(
-    "--max-detect",
-    type=(str, float),
-    multiple=True,
-    default=(),
-    help="Exclude images where detection score >= THRESHOLD (e.g. --max-detect microphone 0.5).",
-)
-@click.option(
-    "--min-detect",
-    type=(str, float),
-    multiple=True,
-    default=(),
-    help="Exclude images where detection score < THRESHOLD (e.g. --min-detect chair 0.3).",
-)
-@click.option(
-    "--source",
-    type=str,
-    default=None,
-    help="Comma-separated list of sources to include (e.g. 'serper,flickr'); checked against sidecar 'source' field.",
-)
-@click.option(
-    "--license",
-    "license_filter",
-    type=str,
-    default=None,
-    help="Comma-separated list of licenses to include (e.g. 'cc-by,none'); checked against sidecar 'license' field.",
-)
-@workers_option()
-@dry_run_option(help="Preview what would be selected without creating files.")
-def cmd(
+def select(
+    *,
     working_dir: Path | None,
-    from_dirs: str | None,
-    to: str | None,
-    move: bool,
-    min_side: int | None,
-    max_side: int | None,
-    min_width: int | None,
-    max_width: int | None,
-    min_height: int | None,
-    max_height: int | None,
-    min_metric: tuple[tuple[str, float], ...],
-    max_metric: tuple[tuple[str, float], ...],
-    max_detect: tuple[tuple[str, float], ...],
-    min_detect: tuple[tuple[str, float], ...],
-    source: str | None,
-    license_filter: str | None,
-    workers: int | None,
-    dry_run: bool,
-) -> None:
-    """Select images from source folders into a destination folder.
-
-    Copies (or moves with --move) images from one or more source folders
-    into a destination folder. When filter criteria are provided, only
-    images that pass all criteria are selected. Without criteria, all
-    images are selected.
-
-    Files that already exist in the destination (by name) are skipped.
-
-    Can be invoked with just a config file, just CLI options, or both.
-    When both are provided, CLI options override config file values.
-
-    \b
-    Examples:
-        dtst select -d ./project --from raw --to backup
-        dtst select -d ./project --from raw,extra --to combined
-        dtst select -d ./project --from faces --to curated --min-side 256
-        dtst select -d ./project --from faces --to curated --min-metric blur 5
-        dtst select -d ./project --from faces --to curated --min-metric blur 5 --min-metric musiq 60
-        dtst select -d ./project --from faces --to curated --max-metric brisque 40
-        dtst select -d ./project --from raw --to clean --max-detect microphone 0.5
-        dtst select -d ./project --from raw --to licensed --source serper,flickr
-        dtst select config.yaml --dry-run
-    """
+    from_dirs: str,
+    to: str,
+    move: bool = False,
+    min_side: int | None = None,
+    max_side: int | None = None,
+    min_width: int | None = None,
+    max_width: int | None = None,
+    min_height: int | None = None,
+    max_height: int | None = None,
+    min_metric: list[tuple[str, float]] | None = None,
+    max_metric: list[tuple[str, float]] | None = None,
+    max_detect: list[tuple[str, float]] | None = None,
+    min_detect: list[tuple[str, float]] | None = None,
+    source: list[str] | None = None,
+    license_filter: list[str] | None = None,
+    workers: int | None = None,
+    dry_run: bool = False,
+    progress: bool = True,
+) -> SelectResult:
+    """Select images from source folders into a destination folder."""
     if not from_dirs:
-        raise click.ClickException(
-            "--from is required (or set 'select.from' in config)"
-        )
+        raise InputError("from_dirs is required")
     if not to:
-        raise click.ClickException("--to is required (or set 'select.to' in config)")
+        raise InputError("to is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     working = (working_dir or Path(".")).resolve()
-    source_list = (
-        [s.strip().lower() for s in source.split(",") if s.strip()] if source else None
-    )
+    source_list = [s.strip().lower() for s in source] if source else None
     license_list = (
-        [lf.strip().lower() for lf in license_filter.split(",") if lf.strip()]
-        if license_filter
-        else None
+        [lf.strip().lower() for lf in license_filter] if license_filter else None
     )
     min_metric_list = list(min_metric) if min_metric else None
     max_metric_list = list(max_metric) if max_metric else None
@@ -251,8 +125,9 @@ def cmd(
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
-        raise click.ClickException(
-            f"Source director{'y' if len(missing) == 1 else 'ies'} not found: {', '.join(missing)}"
+        raise InputError(
+            f"Source director{'y' if len(missing) == 1 else 'ies'} not found: "
+            f"{', '.join(missing)}"
         )
 
     images: list[Path] = []
@@ -262,21 +137,12 @@ def cmd(
         images.extend(found)
 
     if not images:
-        raise click.ClickException(
-            f"No images found in: {', '.join(str(d) for d in input_dirs)}"
-        )
+        raise InputError(f"No images found in: {', '.join(str(d) for d in input_dirs)}")
 
     num_workers = resolve_workers(workers)
     has_dimension_criteria = any(
         v is not None
-        for v in (
-            min_side,
-            max_side,
-            min_width,
-            max_width,
-            min_height,
-            max_height,
-        )
+        for v in (min_side, max_side, min_width, max_width, min_height, max_height)
     )
     has_metric_criteria = min_metric_list is not None or max_metric_list is not None
     has_sidecar_criteria = source_list is not None or license_list is not None
@@ -289,48 +155,12 @@ def cmd(
     )
     transfer_label = "move" if move else "copy"
 
-    # --- Filter images -------------------------------------------------------
-
     rejects: dict[Path, str] = {}
     kept_set: set[Path] = set(images)
     failed = 0
 
     if has_criteria:
-        criteria_parts = []
-        for name, val in [
-            ("min_side", min_side),
-            ("max_side", max_side),
-            ("min_width", min_width),
-            ("max_width", max_width),
-            ("min_height", min_height),
-            ("max_height", max_height),
-        ]:
-            if val is not None:
-                criteria_parts.append(f"{name}={val}")
-        if min_metric_list:
-            for metric_name, threshold in min_metric_list:
-                criteria_parts.append(f"min_metric({metric_name})={threshold}")
-        if max_metric_list:
-            for metric_name, threshold in max_metric_list:
-                criteria_parts.append(f"max_metric({metric_name})={threshold}")
-        if max_detect_list:
-            for cls, threshold in max_detect_list:
-                criteria_parts.append(f"max_detect({cls})={threshold}")
-        if min_detect_list:
-            for cls, threshold in min_detect_list:
-                criteria_parts.append(f"min_detect({cls})={threshold}")
-        if source_list:
-            criteria_parts.append(f"source={','.join(source_list)}")
-        if license_list:
-            criteria_parts.append(f"license={','.join(license_list)}")
-        logger.info("Filtering %d images (%s)", len(images), ", ".join(criteria_parts))
-
-        # Dimension check (parallel, CPU-bound)
         if has_dimension_criteria:
-            from concurrent.futures import ProcessPoolExecutor
-
-            from dtst.executor import run_pool
-
             work = [
                 (
                     str(p),
@@ -364,10 +194,10 @@ def cmd(
                 desc="Checking dimensions",
                 unit="image",
                 on_result=handle,
+                progress=progress,
             )
             failed += counts.get("fail", 0)
 
-        # Metric check (sidecar lookup)
         if has_metric_criteria:
             remaining = sorted(kept_set)
             for img_path in remaining:
@@ -405,7 +235,6 @@ def cmd(
                             kept_set.discard(img_path)
                             break
 
-        # Detection check (sidecar lookup)
         if max_detect_list or min_detect_list:
             remaining = sorted(kept_set)
             for img_path in remaining:
@@ -446,7 +275,6 @@ def cmd(
                             kept_set.discard(img_path)
                             break
 
-        # Source / license check (sidecar lookup)
         if has_sidecar_criteria:
             remaining = sorted(kept_set)
             for img_path in remaining:
@@ -479,8 +307,8 @@ def cmd(
                         continue
 
     selected = sorted(kept_set)
-
     from_label = ", ".join(str(d) for d in input_dirs)
+
     logger.info(
         "Selecting %d / %d images from [%s] to %s (%s)",
         len(selected),
@@ -490,41 +318,56 @@ def cmd(
         transfer_label,
     )
 
-    # --- Dry run -------------------------------------------------------------
+    rejects_preview = [(p.name, r) for p, r in list(rejects.items())[:10]]
 
     if dry_run:
-        click.echo(
-            f"\nDry run -- would {transfer_label} {len(selected):,} / {len(images):,} images"
+        return SelectResult(
+            ok=0,
+            skipped=0,
+            excluded=len(rejects),
+            failed=failed,
+            total_images=len(images),
+            selected=len(selected),
+            move=move,
+            output_dir=output_dir,
+            from_label=from_label,
+            dry_run=True,
+            rejects_preview=rejects_preview,
+            elapsed=0.0,
         )
-        click.echo(f"  From: {from_label}")
-        click.echo(f"  To: {output_dir}")
-        if rejects:
-            click.echo(f"  Excluded: {len(rejects):,}")
-            for path, reason in list(rejects.items())[:10]:
-                click.echo(f"    {path.name} ({reason})")
-            if len(rejects) > 10:
-                click.echo(f"    ... and {len(rejects) - 10:,} more")
-        return
 
     if not selected:
-        click.echo(
-            f"\nNo images passed the filter criteria ({len(rejects):,} excluded)."
+        return SelectResult(
+            ok=0,
+            skipped=0,
+            excluded=len(rejects),
+            failed=failed,
+            total_images=len(images),
+            selected=0,
+            move=move,
+            output_dir=output_dir,
+            from_label=from_label,
+            dry_run=False,
+            rejects_preview=rejects_preview,
+            elapsed=0.0,
         )
-        return
-
-    # --- Transfer images -----------------------------------------------------
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     start_time = time.monotonic()
     ok_count = 0
     skipped_count = 0
-    failed_count = 0
+    failed_count = failed
 
     transfer_fn = move_image if move else copy_image
 
     with logging_redirect_tqdm():
-        with tqdm(total=len(selected), desc="Selecting", unit="image") as pbar:
+        with tqdm(
+            total=len(selected),
+            desc="Selecting",
+            unit="image",
+            disable=not progress,
+        ) as pbar:
             for image_path in selected:
                 dest = output_dir / image_path.name
                 try:
@@ -542,16 +385,17 @@ def cmd(
                 pbar.set_postfix(ok=ok_count, skip=skipped_count, fail=failed_count)
                 pbar.update(1)
 
-    elapsed = time.monotonic() - start_time
-
-    verb = "Moved" if move else "Copied"
-    click.echo("\nSelect complete!")
-    click.echo(f"  {verb}: {ok_count:,}")
-    if skipped_count > 0:
-        click.echo(f"  Skipped: {skipped_count:,}")
-    if len(rejects) > 0:
-        click.echo(f"  Excluded: {len(rejects):,}")
-    if failed_count > 0:
-        click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {format_elapsed(elapsed)}")
-    click.echo(f"  Output: {output_dir}")
+    return SelectResult(
+        ok=ok_count,
+        skipped=skipped_count,
+        excluded=len(rejects),
+        failed=failed_count,
+        total_images=len(images),
+        selected=len(selected),
+        move=move,
+        output_dir=output_dir,
+        from_label=from_label,
+        dry_run=False,
+        rejects_preview=rejects_preview,
+        elapsed=time.monotonic() - start_time,
+    )

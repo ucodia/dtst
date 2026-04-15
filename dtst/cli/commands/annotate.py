@@ -1,20 +1,18 @@
+"""Click wrapper for ``dtst annotate`` — delegates to :mod:`dtst.core.annotate`."""
+
 from __future__ import annotations
 
-import logging
-import time
 
 import click
 
-from dtst.config import (
+from dtst.cli.config import (
     config_argument,
     dry_run_option,
     from_dirs_option,
     working_dir_option,
 )
-from dtst.files import gather_images
-from dtst.sidecar import read_sidecar, write_sidecar
-
-logger = logging.getLogger(__name__)
+from dtst.core.annotate import annotate as core_annotate
+from dtst.errors import DtstError
 
 
 @click.command("annotate")
@@ -68,8 +66,6 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
         dtst annotate --from extra --source "flickr" --overwrite -d ./my-dataset
         dtst annotate --from extra --source "personal" --dry-run
     """
-    t0 = time.time()
-
     if from_dirs is None:
         raise click.ClickException(
             "--from is required (or set 'annotate.from' in config)"
@@ -79,52 +75,24 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
             "At least one of --source, --license, or --origin is required."
         )
 
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
-    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
+    try:
+        result = core_annotate(
+            working_dir=working_dir,
+            from_dirs=from_dirs,
+            source=source,
+            license=license,
+            origin=origin,
+            overwrite=overwrite,
+            dry_run=dry_run,
+        )
+    except DtstError as e:
+        raise click.ClickException(str(e)) from e
 
-    annotation: dict[str, str] = {}
-    if source:
-        annotation["source"] = source
-    if license:
-        annotation["license"] = license
-    if origin:
-        annotation["origin"] = origin
-
-    logger.info(
-        "Found %d images in %s, annotating: %s",
-        len(all_images),
-        ", ".join(dirs_list),
-        ", ".join(f"{k}={v}" for k, v in annotation.items()),
-    )
-
-    annotated = 0
-    skipped = 0
-
-    for img in all_images:
-        existing = read_sidecar(img)
-        if not overwrite:
-            new_data = {k: v for k, v in annotation.items() if k not in existing}
-        else:
-            new_data = dict(annotation)
-
-        if not new_data:
-            skipped += 1
-            continue
-
-        if dry_run:
-            fields = ", ".join(f"{k}={v}" for k, v in new_data.items())
-            logger.debug("%s: %s", img.name, fields)
-            annotated += 1
-            continue
-
-        write_sidecar(img, new_data)
-        annotated += 1
-
-    elapsed = time.time() - t0
-
-    if dry_run:
+    if result.dry_run:
         click.echo(
-            f"[dry-run] Would annotate {annotated} images, skip {skipped} (already set)"
+            f"[dry-run] Would annotate {result.annotated} images, skip {result.skipped} (already set)"
         )
     else:
-        click.echo(f"Done: {annotated} annotated, {skipped} skipped ({elapsed:.1f}s)")
+        click.echo(
+            f"Done: {result.annotated} annotated, {result.skipped} skipped ({result.elapsed:.1f}s)"
+        )
