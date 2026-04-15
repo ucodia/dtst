@@ -125,6 +125,22 @@ logging.basicConfig(level=logging.WARNING)  # quiet
 logging.basicConfig(level=logging.DEBUG)    # verbose
 ```
 
+## Async usage
+
+`dtst.aio` mirrors the sync API as `async def` wrappers built on `asyncio.to_thread`. Use it when you want to call dtst from an async program without blocking the event loop:
+
+```python
+from dtst.aio import fetch, detect, frame
+
+result = await fetch(
+    working_dir=Path("./scratch/trees"),
+    to="raw",
+    input_file="urls.txt",
+)
+```
+
+There is no native async I/O underneath — dtst's workloads are CPU/GPU-bound or already use thread pools internally, so `to_thread` is the right abstraction. Everything else (arguments, return values, exceptions, `progress=False`) behaves identically to the sync API.
+
 ## Library vs. CLI layer
 
 `dtst` is organized into two layers:
