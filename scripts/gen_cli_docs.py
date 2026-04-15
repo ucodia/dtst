@@ -11,5 +11,6 @@ from dtst.cli import cli
 
 out = Path(__file__).resolve().parent.parent / "docs" / "reference" / "cli.md"
 out.parent.mkdir(parents=True, exist_ok=True)
-out.write_text("\n".join(make_command_docs(prog_name="dtst", command=cli, depth=0, style="table", has_attr_list=True)) + "\n")
+body = "\n".join(make_command_docs(prog_name="dtst", command=cli, depth=1, style="table", has_attr_list=True))
+out.write_text("# CLI reference\n\n" + body + "\n")
 print(f"Generated {out}")

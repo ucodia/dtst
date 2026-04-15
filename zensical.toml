@@ -19,8 +19,15 @@ nav = [
   ] },
   { "Reference" = [
     { "CLI" = "reference/cli.md" },
+    { "Python API" = "reference/api.md" },
   ] },
 ]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+allow_inspection = false
+show_root_heading = true
+show_signature_annotations = true
+docstring_style = "google"
 
 [project.theme]
 features = ["navigation.footer"]

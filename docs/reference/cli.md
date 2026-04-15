@@ -1,4 +1,6 @@
-# dtst { #dtst data-toc-label='dtst' }
+# CLI reference
+
+## dtst { #dtst data-toc-label='dtst' }
 
 dtst - dataset toolkit for datasets creation and curation.
 
@@ -15,7 +17,7 @@ dtst [OPTIONS] COMMAND [ARGS]...
 | `--verbose`, `-v` | boolean | Enable debug logging | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst analyze { #dtst-analyze data-toc-label='analyze' }
+### dtst analyze { #dtst-analyze data-toc-label='analyze' }
 
 Compute image metrics and write JSON sidecars.
 
@@ -53,7 +55,7 @@ dtst analyze [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst annotate { #dtst-annotate data-toc-label='annotate' }
+### dtst annotate { #dtst-annotate data-toc-label='annotate' }
 
 Write source and license metadata into image sidecars.
 
@@ -91,7 +93,7 @@ dtst annotate [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be annotated without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst augment { #dtst-augment data-toc-label='augment' }
+### dtst augment { #dtst-augment data-toc-label='augment' }
 
 Augment a dataset by applying image transformations.
 
@@ -138,7 +140,7 @@ dtst augment [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst cluster { #dtst-cluster data-toc-label='cluster' }
+### dtst cluster { #dtst-cluster data-toc-label='cluster' }
 
 Cluster images by visual similarity.
 
@@ -199,7 +201,7 @@ dtst cluster [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Show image count and configuration without clustering. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst dedup { #dtst-dedup data-toc-label='dedup' }
+### dtst dedup { #dtst-dedup data-toc-label='dedup' }
 
 Deduplicate images by perceptual hash similarity.
 
@@ -242,7 +244,7 @@ dtst dedup [OPTIONS] [CONFIG]
 | `--prefer-upscaled` | boolean | Prefer upscaled images over originals when deduplicating. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst detect { #dtst-detect data-toc-label='detect' }
+### dtst detect { #dtst-detect data-toc-label='detect' }
 
 Detect objects in images using OWL-ViT 2.
 
@@ -280,7 +282,7 @@ dtst detect [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be detected without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst extract-classes { #dtst-extract-classes data-toc-label='extract-classes' }
+### dtst extract-classes { #dtst-extract-classes data-toc-label='extract-classes' }
 
 Extract image crops from class detection bounding boxes.
 
@@ -318,7 +320,7 @@ dtst extract-classes [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be extracted without writing files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst extract-faces { #dtst-extract-faces data-toc-label='extract-faces' }
+### dtst extract-faces { #dtst-extract-faces data-toc-label='extract-faces' }
 
 Extract aligned face crops from images.
 
@@ -366,7 +368,7 @@ dtst extract-faces [OPTIONS] [CONFIG]
 | `--debug` | boolean | Overlay landmark points on output images. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst extract-frames { #dtst-extract-frames data-toc-label='extract-frames' }
+### dtst extract-frames { #dtst-extract-frames data-toc-label='extract-frames' }
 
 Extract keyframes from video files using ffmpeg.
 
@@ -414,7 +416,7 @@ dtst extract-frames [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be done without extracting frames. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst fetch { #dtst-fetch data-toc-label='fetch' }
+### dtst fetch { #dtst-fetch data-toc-label='fetch' }
 
 Download images and videos from a URL list.
 
@@ -468,7 +470,7 @@ dtst fetch [OPTIONS] [CONFIG]
 | `--license`, `-l` | text | Only download images whose license starts with this prefix (e.g. 'cc'); only applies to .jsonl input. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst format { #dtst-format data-toc-label='format' }
+### dtst format { #dtst-format data-toc-label='format' }
 
 Convert and normalize image formats, channels, and metadata.
 
@@ -508,7 +510,7 @@ dtst format [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst frame { #dtst-frame data-toc-label='frame' }
+### dtst frame { #dtst-frame data-toc-label='frame' }
 
 Resize images to a target width and/or height.
 
@@ -559,7 +561,7 @@ dtst frame [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst rename { #dtst-rename data-toc-label='rename' }
+### dtst rename { #dtst-rename data-toc-label='rename' }
 
 Sequentially rename images in-place with a prefix and zero-padded number.
 
@@ -591,7 +593,7 @@ dtst rename [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview renames without executing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst review { #dtst-review data-toc-label='review' }
+### dtst review { #dtst-review data-toc-label='review' }
 
 Launch a web UI for manual image review.
 
@@ -625,7 +627,7 @@ dtst review [OPTIONS] [CONFIG]
 | `--working-dir`, `-d` | path | Working directory (default: .). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst run { #dtst-run data-toc-label='run' }
+### dtst run { #dtst-run data-toc-label='run' }
 
 Run a named workflow defined in a config file.
 
@@ -653,7 +655,7 @@ dtst run [OPTIONS] WORKFLOW CONFIG
 | `--dry-run` | boolean | Print steps without executing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst search { #dtst-search data-toc-label='search' }
+### dtst search { #dtst-search data-toc-label='search' }
 
 Search for images across multiple engines.
 
@@ -706,7 +708,7 @@ dtst search [OPTIONS] [CONFIG]
 | `--taxon-ids` | text | Comma-separated iNaturalist taxon IDs (implies --engines inaturalist). | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst select { #dtst-select data-toc-label='select' }
+### dtst select { #dtst-select data-toc-label='select' }
 
 Select images from source folders into a destination folder.
 
@@ -761,7 +763,7 @@ dtst select [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be selected without creating files. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst upscale { #dtst-upscale data-toc-label='upscale' }
+### dtst upscale { #dtst-upscale data-toc-label='upscale' }
 
 Upscale images using AI super-resolution models.
 
@@ -812,7 +814,7 @@ dtst upscale [OPTIONS] [CONFIG]
 | `--dry-run` | boolean | Preview what would be written without processing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
-## dtst validate { #dtst-validate data-toc-label='validate' }
+### dtst validate { #dtst-validate data-toc-label='validate' }
 
 Validate that all images in a folder are consistent.
 
