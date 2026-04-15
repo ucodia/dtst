@@ -1,6 +1,11 @@
 import json
 from pathlib import Path
 
+# Sidecar keys invalidated by image transformations. `metrics` depends on pixel
+# statistics; `classes` contains bounding boxes tied to the source geometry.
+EXCLUDE_METRICS: frozenset[str] = frozenset({"metrics"})
+EXCLUDE_METRICS_AND_CLASSES: frozenset[str] = frozenset({"metrics", "classes"})
+
 
 def sidecar_path(image_path: Path) -> Path:
     return image_path.parent / (image_path.name + ".json")
@@ -23,7 +28,9 @@ def write_sidecar(image_path: Path, data: dict) -> None:
         f.write("\n")
 
 
-def copy_sidecar(src: Path, dest: Path, exclude: set[str] | None = None) -> None:
+def copy_sidecar(
+    src: Path, dest: Path, exclude: frozenset[str] | set[str] | None = None
+) -> None:
     """Copy sidecar data from *src* image to *dest* image.
 
     When *exclude* is given, those top-level keys are omitted from the

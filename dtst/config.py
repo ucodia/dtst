@@ -109,6 +109,89 @@ def config_argument(f):
 
 
 # ---------------------------------------------------------------------------
+# Shared Click option decorators
+#
+# Pipeline commands reuse the same small set of options (``--working-dir``,
+# ``--workers``, ``--from``, ``--to``, ``--dry-run``).  These helpers keep the
+# flag name, short alias, type and default consistent; the ``help`` text can
+# still be customized per-command where the semantics genuinely differ.
+# ---------------------------------------------------------------------------
+
+
+def working_dir_option(help: str = "Working directory (default: .)."):
+    """``--working-dir`` / ``-d`` option decorator."""
+
+    def wrap(f):
+        return click.option(
+            "--working-dir",
+            "-d",
+            type=click.Path(path_type=Path),
+            default=None,
+            help=help,
+        )(f)
+
+    return wrap
+
+
+def workers_option(help: str = "Number of parallel workers (default: CPU count)."):
+    """``--workers`` / ``-w`` option decorator."""
+
+    def wrap(f):
+        return click.option(
+            "--workers",
+            "-w",
+            type=int,
+            default=None,
+            help=help,
+        )(f)
+
+    return wrap
+
+
+def from_dirs_option(
+    help: str = (
+        "Comma-separated source folders under --working-dir "
+        "(supports globs, e.g. 'images/*')."
+    ),
+):
+    """``--from`` option decorator (bound to the ``from_dirs`` Python name)."""
+
+    def wrap(f):
+        return click.option(
+            "--from",
+            "from_dirs",
+            type=str,
+            default=None,
+            help=help,
+        )(f)
+
+    return wrap
+
+
+def to_dir_option(help: str = "Destination folder under --working-dir."):
+    """``--to`` option decorator."""
+
+    def wrap(f):
+        return click.option(
+            "--to",
+            type=str,
+            default=None,
+            help=help,
+        )(f)
+
+    return wrap
+
+
+def dry_run_option(help: str = "Preview what would be done without executing."):
+    """``--dry-run`` flag decorator."""
+
+    def wrap(f):
+        return click.option("--dry-run", is_flag=True, help=help)(f)
+
+    return wrap
+
+
+# ---------------------------------------------------------------------------
 # Workflow support (used by the `run` command)
 # ---------------------------------------------------------------------------
 

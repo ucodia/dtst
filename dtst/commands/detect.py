@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 import click
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import gather_images
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -16,13 +21,7 @@ logger = logging.getLogger(__name__)
 
 @click.command("detect")
 @config_argument
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
-)
+@from_dirs_option()
 @click.option(
     "--classes",
     "-c",
@@ -37,20 +36,8 @@ logger = logging.getLogger(__name__)
     help="Minimum detection confidence.",
     show_default="0.2",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of threads for image preloading (default: 4).",
-)
+@working_dir_option()
+@workers_option(help="Number of threads for image preloading (default: 4).")
 @click.option(
     "--max-instances",
     type=int,
@@ -61,11 +48,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--clear", is_flag=True, help="Remove all detection data from sidecar files."
 )
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be detected without writing sidecars.",
-)
+@dry_run_option(help="Preview what would be detected without writing sidecars.")
 def cmd(
     from_dirs, classes, threshold, working_dir, workers, max_instances, clear, dry_run
 ):
@@ -92,25 +75,13 @@ def cmd(
         raise click.ClickException(
             "--from is required (or set 'detect.from' in config)"
         )
-    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
     classes_list = (
         [c.strip() for c in classes.split(",") if c.strip()] if classes else None
     )
     threshold = threshold if threshold is not None else 0.2
     max_instances = max_instances if max_instances is not None else 1
 
-    input_dirs = resolve_dirs(working, dirs_list)
-
-    all_images: list[Path] = []
-    for src in input_dirs:
-        if not src.is_dir():
-            logger.warning("Source directory does not exist, skipping: %s", src)
-            continue
-        all_images.extend(find_images(src))
-
-    if not all_images:
-        raise click.ClickException("No images found in source directories.")
+    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
 
     # --- Clear mode ----------------------------------------------------------
 

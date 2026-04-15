@@ -12,10 +12,23 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
 from dtst.embeddings.base import detect_device
-from dtst.files import build_save_kwargs, find_images, resolve_dirs
-from dtst.sidecar import copy_sidecar, read_sidecar, scale_classes, write_sidecar
+from dtst.files import build_save_kwargs, find_images, format_elapsed, resolve_dirs
+from dtst.sidecar import (
+    EXCLUDE_METRICS,
+    copy_sidecar,
+    read_sidecar,
+    scale_classes,
+    write_sidecar,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -186,26 +199,11 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
 
 @click.command("upscale")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--scale",
     "-s",
@@ -255,16 +253,8 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
     default=None,
     help="Denoise strength 0.0-1.0. Lower preserves more texture. Only available at 4x.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of threads for image preloading (default: 4).",
-)
-@click.option(
-    "--dry-run", is_flag=True, help="Preview what would be written without processing."
-)
+@workers_option(help="Number of threads for image preloading (default: 4).")
+@dry_run_option(help="Preview what would be written without processing.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -439,7 +429,7 @@ def cmd(
                         result_img.save(output_dir / out_name, **save_kwargs)
                         result_img.close()
                         copy_sidecar(
-                            img_path, output_dir / out_name, exclude={"metrics"}
+                            img_path, output_dir / out_name, exclude=EXCLUDE_METRICS
                         )
                         classes = read_sidecar(img_path).get("classes")
                         upscale_data = {"upscale": actual_scale}
@@ -463,11 +453,10 @@ def cmd(
                     pbar.update(1)
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nUpscale complete!")
     click.echo(f"  Upscaled: {ok_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
     click.echo(f"  Scale: {actual_scale}x ({model_label})")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

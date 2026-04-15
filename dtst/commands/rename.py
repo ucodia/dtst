@@ -7,21 +7,20 @@ from pathlib import Path
 
 import click
 
-from dtst.config import config_argument
-from dtst.files import find_images, move_image, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    working_dir_option,
+)
+from dtst.files import gather_images, move_image
 
 logger = logging.getLogger(__name__)
 
 
 @click.command("rename")
 @config_argument
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
-)
+@from_dirs_option()
 @click.option(
     "--prefix",
     "-p",
@@ -36,14 +35,8 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Number of zero-padded digits (default: auto based on total count).",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
-@click.option("--dry-run", is_flag=True, help="Preview renames without executing.")
+@working_dir_option()
+@dry_run_option(help="Preview renames without executing.")
 def cmd(from_dirs, prefix, digits, working_dir, dry_run):
     """Sequentially rename images in-place with a prefix and zero-padded number.
 
@@ -66,20 +59,9 @@ def cmd(from_dirs, prefix, digits, working_dir, dry_run):
             "--from is required (or set 'rename.from' in config)"
         )
 
-    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     prefix = prefix or ""
-    working = (working_dir or Path(".")).resolve()
-    input_dirs = resolve_dirs(working, dirs_list)
-
-    all_images: list[Path] = []
-    for src in input_dirs:
-        if not src.is_dir():
-            logger.warning("Source directory does not exist, skipping: %s", src)
-            continue
-        all_images.extend(find_images(src))
-
-    if not all_images:
-        raise click.ClickException("No images found in source directories.")
+    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     pad = digits if digits is not None else len(str(len(all_images)))
 

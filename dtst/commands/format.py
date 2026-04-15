@@ -1,7 +1,6 @@
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
@@ -9,9 +8,22 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import build_save_kwargs, find_images, resolve_dirs
-from dtst.sidecar import copy_sidecar
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import (
+    build_save_kwargs,
+    find_images,
+    format_elapsed,
+    resolve_dirs,
+    resolve_workers,
+)
+from dtst.sidecar import EXCLUDE_METRICS, copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -99,26 +111,11 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
 
 @click.command("format")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs).",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--format",
     "-f",
@@ -159,18 +156,8 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
     default=None,
     help="Background color for alpha compositing (default: white). Accepts named colors or hex codes.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be written without creating files.",
-)
+@workers_option()
+@dry_run_option(help="Preview what would be written without creating files.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -232,7 +219,7 @@ def cmd(
         )
 
     from_label = ", ".join(str(d) for d in input_dirs)
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
 
     ops: list[str] = []
     if fmt:
@@ -297,7 +284,7 @@ def cmd(
                             ok_count += 1
                             src_path = Path(futures[future][0])
                             copy_sidecar(
-                                src_path, output_dir / name, exclude={"metrics"}
+                                src_path, output_dir / name, exclude=EXCLUDE_METRICS
                             )
                         else:
                             failed_count += 1
@@ -309,10 +296,9 @@ def cmd(
                     raise
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nFormat complete!")
     click.echo(f"  Converted: {ok_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

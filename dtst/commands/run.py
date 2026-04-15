@@ -8,8 +8,10 @@ from dtst.config import (
     _YAML_TO_CLICK,
     _coerce_for_click,
     _resolve_working_dir,
+    dry_run_option,
     load_workflow_config,
     load_yaml,
+    working_dir_option,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,14 +81,8 @@ def _build_ctx_params(click_cmd, step, config_path, working_dir, workflow_workin
     "config",
     type=click.Path(exists=True, path_type=Path),
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Override working directory.",
-)
-@click.option("--dry-run", is_flag=True, help="Print steps without executing.")
+@working_dir_option(help="Override working directory.")
+@dry_run_option(help="Print steps without executing.")
 @click.pass_context
 def cmd(ctx, workflow, config, working_dir, dry_run):
     """Run a named workflow defined in a config file.

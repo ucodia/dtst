@@ -4,7 +4,6 @@ import json
 import logging
 import shutil
 import time
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
@@ -13,29 +12,31 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.cache import load_embeddings, save_embeddings
-from dtst.config import config_argument
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    working_dir_option,
+    workers_option,
+)
 from dtst.embeddings import VALID_MODELS, detect_device, get_backend
-from dtst.files import copy_image, find_images, resolve_dirs
+from dtst.files import (
+    copy_image,
+    find_images,
+    format_elapsed,
+    resolve_dirs,
+    resolve_workers,
+)
 
 logger = logging.getLogger(__name__)
 
 
 @click.command("cluster")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
+@from_dirs_option()
 @click.option(
     "--to",
     "-t",
@@ -76,13 +77,7 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Images per inference batch (default: 32).",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of workers for image preloading (default: CPU count).",
-)
+@workers_option(help="Number of workers for image preloading (default: CPU count).")
 @click.option(
     "--no-cache",
     is_flag=True,
@@ -93,11 +88,7 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     help="Remove the output directory before writing new clusters.",
 )
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Show image count and configuration without clustering.",
-)
+@dry_run_option(help="Show image count and configuration without clustering.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -182,7 +173,7 @@ def cmd(
             f"No images found in: {', '.join(str(d) for d in input_dirs)}"
         )
 
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
     from_label = ", ".join(str(d) for d in input_dirs)
     top_label = str(top) if top is not None else "all"
 
@@ -341,7 +332,6 @@ def cmd(
     # --- Summary -------------------------------------------------------------
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nCluster complete!")
     click.echo(f"  Images processed: {len(valid_paths):,} / {len(images):,}")
@@ -349,5 +339,5 @@ def cmd(
     for rank, (label, count) in enumerate(cluster_info):
         click.echo(f"    {rank:03d}/: {count:,} images")
     click.echo(f"  Noise: {noise_count:,} images")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

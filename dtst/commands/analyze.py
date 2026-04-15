@@ -3,15 +3,20 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import gather_images, resolve_workers
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -64,13 +69,7 @@ _CPU_COMPUTE_FNS = {
 
 @click.command("analyze")
 @config_argument
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
-)
+@from_dirs_option()
 @click.option(
     "--metrics",
     "-m",
@@ -84,28 +83,12 @@ _CPU_COMPUTE_FNS = {
     default=False,
     help="Recompute all metrics even if sidecar data already exists.",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
-@click.option(
-    "--workers",
-    "-w",
-    default=None,
-    type=int,
-    help="Number of parallel workers for CPU metrics (default: CPU count).",
-)
+@working_dir_option()
+@workers_option(help="Number of parallel workers for CPU metrics (default: CPU count).")
 @click.option(
     "--clear", is_flag=True, help="Remove all sidecar files from source folders."
 )
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be computed without writing sidecars.",
-)
+@dry_run_option(help="Preview what would be computed without writing sidecars.")
 def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     """Compute image metrics and write JSON sidecars.
 
@@ -131,24 +114,13 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
         raise click.ClickException(
             "--from is required (or set 'analyze.from' in config)"
         )
-    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     metrics_list = (
         [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
     )
-    working = (working_dir or Path(".")).resolve()
-    input_dirs = resolve_dirs(working, dirs_list)
+    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     if clear:
-        all_images: list[Path] = []
-        for src in input_dirs:
-            if not src.is_dir():
-                logger.warning("Source directory does not exist, skipping: %s", src)
-                continue
-            all_images.extend(find_images(src))
-
-        if not all_images:
-            raise click.ClickException("No images found in source directories.")
-
         sidecars = [
             sidecar_path(img) for img in all_images if sidecar_path(img).exists()
         ]
@@ -201,18 +173,7 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
                 f"The analyze command only supports no-reference (NR) metrics."
             )
 
-    if workers is None:
-        workers = cpu_count()
-
-    all_images: list[Path] = []
-    for src in input_dirs:
-        if not src.is_dir():
-            logger.warning("Source directory does not exist, skipping: %s", src)
-            continue
-        all_images.extend(find_images(src))
-
-    if not all_images:
-        raise click.ClickException("No images found in source directories.")
+    workers = resolve_workers(workers)
 
     logger.info(
         "Found %d images in %s, metrics: %s",

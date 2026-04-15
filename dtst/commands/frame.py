@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
@@ -15,9 +14,20 @@ from dtst.config import (
     FRAME_GRAVITIES,
     FRAME_MODES,
     config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
 )
-from dtst.files import build_save_kwargs, find_images, resolve_dirs
-from dtst.sidecar import copy_sidecar
+from dtst.files import (
+    build_save_kwargs,
+    find_images,
+    format_elapsed,
+    resolve_dirs,
+    resolve_workers,
+)
+from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 from PIL import Image
 
@@ -169,26 +179,11 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
 
 @click.command("frame")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--width",
     "-W",
@@ -243,18 +238,8 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
     default=None,
     help="PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be written without creating files.",
-)
+@workers_option()
+@dry_run_option(help="Preview what would be written without creating files.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -337,7 +322,7 @@ def cmd(
     height_label = str(height) if height is not None else "auto"
     both_dims = width is not None and height is not None
     from_label = ", ".join(str(d) for d in input_dirs)
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
 
     logger.info(
         "Resizing %d images from [%s] to %sx%s mode=%s (workers=%d)",
@@ -399,7 +384,7 @@ def cmd(
                             copy_sidecar(
                                 src_path,
                                 output_dir / name,
-                                exclude={"metrics", "classes"},
+                                exclude=EXCLUDE_METRICS_AND_CLASSES,
                             )
                         else:
                             failed_count += 1
@@ -411,7 +396,6 @@ def cmd(
                     raise
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nFrame complete!")
     click.echo(f"  Resized: {ok_count:,}")
@@ -419,5 +403,5 @@ def cmd(
     click.echo(f"  Target: {width_label} x {height_label}")
     if both_dims:
         click.echo(f"  Mode: {mode}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

@@ -2,15 +2,19 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
+from dtst.config import (
+    config_argument,
+    working_dir_option,
+    workers_option,
+)
 from dtst.engines import ENGINE_REGISTRY
+from dtst.files import format_elapsed, resolve_workers
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +80,7 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     default=None,
     help="Comma-separated query suffixes (override config).",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory where results are written (default: .).",
-)
+@working_dir_option(help="Working directory where results are written (default: .).")
 @click.option(
     "--output",
     "-o",
@@ -110,14 +108,7 @@ def _dedup_results(results: list[dict]) -> list[dict]:
     is_flag=True,
     help="Print query matrix and exit without searching.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    show_default=True,
-    help="Parallel workers (default: CPU count).",
-)
+@workers_option(help="Parallel workers (default: CPU count).")
 @click.option(
     "--min-size",
     "-s",
@@ -273,7 +264,7 @@ def cmd(
         click.echo(f"Min size: {min_size_val}px")
         return
 
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
 
     tasks: list[tuple[str, str, int, int, int, int | float]] = []
     for query in queries:
@@ -366,7 +357,6 @@ def cmd(
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     query_count = len(queries)
     if "inaturalist" in engine_list:
@@ -377,4 +367,4 @@ def cmd(
     click.echo(f"Total unique results (after dedup): {len(deduped)}")
     click.echo(f"New URLs added: {len(deduped) - len(existing_results)}")
     click.echo(f"Errors: {error_count}")
-    click.echo(f"Time: {minutes}m {seconds}s")
+    click.echo(f"Time: {format_elapsed(elapsed)}")

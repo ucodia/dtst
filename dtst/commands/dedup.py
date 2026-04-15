@@ -4,15 +4,19 @@ import logging
 import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import find_images, resolve_workers
 from dtst.sidecar import read_all_sidecars, sidecar_path
 
 logger = logging.getLogger(__name__)
@@ -62,13 +66,7 @@ class _UnionFind:
 
 @click.command("dedup")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
+@working_dir_option()
 @click.option(
     "--from",
     "from_dir",
@@ -91,23 +89,13 @@ class _UnionFind:
     help="Phash hamming distance threshold for near-duplicate detection.",
     show_default="8",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
+@workers_option()
 @click.option(
     "--clear",
     is_flag=True,
     help="Restore all deduplicated images back to the source folder.",
 )
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Show what would be deduplicated without moving anything.",
-)
+@dry_run_option(help="Show what would be deduplicated without moving anything.")
 @click.option(
     "--prefer-upscaled",
     is_flag=True,
@@ -158,8 +146,7 @@ def cmd(
     if not source_dir.is_dir():
         raise click.ClickException(f"Source directory not found: {source_dir}")
 
-    if workers is None:
-        workers = cpu_count()
+    workers = resolve_workers(workers)
 
     # --- Clear mode ----------------------------------------------------------
 

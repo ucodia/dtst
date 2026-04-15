@@ -7,16 +7,23 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import VALID_FRAME_FORMATS, config_argument
-from dtst.files import find_videos, resolve_dirs
-from dtst.sidecar import copy_sidecar
+from dtst.config import (
+    VALID_FRAME_FORMATS,
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import find_videos, format_elapsed, resolve_dirs, resolve_workers
+from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -155,26 +162,11 @@ def _check_ffmpeg() -> bool:
 
 @click.command("extract-frames")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--keyframes",
     "-k",
@@ -190,18 +182,8 @@ def _check_ffmpeg() -> bool:
     default=None,
     help="Output image format (default: jpg).",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be done without extracting frames.",
-)
+@workers_option()
+@dry_run_option(help="Preview what would be done without extracting frames.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -280,7 +262,7 @@ def cmd(
             f"No video files found in: {', '.join(str(d) for d in input_dirs)}"
         )
 
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
     from_label = ", ".join(str(d) for d in input_dirs)
 
     logger.info(
@@ -364,7 +346,7 @@ def cmd(
                                     copy_sidecar(
                                         video_path,
                                         frame_path,
-                                        exclude={"metrics", "classes"},
+                                        exclude=EXCLUDE_METRICS_AND_CLASSES,
                                     )
                             elif status == "skipped":
                                 skipped_count += 1
@@ -403,12 +385,11 @@ def cmd(
                     raise
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nExtract-frames complete!")
     click.echo(f"  Processed: {ok_count:,} videos")
     click.echo(f"  Frames extracted: {total_frames:,}")
     click.echo(f"  Skipped (existing): {skipped_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

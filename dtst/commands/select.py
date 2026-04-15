@@ -2,15 +2,28 @@ from __future__ import annotations
 
 import logging
 import time
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import copy_image, find_images, move_image, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import (
+    copy_image,
+    find_images,
+    format_elapsed,
+    move_image,
+    resolve_dirs,
+    resolve_workers,
+)
 from dtst.sidecar import read_sidecar
 
 logger = logging.getLogger(__name__)
@@ -79,26 +92,11 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
 
 @click.command("select")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--move", is_flag=True, help="Move images instead of copying (removes originals)."
 )
@@ -180,18 +178,8 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
     default=None,
     help="Comma-separated list of licenses to include (e.g. 'cc-by,none'); checked against sidecar 'license' field.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be selected without creating files.",
-)
+@workers_option()
+@dry_run_option(help="Preview what would be selected without creating files.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -278,7 +266,7 @@ def cmd(
             f"No images found in: {', '.join(str(d) for d in input_dirs)}"
         )
 
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
     has_dimension_criteria = any(
         v is not None
         for v in (
@@ -552,7 +540,6 @@ def cmd(
                 pbar.update(1)
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     verb = "Moved" if move else "Copied"
     click.echo("\nSelect complete!")
@@ -563,5 +550,5 @@ def cmd(
         click.echo(f"  Excluded: {len(rejects):,}")
     if failed_count > 0:
         click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

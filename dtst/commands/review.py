@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from dtst.config import config_argument
+from dtst.config import config_argument, working_dir_option
 
 
 @click.command("review")
@@ -38,13 +38,7 @@ from dtst.config import config_argument
     default=False,
     help="Do not open the browser automatically.",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
+@working_dir_option()
 def cmd(from_dir, to, port, no_open, working_dir):
     """Launch a web UI for manual image review.
 

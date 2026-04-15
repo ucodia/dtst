@@ -8,7 +8,6 @@ import subprocess
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,7 +17,13 @@ from PIL import Image
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
+from dtst.config import (
+    config_argument,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import format_elapsed, resolve_workers
 from dtst.sidecar import write_sidecar
 from dtst.throttle import DomainThrottler
 from dtst.urls import canonicalize_image_url, clean_image_url
@@ -410,19 +415,10 @@ def _check_ytdlp() -> bool:
 
 @click.command("fetch")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory where input is read from and media is written to (default: .).",
+@working_dir_option(
+    help="Working directory where input is read from and media is written to (default: .)."
 )
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@to_dir_option()
 @click.option(
     "--input",
     "-i",
@@ -438,12 +434,8 @@ def _check_ytdlp() -> bool:
     default=None,
     help="Minimum image dimension in pixels; only applies to .jsonl input (default: 512).",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel download threads (default: CPU count for images, 2 for video).",
+@workers_option(
+    help="Number of parallel download threads (default: CPU count for images, 2 for video)."
 )
 @click.option(
     "--timeout",
@@ -602,7 +594,7 @@ def cmd(
     # --- Direct HTTP downloads -----------------------------------------------
 
     if direct_urls:
-        num_workers = workers if workers is not None else cpu_count() or 4
+        num_workers = resolve_workers(workers)
         throttler = DomainThrottler()
         for domain, policy in throttler.active_policies().items():
             logger.info(
@@ -744,7 +736,6 @@ def cmd(
     # --- Summary -------------------------------------------------------------
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nFetch complete!")
     click.echo(f"  Downloaded: {downloaded:,}")
@@ -755,5 +746,5 @@ def cmd(
         domains_str = ", ".join(sorted(rate_limited_domains))
         click.echo(f"  Rate limited: {rate_limited:,} ({domains_str})")
     click.echo(f"  Failed: {failed:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {dest_dir}")

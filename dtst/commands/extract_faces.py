@@ -3,16 +3,21 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
-from dtst.sidecar import copy_sidecar
+from dtst.config import (
+    config_argument,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
+from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
 logger = logging.getLogger(__name__)
 
@@ -91,26 +96,11 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
 
 @click.command("extract-faces")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--max-size",
     "-M",
@@ -132,13 +122,7 @@ def _process_image(args: tuple) -> tuple[str, str, int, str | None]:
     default=None,
     help="Max faces to extract per image (default: 1).",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
+@workers_option()
 @click.option(
     "--padding/--no-padding",
     default=None,
@@ -229,7 +213,7 @@ def cmd(
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
 
     max_size_label = str(max_size) if max_size is not None else "none"
     from_label = ", ".join(str(d) for d in input_dirs)
@@ -282,14 +266,14 @@ def cmd(
                                 copy_sidecar(
                                     src_path,
                                     output_dir / f"{stem}.jpg",
-                                    exclude={"metrics", "classes"},
+                                    exclude=EXCLUDE_METRICS_AND_CLASSES,
                                 )
                             else:
                                 for i in range(face_count):
                                     copy_sidecar(
                                         src_path,
                                         output_dir / f"{stem}_{i + 1:02d}.jpg",
-                                        exclude={"metrics", "classes"},
+                                        exclude=EXCLUDE_METRICS_AND_CLASSES,
                                     )
                         elif status == "no_faces":
                             no_faces_count += 1
@@ -306,12 +290,11 @@ def cmd(
                     raise
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nExtract faces complete!")
     click.echo(f"  Processed: {ok_count:,}")
     click.echo(f"  Faces extracted: {total_faces:,}")
     click.echo(f"  No faces detected: {no_faces_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")

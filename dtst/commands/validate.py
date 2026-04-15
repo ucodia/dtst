@@ -6,15 +6,19 @@ import sys
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
+from dtst.config import (
+    config_argument,
+    from_dirs_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import format_elapsed, gather_images, resolve_workers
 
 logger = logging.getLogger(__name__)
 
@@ -63,33 +67,15 @@ def _check_image(
 
 @click.command("validate")
 @config_argument
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
+@from_dirs_option()
+@working_dir_option()
 @click.option(
     "--square",
     is_flag=True,
     default=False,
     help="Check that all images are square (width == height).",
 )
-@click.option(
-    "--workers",
-    "-w",
-    default=None,
-    type=int,
-    help="Number of parallel workers (default: CPU count).",
-)
+@workers_option()
 def cmd(from_dirs, working_dir, square, workers):
     """Validate that all images in a folder are consistent.
 
@@ -103,26 +89,14 @@ def cmd(from_dirs, working_dir, square, workers):
         dtst validate --from faces --square -d ./my-dataset
         dtst validate config.yaml
     """
-    if workers is None:
-        workers = cpu_count()
+    workers = resolve_workers(workers)
     if from_dirs is None:
         raise click.ClickException(
             "--from is required (or set 'validate.from' in config)"
         )
 
+    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
-    input_dirs = resolve_dirs(working, dirs_list)
-
-    all_images: list[Path] = []
-    for src in input_dirs:
-        if not src.is_dir():
-            logger.warning("Source directory does not exist, skipping: %s", src)
-            continue
-        all_images.extend(find_images(src))
-
-    if not all_images:
-        raise click.ClickException("No images found in source directories.")
 
     logger.info("Validating %d images from %s", len(all_images), ", ".join(dirs_list))
 
@@ -161,11 +135,10 @@ def cmd(from_dirs, working_dir, square, workers):
                     raise
 
     elapsed = time.monotonic() - t0
-    minutes, seconds = divmod(int(elapsed), 60)
     total = len(all_images)
     checks_passed = True
 
-    click.echo(f"\nValidated {total:,} images ({minutes}m {seconds}s)")
+    click.echo(f"\nValidated {total:,} images ({format_elapsed(elapsed)})")
     click.echo("")
 
     # Dimensions check

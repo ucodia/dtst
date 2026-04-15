@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 import click
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    working_dir_option,
+)
+from dtst.files import gather_images
 from dtst.sidecar import read_sidecar, write_sidecar
 
 logger = logging.getLogger(__name__)
@@ -15,13 +19,7 @@ logger = logging.getLogger(__name__)
 
 @click.command("annotate")
 @config_argument
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders (supports globs, e.g. 'images/*').",
-)
+@from_dirs_option()
 @click.option(
     "--source",
     "-s",
@@ -49,18 +47,8 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Overwrite existing source/license/origin values in sidecars.",
 )
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory (default: .).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be annotated without writing sidecars.",
-)
+@working_dir_option()
+@dry_run_option(help="Preview what would be annotated without writing sidecars.")
 def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
     """Write source and license metadata into image sidecars.
 
@@ -86,25 +74,13 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
         raise click.ClickException(
             "--from is required (or set 'annotate.from' in config)"
         )
-    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
-
     if not source and not license and not origin:
         raise click.ClickException(
             "At least one of --source, --license, or --origin is required."
         )
 
-    input_dirs = resolve_dirs(working, dirs_list)
-
-    all_images: list[Path] = []
-    for src in input_dirs:
-        if not src.is_dir():
-            logger.warning("Source directory does not exist, skipping: %s", src)
-            continue
-        all_images.extend(find_images(src))
-
-    if not all_images:
-        raise click.ClickException("No images found in source directories.")
+    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     annotation: dict[str, str] = {}
     if source:

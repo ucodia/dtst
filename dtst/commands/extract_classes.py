@@ -4,15 +4,21 @@ import json
 import logging
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
 from pathlib import Path
 
 import click
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from dtst.config import config_argument
-from dtst.files import find_images, resolve_dirs
+from dtst.config import (
+    config_argument,
+    dry_run_option,
+    from_dirs_option,
+    to_dir_option,
+    working_dir_option,
+    workers_option,
+)
+from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
 from dtst.sidecar import read_sidecar, sidecar_path
 
 logger = logging.getLogger(__name__)
@@ -146,26 +152,11 @@ def _process_image(
 
 @click.command("extract-classes")
 @config_argument
-@click.option(
-    "--working-dir",
-    "-d",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Working directory containing source folders and where output is written (default: .).",
+@working_dir_option(
+    help="Working directory containing source folders and where output is written (default: .)."
 )
-@click.option(
-    "--from",
-    "from_dirs",
-    type=str,
-    default=None,
-    help="Comma-separated source folders within the working directory (supports globs, e.g. 'images/*').",
-)
-@click.option(
-    "--to",
-    type=str,
-    default=None,
-    help="Destination folder name within the working directory.",
-)
+@from_dirs_option()
+@to_dir_option()
 @click.option(
     "--classes",
     "-c",
@@ -195,18 +186,8 @@ def _process_image(
     is_flag=True,
     help="Skip detections whose crop extends beyond the image boundary after applying --square and --margin.",
 )
-@click.option(
-    "--workers",
-    "-w",
-    type=int,
-    default=None,
-    help="Number of parallel workers (default: CPU count).",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview what would be extracted without writing files.",
-)
+@workers_option()
+@dry_run_option(help="Preview what would be extracted without writing files.")
 def cmd(
     working_dir: Path | None,
     from_dirs: str | None,
@@ -302,7 +283,7 @@ def cmd(
         margin_label,
         square,
         min_score,
-        workers if workers is not None else (cpu_count() or 4),
+        resolve_workers(workers),
     )
 
     if dry_run:
@@ -318,7 +299,7 @@ def cmd(
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    num_workers = workers if workers is not None else cpu_count() or 4
+    num_workers = resolve_workers(workers)
 
     work = [
         (
@@ -380,12 +361,11 @@ def cmd(
                     raise
 
     elapsed = time.monotonic() - start_time
-    minutes, seconds = divmod(int(elapsed), 60)
 
     click.echo("\nExtract classes complete!")
     click.echo(f"  Processed: {ok_count:,}")
     click.echo(f"  Crops extracted: {total_crops:,}")
     click.echo(f"  No detections: {no_det_count:,}")
     click.echo(f"  Failed: {failed_count:,}")
-    click.echo(f"  Time: {minutes}m {seconds}s")
+    click.echo(f"  Time: {format_elapsed(elapsed)}")
     click.echo(f"  Output: {output_dir}")
