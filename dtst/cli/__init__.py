@@ -26,12 +26,13 @@ from dtst.cli.commands import (
     format,
     frame,
     rename,
+    review,
+    run,
     search,
     select,
     upscale,
     validate,
 )
-from dtst.commands import review, run
 
 
 @click.group()
