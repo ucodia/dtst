@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
@@ -16,6 +16,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import find_images, resolve_workers
 from dtst.sidecar import read_all_sidecars, sidecar_path
 
@@ -218,21 +219,27 @@ def cmd(
 
     logger.info("Reading image metadata for %d images", len(has_phash))
     image_info: dict[Path, tuple[int, int, int]] = {}
-    errors = 0
 
-    with logging_redirect_tqdm():
-        work = [(str(p),) for p in has_phash]
-        with ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(_read_image_info, w): w for w in work}
-            with tqdm(total=len(work), desc="Reading metadata", unit="image") as pbar:
-                for future in as_completed(futures):
-                    path_str, w, h, file_size, err = future.result()
-                    if err:
-                        logger.error("Failed to read %s: %s", Path(path_str).name, err)
-                        errors += 1
-                    else:
-                        image_info[Path(path_str)] = (w, h, file_size)
-                    pbar.update(1)
+    work = [(str(p),) for p in has_phash]
+
+    def handle(result, _work_item):
+        path_str, w, h, file_size, err = result
+        if err:
+            logger.error("Failed to read %s: %s", Path(path_str).name, err)
+            return "fail"
+        image_info[Path(path_str)] = (w, h, file_size)
+        return "ok"
+
+    counts = run_pool(
+        ProcessPoolExecutor,
+        _read_image_info,
+        work,
+        max_workers=workers,
+        desc="Reading metadata",
+        unit="image",
+        on_result=handle,
+    )
+    errors = counts.get("fail", 0)
 
     valid_images = [p for p in has_phash if p in image_info]
     if len(valid_images) < 2:

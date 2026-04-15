@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
-from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import (
@@ -16,6 +15,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import gather_images, resolve_workers
 from dtst.sidecar import read_sidecar, sidecar_path, write_sidecar
 
@@ -213,34 +213,38 @@ def cmd(from_dirs, metrics, force, working_dir, workers, clear, dry_run):
     errors = 0
 
     # --- CPU metrics via ProcessPoolExecutor ---
-    with logging_redirect_tqdm():
-        for metric_name in requested_cpu:
-            compute_fn = _CPU_COMPUTE_FNS[metric_name]
-            metric_images = [
-                img for img, pending in needs_work.items() if metric_name in pending
-            ]
-            if not metric_images:
-                continue
+    for metric_name in requested_cpu:
+        compute_fn = _CPU_COMPUTE_FNS[metric_name]
+        metric_images = [
+            img for img, pending in needs_work.items() if metric_name in pending
+        ]
+        if not metric_images:
+            continue
 
-            work = [(str(img),) for img in metric_images]
-            with ProcessPoolExecutor(max_workers=workers) as executor:
-                futures = {executor.submit(compute_fn, w): w for w in work}
-                with tqdm(
-                    total=len(work), desc=f"Computing {metric_name}", unit="image"
-                ) as pbar:
-                    for future in as_completed(futures):
-                        path_str, value, err = future.result()
-                        img_path = Path(path_str)
-                        if err:
-                            logger.error(
-                                "%s failed for %s: %s", metric_name, img_path.name, err
-                            )
-                            errors += 1
-                        else:
-                            if isinstance(value, float):
-                                value = round(value, 2)
-                            results[img_path][metric_name] = value
-                        pbar.update(1)
+        work = [(str(img),) for img in metric_images]
+
+        def handle(result, _work_item, metric_name=metric_name):
+            path_str, value, err = result
+            img_path = Path(path_str)
+            if err:
+                logger.error("%s failed for %s: %s", metric_name, img_path.name, err)
+                return "fail"
+            if isinstance(value, float):
+                value = round(value, 2)
+            results[img_path][metric_name] = value
+            return "ok"
+
+        counts = run_pool(
+            ProcessPoolExecutor,
+            compute_fn,
+            work,
+            max_workers=workers,
+            desc=f"Computing {metric_name}",
+            unit="image",
+            on_result=handle,
+            postfix_keys=("ok", "fail"),
+        )
+        errors += counts.get("fail", 0)
 
     # --- IQA metrics via batched GPU inference ---
     if requested_iqa:

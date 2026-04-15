@@ -5,12 +5,10 @@ import struct
 import sys
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import (
     config_argument,
@@ -18,6 +16,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import format_elapsed, gather_images, resolve_workers
 
 logger = logging.getLogger(__name__)
@@ -106,33 +105,35 @@ def cmd(from_dirs, working_dir, square, workers):
     non_square = 0
     compressed_png = 0
     total_png = 0
-    failed = 0
 
     work = [(str(img),) for img in all_images]
 
-    with logging_redirect_tqdm():
-        with ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(_check_image, w): w for w in work}
-            with tqdm(total=len(futures), desc="Validating", unit="image") as pbar:
-                try:
-                    for future in as_completed(futures):
-                        name, w, h, mode, is_png, flevel, error = future.result()
-                        if error is not None:
-                            logger.error("Failed to read %s: %s", name, error)
-                            failed += 1
-                        else:
-                            dim_counts[(w, h)] += 1
-                            mode_counts[mode] += 1
-                            if square and w != h:
-                                non_square += 1
-                            if is_png:
-                                total_png += 1
-                                if flevel is not None and flevel > 0:
-                                    compressed_png += 1
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    def handle(result, _work_item):
+        nonlocal non_square, total_png, compressed_png
+        name, w, h, mode, is_png, flevel, error = result
+        if error is not None:
+            logger.error("Failed to read %s: %s", name, error)
+            return "fail"
+        dim_counts[(w, h)] += 1
+        mode_counts[mode] += 1
+        if square and w != h:
+            non_square += 1
+        if is_png:
+            total_png += 1
+            if flevel is not None and flevel > 0:
+                compressed_png += 1
+        return "ok"
+
+    counts = run_pool(
+        ProcessPoolExecutor,
+        _check_image,
+        work,
+        max_workers=workers,
+        desc="Validating",
+        unit="image",
+        on_result=handle,
+    )
+    failed = counts.get("fail", 0)
 
     elapsed = time.monotonic() - t0
     total = len(all_images)

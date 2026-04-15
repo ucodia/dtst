@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import (
     config_argument,
@@ -16,6 +14,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
 from dtst.sidecar import EXCLUDE_METRICS_AND_CLASSES, copy_sidecar
 
@@ -243,51 +242,48 @@ def cmd(
     ]
 
     start_time = time.monotonic()
-    ok_count = 0
-    no_faces_count = 0
-    failed_count = 0
     total_faces = 0
 
-    with logging_redirect_tqdm():
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_process_image, w): w for w in work}
-            with tqdm(
-                total=len(futures), desc="Extracting faces", unit="image"
-            ) as pbar:
-                try:
-                    for future in as_completed(futures):
-                        status, name, face_count, error = future.result()
-                        if status == "ok":
-                            ok_count += 1
-                            total_faces += face_count
-                            src_path = Path(futures[future][0])
-                            stem = src_path.stem
-                            if face_count == 1:
-                                copy_sidecar(
-                                    src_path,
-                                    output_dir / f"{stem}.jpg",
-                                    exclude=EXCLUDE_METRICS_AND_CLASSES,
-                                )
-                            else:
-                                for i in range(face_count):
-                                    copy_sidecar(
-                                        src_path,
-                                        output_dir / f"{stem}_{i + 1:02d}.jpg",
-                                        exclude=EXCLUDE_METRICS_AND_CLASSES,
-                                    )
-                        elif status == "no_faces":
-                            no_faces_count += 1
-                            logger.debug("No faces detected in %s", name)
-                        else:
-                            failed_count += 1
-                            logger.error("Failed to process %s: %s", name, error)
-                        pbar.set_postfix(
-                            ok=ok_count, noface=no_faces_count, fail=failed_count
-                        )
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    def handle(result, work_item):
+        nonlocal total_faces
+        status, name, face_count, error = result
+        if status == "ok":
+            total_faces += face_count
+            src_path = Path(work_item[0])
+            stem = src_path.stem
+            if face_count == 1:
+                copy_sidecar(
+                    src_path,
+                    output_dir / f"{stem}.jpg",
+                    exclude=EXCLUDE_METRICS_AND_CLASSES,
+                )
+            else:
+                for i in range(face_count):
+                    copy_sidecar(
+                        src_path,
+                        output_dir / f"{stem}_{i + 1:02d}.jpg",
+                        exclude=EXCLUDE_METRICS_AND_CLASSES,
+                    )
+            return "ok"
+        if status == "no_faces":
+            logger.debug("No faces detected in %s", name)
+            return "noface"
+        logger.error("Failed to process %s: %s", name, error)
+        return "fail"
+
+    counts = run_pool(
+        ProcessPoolExecutor,
+        _process_image,
+        work,
+        max_workers=num_workers,
+        desc="Extracting faces",
+        unit="image",
+        on_result=handle,
+        postfix_keys=("ok", "noface", "fail"),
+    )
+    ok_count = counts.get("ok", 0)
+    no_faces_count = counts.get("noface", 0)
+    failed_count = counts.get("fail", 0)
 
     elapsed = time.monotonic() - start_time
 

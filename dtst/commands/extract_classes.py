@@ -3,12 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import (
     config_argument,
@@ -18,6 +16,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import find_images, format_elapsed, resolve_dirs, resolve_workers
 from dtst.sidecar import read_sidecar, sidecar_path
 
@@ -317,48 +316,44 @@ def cmd(
 
     start_time = time.monotonic()
     ok_count = 0
-    no_det_count = no_sidecar
-    failed_count = 0
     total_crops = 0
 
-    with logging_redirect_tqdm():
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_process_image, w): w for w in work}
-            with tqdm(
-                total=len(futures), desc="Extracting classes", unit="image"
-            ) as pbar:
-                try:
-                    for future in as_completed(futures):
-                        status, name, crop_count, outputs, error = future.result()
-                        if status == "ok":
-                            ok_count += 1
-                            total_crops += crop_count
-                            src_path = Path(futures[future][0])
-                            src_sidecar = read_sidecar(src_path)
-                            base_data = {
-                                k: v
-                                for k, v in src_sidecar.items()
-                                if k not in {"metrics", "classes"}
-                            }
-                            for out_name, cls_name, shifted_classes in outputs:
-                                out_data = {**base_data, "classes": shifted_classes}
-                                out_path = sidecar_path(output_dir / out_name)
-                                with open(out_path, "w") as f:
-                                    json.dump(out_data, f, indent=2)
-                                    f.write("\n")
-                        elif status == "no_detections":
-                            no_det_count += 1
-                            logger.debug("No matching detections in %s", name)
-                        else:
-                            failed_count += 1
-                            logger.error("Failed to process %s: %s", name, error)
-                        pbar.set_postfix(
-                            ok=ok_count, nodet=no_det_count, fail=failed_count
-                        )
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    def handle(result, work_item):
+        nonlocal total_crops
+        status, name, crop_count, outputs, error = result
+        if status == "ok":
+            total_crops += crop_count
+            src_path = Path(work_item[0])
+            src_sidecar = read_sidecar(src_path)
+            base_data = {
+                k: v for k, v in src_sidecar.items() if k not in {"metrics", "classes"}
+            }
+            for out_name, cls_name, shifted_classes in outputs:
+                out_data = {**base_data, "classes": shifted_classes}
+                out_path = sidecar_path(output_dir / out_name)
+                with open(out_path, "w") as f:
+                    json.dump(out_data, f, indent=2)
+                    f.write("\n")
+            return "ok"
+        if status == "no_detections":
+            logger.debug("No matching detections in %s", name)
+            return "nodet"
+        logger.error("Failed to process %s: %s", name, error)
+        return "fail"
+
+    counts = run_pool(
+        ProcessPoolExecutor,
+        _process_image,
+        work,
+        max_workers=num_workers,
+        desc="Extracting classes",
+        unit="image",
+        on_result=handle,
+        postfix_keys=("ok", "nodet", "fail"),
+    )
+    ok_count = counts.get("ok", 0)
+    no_det_count = no_sidecar + counts.get("nodet", 0)
+    failed_count = counts.get("fail", 0)
 
     elapsed = time.monotonic() - start_time
 

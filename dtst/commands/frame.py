@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import click
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dtst.config import (
     FRAME_FILLS,
@@ -20,6 +18,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import (
     build_save_kwargs,
     find_images,
@@ -368,32 +367,31 @@ def cmd(
     ]
 
     start_time = time.monotonic()
-    ok_count = 0
-    failed_count = 0
 
-    with logging_redirect_tqdm():
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_resize_image, w): w for w in work}
-            with tqdm(total=len(futures), desc="Resizing", unit="image") as pbar:
-                try:
-                    for future in as_completed(futures):
-                        status, name, error = future.result()
-                        if status == "ok":
-                            ok_count += 1
-                            src_path = Path(futures[future][0])
-                            copy_sidecar(
-                                src_path,
-                                output_dir / name,
-                                exclude=EXCLUDE_METRICS_AND_CLASSES,
-                            )
-                        else:
-                            failed_count += 1
-                            logger.error("Failed to resize %s: %s", name, error)
-                        pbar.set_postfix(ok=ok_count, fail=failed_count)
-                        pbar.update(1)
-                except KeyboardInterrupt:
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise
+    def handle(result, work_item):
+        status, name, error = result
+        if status == "ok":
+            copy_sidecar(
+                Path(work_item[0]),
+                output_dir / name,
+                exclude=EXCLUDE_METRICS_AND_CLASSES,
+            )
+            return "ok"
+        logger.error("Failed to resize %s: %s", name, error)
+        return "fail"
+
+    counts = run_pool(
+        ProcessPoolExecutor,
+        _resize_image,
+        work,
+        max_workers=num_workers,
+        desc="Resizing",
+        unit="image",
+        on_result=handle,
+        postfix_keys=("ok", "fail"),
+    )
+    ok_count = counts.get("ok", 0)
+    failed_count = counts.get("fail", 0)
 
     elapsed = time.monotonic() - start_time
 

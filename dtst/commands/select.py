@@ -327,7 +327,9 @@ def cmd(
 
         # Dimension check (parallel, CPU-bound)
         if has_dimension_criteria:
-            from concurrent.futures import ProcessPoolExecutor, as_completed
+            from concurrent.futures import ProcessPoolExecutor
+
+            from dtst.executor import run_pool
 
             work = [
                 (
@@ -341,28 +343,29 @@ def cmd(
                 )
                 for p in images
             ]
-            with logging_redirect_tqdm():
-                with ProcessPoolExecutor(max_workers=num_workers) as executor:
-                    futures = {
-                        executor.submit(_check_image_dimensions, w): w for w in work
-                    }
-                    with tqdm(
-                        total=len(futures), desc="Checking dimensions", unit="image"
-                    ) as pbar:
-                        try:
-                            for future in as_completed(futures):
-                                status, name, w, h, reason = future.result()
-                                if status == "reject":
-                                    original_path = Path(futures[future][0])
-                                    rejects[original_path] = reason
-                                    kept_set.discard(original_path)
-                                elif status == "failed":
-                                    failed += 1
-                                    logger.error("Failed to check %s: %s", name, reason)
-                                pbar.update(1)
-                        except KeyboardInterrupt:
-                            executor.shutdown(wait=False, cancel_futures=True)
-                            raise
+
+            def handle(result, work_item):
+                status, name, w, h, reason = result
+                if status == "reject":
+                    original_path = Path(work_item[0])
+                    rejects[original_path] = reason
+                    kept_set.discard(original_path)
+                    return "reject"
+                if status == "failed":
+                    logger.error("Failed to check %s: %s", name, reason)
+                    return "fail"
+                return "keep"
+
+            counts = run_pool(
+                ProcessPoolExecutor,
+                _check_image_dimensions,
+                work,
+                max_workers=num_workers,
+                desc="Checking dimensions",
+                unit="image",
+                on_result=handle,
+            )
+            failed += counts.get("fail", 0)
 
         # Metric check (sidecar lookup)
         if has_metric_criteria:

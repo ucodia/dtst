@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,6 +23,7 @@ from dtst.config import (
     working_dir_option,
     workers_option,
 )
+from dtst.executor import run_pool
 from dtst.files import format_elapsed, resolve_workers
 from dtst.sidecar import write_sidecar
 from dtst.throttle import DomainThrottler
@@ -612,43 +613,38 @@ def cmd(
             (url, dest_dir, timeout, force, throttler, max_wait) for url in direct_urls
         ]
 
-        with logging_redirect_tqdm():
-            with ThreadPoolExecutor(max_workers=num_workers) as executor:
-                futures = {executor.submit(_download_url, w): w for w in work}
-                with tqdm(
-                    total=len(futures),
-                    desc="Fetching",
-                    unit="url",
-                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]",
-                ) as pbar:
-                    try:
-                        for future in as_completed(futures):
-                            status, url, error, final_path = future.result()
-                            if status == "downloaded":
-                                downloaded += 1
-                                if final_path is not None:
-                                    meta = sidecar_lookup.get(url)
-                                    if meta:
-                                        write_sidecar(final_path, meta)
-                            elif status == "skipped":
-                                skipped += 1
-                            elif status == "rate_limited":
-                                rate_limited += 1
-                                domain = urlparse(url).hostname or "unknown"
-                                rate_limited_domains.add(domain)
-                            else:
-                                failed += 1
-                                logger.error("Failed to download %s: %s", url, error)
-                            pbar.set_postfix(
-                                ok=downloaded,
-                                skip=skipped,
-                                fail=failed,
-                                limited=rate_limited,
-                            )
-                            pbar.update(1)
-                    except KeyboardInterrupt:
-                        executor.shutdown(wait=False, cancel_futures=True)
-                        raise
+        def handle(result, _work_item):
+            status, url, error, final_path = result
+            if status == "downloaded":
+                if final_path is not None:
+                    meta = sidecar_lookup.get(url)
+                    if meta:
+                        write_sidecar(final_path, meta)
+                return "ok"
+            if status == "skipped":
+                return "skip"
+            if status == "rate_limited":
+                domain = urlparse(url).hostname or "unknown"
+                rate_limited_domains.add(domain)
+                return "limited"
+            logger.error("Failed to download %s: %s", url, error)
+            return "fail"
+
+        counts = run_pool(
+            ThreadPoolExecutor,
+            _download_url,
+            work,
+            max_workers=num_workers,
+            desc="Fetching",
+            unit="url",
+            on_result=handle,
+            postfix_keys=("ok", "skip", "fail", "limited"),
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}{postfix}]",
+        )
+        downloaded += counts.get("ok", 0)
+        skipped += counts.get("skip", 0)
+        failed += counts.get("fail", 0)
+        rate_limited += counts.get("limited", 0)
 
     # --- yt-dlp downloads ----------------------------------------------------
 
