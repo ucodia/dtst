@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 def rename(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     prefix: str = "",
     digits: int | None = None,
@@ -24,18 +23,16 @@ def rename(
 ) -> RenameResult:
     """Sequentially rename images in-place with a prefix + zero-padded number.
 
-    Parameters mirror the CLI flags.  ``from_dirs`` is a comma-separated
-    list of folder names (relative to ``working_dir``) and may contain
-    globs.  Sidecar JSON files travel with their images.
-
-    Raises :class:`InputError` if ``from_dirs`` is missing or no images
-    are found.
+    ``from_dirs`` is a comma-separated list of folders and may contain
+    globs.  Sidecar JSON files travel with their images.  Raises
+    :class:`InputError` if ``from_dirs`` is missing or no images are
+    found.
     """
     if not from_dirs:
         raise InputError("from_dirs is required")
 
     t0 = time.time()
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    _input_dirs, all_images = gather_images(from_dirs)
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     pad = digits if digits is not None else len(str(len(all_images)))

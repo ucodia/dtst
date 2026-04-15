@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     to_dir_option,
     working_dir_option,
@@ -19,9 +20,7 @@ from dtst.files import format_elapsed
 
 @click.command("fetch")
 @config_argument
-@working_dir_option(
-    help="Working directory where input is read from and media is written to (default: .)."
-)
+@working_dir_option()
 @to_dir_option()
 @click.option(
     "--input",
@@ -29,7 +28,7 @@ from dtst.files import format_elapsed
     "input_file",
     type=str,
     default=None,
-    help="Input file name relative to the working directory. Supports .jsonl and .txt formats.",
+    help="Input file path (.jsonl or .txt).",
 )
 @click.option(
     "--min-size",
@@ -125,9 +124,9 @@ def cmd(
             "--input is required (or set 'fetch.input' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_fetch(
-            working_dir=working_dir,
             to=to,
             input_file=input_file,
             min_size=min_size if min_size is not None else 512,

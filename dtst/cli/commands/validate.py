@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     from_dirs_option,
     working_dir_option,
@@ -52,9 +53,9 @@ def cmd(
             "--from is required (or set 'validate.from' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_validate(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             square=square,
             workers=workers,

@@ -64,7 +64,6 @@ class _UnionFind:
 
 def dedup(
     *,
-    working_dir: Path | None,
     from_dir: str,
     to: str = "duplicated",
     threshold: int = 8,
@@ -74,14 +73,17 @@ def dedup(
     prefer_upscaled: bool = False,
     progress: bool = True,
 ) -> DedupResult:
-    """Deduplicate images by perceptual hash similarity."""
+    """Deduplicate images by perceptual hash similarity.
+
+    ``to`` is a subfolder *inside* ``from_dir`` where duplicates are
+    moved.
+    """
     t0 = time.time()
 
     if not from_dir:
         raise InputError("from_dir is required")
 
-    working = (working_dir or Path(".")).resolve()
-    source_dir = working / from_dir
+    source_dir = Path(from_dir).expanduser().resolve()
     duplicated_dir = source_dir / to
 
     if not source_dir.is_dir():

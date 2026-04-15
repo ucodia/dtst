@@ -4,7 +4,7 @@ For repeatable pipelines, collect your parameters into a YAML config file. Comma
 
 ## Config file structure
 
-The config file has `working_dir` at the top level and parameters nested under command-specific keys:
+The config file has an optional `working_dir` at the top level and parameters nested under command-specific keys. When set, `working_dir` is resolved relative to the YAML file and the command `chdir`s into it before running; when omitted, the shell's current directory is used. Path options (`from`, `to`, `input`, `output`) accept any relative or absolute path.
 
 ```yaml
 # crowd.yaml

@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     working_dir_option,
@@ -24,7 +25,7 @@ from dtst.errors import DtstError
     "from_dir",
     type=str,
     default=None,
-    help="Folder name to deduplicate within the working directory.",
+    help="Folder to deduplicate.",
 )
 @click.option(
     "--to",
@@ -88,9 +89,9 @@ def cmd(
     if from_dir is None:
         raise click.ClickException("--from is required (or set 'dedup.from' in config)")
 
+    apply_working_dir(working_dir)
     try:
         result = core_dedup(
-            working_dir=working_dir,
             from_dir=from_dir,
             to=to or "duplicated",
             threshold=threshold if threshold is not None else 8,

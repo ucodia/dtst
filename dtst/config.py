@@ -11,4 +11,5 @@ from dtst.cli.config import (  # noqa: F401
     _coerce_for_click,
     _find_param,
     _resolve_working_dir,
+    apply_working_dir,
 )

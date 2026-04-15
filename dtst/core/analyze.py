@@ -65,7 +65,6 @@ _CPU_COMPUTE_FNS = {
 
 def analyze(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     metrics: str | None = None,
     force: bool = False,
@@ -82,7 +81,7 @@ def analyze(
     metrics_list = (
         [m.strip() for m in metrics.split(",") if m.strip()] if metrics else []
     )
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    _input_dirs, all_images = gather_images(from_dirs)
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     if clear:

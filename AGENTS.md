@@ -15,7 +15,9 @@ All commands use **Click** for argument parsing. Never use `argparse`.
 
 ### Pipeline Model
 
-The pipeline is organized around a **working directory** that acts as the project root. All commands read from and write to named folders within it. The working directory is the source of truth — users can inspect it in the file explorer, manually drop files in, and everything just works.
+The pipeline is organized around a **working directory** that acts as the project root. Users can inspect it in the file explorer, drop files in, and everything just works.
+
+`--working-dir` / `-d` is equivalent to `cd` into that directory before the command runs, and is optional. Path options (`--from`, `--to`, `--input`, `--output`) accept any relative or absolute path — they resolve against cwd like in any other tool.
 
 There are three kinds of commands:
 
@@ -23,9 +25,9 @@ There are three kinds of commands:
 - **Augmenting** commands take one or more existing folders and produce a new folder (e.g. `extract-faces`). They have both `--from` and `--to`.
 - **Filtering** commands reduce an existing folder without producing a new one.
 
-`search` is a special case: it has no `--from` or `--to` and simply deposits `results.jsonl` in the working directory for `fetch` to consume.
+`search` is a special case: it has no `--from` or `--to` and simply writes `results.jsonl` for `fetch` to consume.
 
-The folder names in `--from` and `--to` are always relative to `--working-dir` and are mandatory (either via CLI flags or a config file). The conventional happy-path pipeline uses these folder names:
+The conventional happy-path pipeline uses these folder names under the working directory:
 
 ```
 working_dir/
@@ -39,21 +41,21 @@ working_dir/
 
 Every subcommand is a function decorated with `@click.command()` and registered to the main `dtst` CLI group. Commands live in `dtst/commands/` as individual modules.
 
+CLI wrappers live in `dtst/cli/commands/` and call a core function in `dtst/core/`. Each wrapper handles Click parsing, calls `apply_working_dir(working_dir)` (a `chdir` shim), and then invokes the core function. Core functions do not accept `working_dir`.
+
 ```python
 import click
-from dtst.config import config_argument
+from dtst.cli.config import apply_working_dir, config_argument, working_dir_option
 
 @click.command()
 @config_argument
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory (default: .).")
+@working_dir_option()
 @click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count).")
 @click.option("--dry-run", is_flag=True, help="Preview what would be done without executing.")
 def my_command(working_dir, workers, dry_run):
     """One-line description of what this command does."""
-    if workers is None:
-        workers = cpu_count()
-    working = (working_dir or Path(".")).resolve()
-    # ...
+    apply_working_dir(working_dir)
+    # delegate to dtst.core.my_command(...)
 ```
 
 After adding or changing any command's options, arguments, or docstring, regenerate the CLI reference docs:
@@ -77,7 +79,7 @@ The schema is defined **once** — in the Click decorators. There are no config 
 | `input` | `input_file` | `input` is a Python builtin |
 | `license` | `license_filter` | Avoids shadowing the builtin |
 
-Config files use YAML with `working_dir` at the top level and parameters nested under command-specific keys:
+Config files use YAML with an optional `working_dir` at the top level and parameters nested under command-specific keys. When set, `working_dir` is resolved relative to the YAML file's directory and the command `chdir`s into it before running.
 
 ```yaml
 working_dir: "./scratch/chanterelle"
@@ -115,8 +117,8 @@ dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 ### Option Patterns
 
 - Always provide a short flag alias for frequently used options (`-d`, `-w`, `-t`)
-- Use `--working-dir` / `-d` for the working directory on all pipeline commands
-- Use `--from` for augmenting commands that accept input folder names (comma-separated, supports globs like `images/*`, maps to `from_dirs` in Python since `from` is a keyword). Glob expansion is handled by `resolve_dirs()` in `dtst/files.py`.
+- Use `--working-dir` / `-d` on all pipeline commands
+- Use `--from` for augmenting commands that accept input folders (comma-separated, supports globs like `images/*`, maps to `from_dirs` in Python since `from` is a keyword). Glob expansion is handled by `resolve_dirs()` in `dtst/files.py`.
 - Use `--to` for sourcing and augmenting commands that write to an output folder
 - Use `click.Path(path_type=Path)` so paths arrive as `Path` objects
 - Default `--workers` to `None` and resolve to `cpu_count()` inside the function body
@@ -367,7 +369,7 @@ Since the CLI docs are generated from your Click code, every command must be wri
 @click.command()
 @config_argument
 @click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
-@click.option("--working-dir", "-d", type=click.Path(path_type=Path), default=None, help="Working directory where results.jsonl is written (default: .).")
+@working_dir_option(help="Change into this directory before running (default: current directory).")
 @click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches.")
 def search(terms, working_dir, dry_run):
     """Search for images across multiple engines.

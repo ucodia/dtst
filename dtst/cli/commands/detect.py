@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -83,9 +84,9 @@ def cmd(
             "--classes is required (or set 'detect.classes' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_detect(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             classes=classes,
             threshold=threshold if threshold is not None else 0.2,

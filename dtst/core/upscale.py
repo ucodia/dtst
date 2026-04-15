@@ -198,7 +198,6 @@ def _load_and_preprocess(path: Path) -> tuple[Path, torch.Tensor | None, str | N
 
 def upscale(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     scale: int = 4,
@@ -224,10 +223,8 @@ def upscale(
         raise InputError("denoise is not compatible with model")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
-
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:

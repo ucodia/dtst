@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 
 from dtst.errors import InputError
 from dtst.files import gather_images
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 def annotate(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     source: str | None = None,
     license: str | None = None,
@@ -31,7 +29,7 @@ def annotate(
         raise InputError("At least one of source, license, or origin is required.")
 
     t0 = time.time()
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    _input_dirs, all_images = gather_images(from_dirs)
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     annotation: dict[str, str] = {}

@@ -23,16 +23,16 @@ def _cache_key(model: str, image_paths: list[Path]) -> str:
 
 
 def load_embeddings(
-    working_dir: Path,
     model: str,
     image_paths: list[Path],
 ) -> tuple[np.ndarray, list[Path]] | None:
     """Load cached embeddings if they exist and match the current image set.
 
-    Returns (embeddings, valid_paths) on hit, or None on miss.
+    The cache lives under ``.dtst/cache/``.  Returns
+    (embeddings, valid_paths) on hit, or None on miss.
     """
     key = _cache_key(model, image_paths)
-    cache_path = working_dir / CACHE_DIR / f"{key}.npz"
+    cache_path = CACHE_DIR / f"{key}.npz"
 
     if not cache_path.exists():
         return None
@@ -60,17 +60,15 @@ def load_embeddings(
 
 
 def save_embeddings(
-    working_dir: Path,
     model: str,
     image_paths: list[Path],
     embeddings: np.ndarray,
     valid_paths: list[Path],
 ) -> None:
-    """Save embeddings to the cache."""
+    """Save embeddings to the ``.dtst/cache/`` directory."""
     key = _cache_key(model, image_paths)
-    cache_dir = working_dir / CACHE_DIR
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = cache_dir / f"{key}.npz"
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = CACHE_DIR / f"{key}.npz"
 
     filenames = np.array([p.name for p in valid_paths])
     np.savez(cache_path, embeddings=embeddings, filenames=filenames)

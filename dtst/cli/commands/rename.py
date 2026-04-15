@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -61,9 +62,9 @@ def cmd(
             "--from is required (or set 'rename.from' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_rename(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             prefix=prefix or "",
             digits=digits,

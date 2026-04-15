@@ -384,7 +384,6 @@ def _check_ytdlp() -> bool:
 
 def fetch(
     *,
-    working_dir: Path | None,
     to: str,
     input_file: str,
     min_size: int = 512,
@@ -407,10 +406,8 @@ def fetch(
     if not input_file:
         raise InputError("input_file is required")
 
-    working = (working_dir or Path(".")).resolve()
-    input_name = input_file
-    input_path = working / input_name
-    input_ext = Path(input_name).suffix.lower()
+    input_path = Path(input_file).expanduser().resolve()
+    input_ext = input_path.suffix.lower()
 
     if not input_path.exists():
         raise InputError(f"Input file not found: {input_path}")
@@ -438,7 +435,7 @@ def fetch(
     if not urls:
         raise InputError("No URLs to fetch after filtering")
 
-    dest_dir = working / to
+    dest_dir = Path(to).expanduser().resolve()
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     direct_urls: list[str] = []

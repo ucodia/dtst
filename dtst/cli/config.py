@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,20 @@ def _resolve_working_dir(data: dict, config_dir: Path) -> Path:
     if not isinstance(working_dir, str) or not working_dir.strip():
         raise click.ClickException("'working_dir' must be a non-empty string")
     return config_dir / working_dir.strip()
+
+
+def apply_working_dir(working_dir: Path | None) -> None:
+    """``chdir`` into ``working_dir`` when set; no-op when ``None``.
+
+    Creates the directory if it does not yet exist.  Called from every
+    CLI command wrapper to honor ``--working-dir`` and the YAML
+    ``working_dir`` key.
+    """
+    if working_dir is None:
+        return
+    target = Path(working_dir).expanduser().resolve()
+    target.mkdir(parents=True, exist_ok=True)
+    os.chdir(target)
 
 
 # Mapping from YAML config keys to Click parameter names where they differ.
@@ -118,7 +133,9 @@ def config_argument(f):
 # ---------------------------------------------------------------------------
 
 
-def working_dir_option(help: str = "Working directory (default: .)."):
+def working_dir_option(
+    help: str = "Change into this directory before running.",
+):
     """``--working-dir`` / ``-d`` option decorator."""
 
     def wrap(f):
@@ -149,10 +166,7 @@ def workers_option(help: str = "Number of parallel workers (default: CPU count).
 
 
 def from_dirs_option(
-    help: str = (
-        "Comma-separated source folders under --working-dir "
-        "(supports globs, e.g. 'images/*')."
-    ),
+    help: str = "Comma-separated source folders (supports globs like 'images/*').",
 ):
     """``--from`` option decorator (bound to the ``from_dirs`` Python name)."""
 
@@ -168,7 +182,7 @@ def from_dirs_option(
     return wrap
 
 
-def to_dir_option(help: str = "Destination folder under --working-dir."):
+def to_dir_option(help: str = "Destination folder."):
     """``--to`` option decorator."""
 
     def wrap(f):

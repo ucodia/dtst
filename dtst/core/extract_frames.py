@@ -132,7 +132,6 @@ def _check_ffmpeg() -> bool:
 
 def extract_frames(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     keyframes: float = 10.0,
@@ -150,15 +149,14 @@ def extract_frames(
         raise InputError("to is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
 
     if not _check_ffmpeg():
         raise InputError(
             "ffmpeg is not installed or not on PATH. Install it with: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         )
 
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:

@@ -66,7 +66,6 @@ def search(
     *,
     terms: list[str] | None = None,
     suffixes: list[str] | None = None,
-    working_dir: Path | None = None,
     output: str = "results.jsonl",
     max_pages: int | None = None,
     engines: list[str] | None = None,
@@ -84,7 +83,6 @@ def search(
     suffixes_list = list(suffixes or [])
     engine_list = [e.strip().lower() for e in (engines or []) if e.strip()]
     taxon_ids_list = list(taxon_ids or [])
-    working_dir_path = (working_dir or Path(".")).resolve()
 
     if taxon_ids_list and "inaturalist" not in engine_list:
         engine_list.append("inaturalist")
@@ -121,7 +119,7 @@ def search(
         return queries
 
     queries = query_matrix(suffix_only=suffix_only) if text_engines else []
-    results_file = working_dir_path / output
+    results_file = Path(output).expanduser().resolve()
 
     if dry_run:
         return SearchResult(
@@ -210,7 +208,7 @@ def search(
                     executor.shutdown(wait=False, cancel_futures=True)
                     raise
 
-    working_dir_path.mkdir(parents=True, exist_ok=True)
+    results_file.parent.mkdir(parents=True, exist_ok=True)
 
     existing_results: list[dict] = []
     if results_file.exists():

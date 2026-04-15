@@ -137,7 +137,6 @@ def _process_image(
 
 def extract_classes(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     classes: str,
@@ -159,10 +158,8 @@ def extract_classes(
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     classes_list = [c.strip() for c in classes.split(",") if c.strip()]
-    working = (working_dir or Path(".")).resolve()
-
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:

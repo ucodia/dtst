@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import time
-from pathlib import Path
 
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 def detect(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     classes: str | None = None,
     threshold: float = 0.2,
@@ -39,7 +37,7 @@ def detect(
         [c.strip() for c in classes.split(",") if c.strip()] if classes else None
     )
 
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    _input_dirs, all_images = gather_images(from_dirs)
 
     if clear:
         modified = 0

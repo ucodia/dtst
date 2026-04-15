@@ -6,6 +6,7 @@ from __future__ import annotations
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -75,9 +76,9 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
             "At least one of --source, --license, or --origin is required."
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_annotate(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             source=source,
             license=license,

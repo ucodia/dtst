@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 def cluster(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     model: str = "arcface",
@@ -50,10 +49,8 @@ def cluster(
         raise InputError("to is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
-
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:
@@ -99,7 +96,7 @@ def cluster(
         )
 
     start_time = time.monotonic()
-    cached = load_embeddings(working, model, images) if not no_cache else None
+    cached = load_embeddings(model, images) if not no_cache else None
 
     if cached is not None:
         embeddings, valid_paths = cached
@@ -119,7 +116,7 @@ def cluster(
             raise PipelineError("No images produced valid embeddings")
 
         if not no_cache:
-            save_embeddings(working, model, images, embeddings, valid_paths)
+            save_embeddings(model, images, embeddings, valid_paths)
 
     embed_time = time.monotonic() - start_time
     logger.info(

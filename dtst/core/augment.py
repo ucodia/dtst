@@ -77,7 +77,6 @@ def _transform_image(args: tuple) -> tuple[str, str, list[str], str | None]:
 
 def augment(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     flip_x: bool = False,
@@ -99,9 +98,8 @@ def augment(
         )
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:

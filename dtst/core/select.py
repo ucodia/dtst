@@ -83,7 +83,6 @@ def _check_image_dimensions(args: tuple) -> tuple[str, str, int, int, str | None
 
 def select(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     to: str,
     move: bool = False,
@@ -110,7 +109,6 @@ def select(
         raise InputError("to is required")
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
-    working = (working_dir or Path(".")).resolve()
     source_list = [s.strip().lower() for s in source] if source else None
     license_list = (
         [lf.strip().lower() for lf in license_filter] if license_filter else None
@@ -120,8 +118,8 @@ def select(
     min_detect_list = list(min_detect) if min_detect else None
     max_detect_list = list(max_detect) if max_detect else None
 
-    input_dirs = resolve_dirs(working, dirs_list)
-    output_dir = working / to
+    input_dirs = resolve_dirs(dirs_list)
+    output_dir = Path(to).expanduser().resolve()
 
     missing = [str(d) for d in input_dirs if not d.is_dir()]
     if missing:

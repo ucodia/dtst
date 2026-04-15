@@ -8,44 +8,35 @@
 from pathlib import Path
 from dtst import fetch, extract_frames, detect, extract_classes, frame
 
-WORKING_DIR = Path("./scratch/trees")
+base = Path("./scratch/trees")
 
-fetch(
-    working_dir=WORKING_DIR,
-    to="raw",
-    input_file="urls.txt",
-)
+fetch(to=str(base / "raw"), input_file=str(base / "urls.txt"))
 
 extract_frames(
-    working_dir=WORKING_DIR,
-    from_dirs="raw",
-    to="frames",
+    from_dirs=str(base / "raw"),
+    to=str(base / "frames"),
     keyframes=10.0,
 )
 
-detect(
-    working_dir=WORKING_DIR,
-    from_dirs="frames",
-    classes="tree",
-)
+detect(from_dirs=str(base / "frames"), classes="tree")
 
 extract_classes(
-    working_dir=WORKING_DIR,
-    from_dirs="frames",
-    to="crops",
+    from_dirs=str(base / "frames"),
+    to=str(base / "crops"),
     classes="tree",
     square=True,
 )
 
 frame(
-    working_dir=WORKING_DIR,
-    from_dirs="crops",
-    to="framed",
+    from_dirs=str(base / "crops"),
+    to=str(base / "framed"),
     width=256,
     height=256,
     mode="stretch",
 )
 ```
+
+Path arguments (`from_dirs`, `to`, `input_file`, `output`) resolve against the current working directory when relative, or are used as-is when absolute. In scripts, build paths from a shared base directory rather than relying on cwd.
 
 ## Function signatures
 
@@ -62,6 +53,8 @@ from dtst import (
 
 Each function takes **keyword-only arguments** that mirror the CLI flags. Parameter names match the long flag, with `--from` → `from_dirs` and `--format` → `fmt` (the two cases where the CLI name collides with a Python keyword or builtin). Required fields raise `InputError` if missing.
 
+Core functions do not accept `working_dir`; it is a CLI convenience that `chdir`s before the command runs. From Python, construct paths from a base directory (as in the quick start) and pass them in directly.
+
 The `review` and `run` commands are CLI-only and not available as library functions.
 
 ## Return values
@@ -71,11 +64,7 @@ Each function returns a dataclass describing what happened. For example, `valida
 ```python
 from dtst import validate
 
-result = validate(
-    working_dir=Path("./my-dataset"),
-    from_dirs="faces",
-    square=True,
-)
+result = validate(from_dirs="./my-dataset/faces", square=True)
 if not result.passed:
     print(f"Failed: {result.failed} errors, {result.non_square} non-square")
 ```
@@ -90,7 +79,7 @@ Library calls raise subclasses of `DtstError` instead of exiting the process:
 from dtst import fetch, DtstError, InputError, PipelineError
 
 try:
-    fetch(working_dir=working, to="raw", input_file="urls.txt")
+    fetch(to="raw", input_file="urls.txt")
 except InputError as e:
     # Bad / missing inputs (e.g. no URLs to fetch, unsupported file format)
     ...
@@ -110,7 +99,6 @@ Every function that shows a `tqdm` progress bar accepts `progress: bool = True`.
 
 ```python
 result = detect(
-    working_dir=working,
     from_dirs="frames",
     classes="tree",
     progress=False,
@@ -130,12 +118,13 @@ logging.basicConfig(level=logging.DEBUG)    # verbose
 `dtst.aio` mirrors the sync API as `async def` wrappers built on `asyncio.to_thread`. Use it when you want to call dtst from an async program without blocking the event loop:
 
 ```python
+from pathlib import Path
 from dtst.aio import fetch, detect, frame
 
+base = Path("./scratch/trees")
 result = await fetch(
-    working_dir=Path("./scratch/trees"),
-    to="raw",
-    input_file="urls.txt",
+    to=str(base / "raw"),
+    input_file=str(base / "urls.txt"),
 )
 ```
 
@@ -157,16 +146,18 @@ Top-level `dtst.<command>` imports re-export the core functions, so `from dtst i
 The `@config_argument` decorator and YAML loading live in the CLI layer and are not applied when calling core functions directly. If you want to reuse an existing YAML pipeline config from Python, parse it yourself and forward the values:
 
 ```python
-import yaml
 from pathlib import Path
+import yaml
 from dtst import detect
 
-with open("tree.yaml") as f:
+config_path = Path("tree.yaml")
+with open(config_path) as f:
     cfg = yaml.safe_load(f)
 
+base = config_path.parent / cfg.get("working_dir", ".")
+
 detect(
-    working_dir=Path(cfg["working_dir"]),
-    from_dirs=cfg["detect"]["from"],
+    from_dirs=str(base / cfg["detect"]["from"]),
     classes=cfg["detect"]["classes"],
 )
 ```

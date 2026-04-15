@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     working_dir_option,
     workers_option,
@@ -30,13 +31,13 @@ from dtst.files import format_elapsed
     default=None,
     help="Comma-separated query suffixes (override config).",
 )
-@working_dir_option(help="Working directory where results are written (default: .).")
+@working_dir_option()
 @click.option(
     "--output",
     "-o",
     type=str,
     default=None,
-    help="Output filename within the working directory (default: results.jsonl).",
+    help="Output file path (default: results.jsonl).",
 )
 @click.option(
     "--max-pages",
@@ -155,11 +156,11 @@ def cmd(
                         f"Invalid taxon ID: {t!r}; must be an integer."
                     )
 
+    apply_working_dir(working_dir)
     try:
         result = core_search(
             terms=terms_list,
             suffixes=suffixes_list,
-            working_dir=working_dir,
             output=output or "results.jsonl",
             max_pages=max_pages,
             engines=engine_list,

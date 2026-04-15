@@ -46,10 +46,10 @@ dtst analyze [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
 | `--metrics`, `-m` | text | Comma-separated metric names (e.g. 'phash,blur,musiq,clipiqa'). | None |
 | `--force` | boolean | Recompute all metrics even if sidecar data already exists. | `False` |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--workers`, `-w` | integer | Number of parallel workers for CPU metrics (default: CPU count). | None |
 | `--clear` | boolean | Remove all sidecar files from source folders. | `False` |
 | `--dry-run` | boolean | Preview what would be computed without writing sidecars. | `False` |
@@ -84,12 +84,12 @@ dtst annotate [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
 | `--source`, `-s` | text | Source name to write (e.g. 'unsplash', 'personal'). | None |
 | `--license`, `-l` | text | License string to write (e.g. 'cc-by', 'cc0', 'all-rights-reserved'). | None |
 | `--origin`, `-o` | text | Origin URL to write (applied to all images). | None |
 | `--overwrite` | boolean | Overwrite existing source/license/origin values in sidecars. | `False` |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--dry-run` | boolean | Preview what would be annotated without writing sidecars. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
@@ -129,9 +129,9 @@ dtst augment [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--flipX` | boolean | Apply horizontal flip. | `False` |
 | `--flipY` | boolean | Apply vertical flip. | `False` |
 | `--flipXY` | boolean | Apply both horizontal and vertical flip (180-degree rotation). | `False` |
@@ -187,9 +187,9 @@ dtst cluster [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: . | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to`, `-t` | text | Destination folder name within the working directory. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to`, `-t` | text | Destination folder. | None |
 | `--model`, `-m` | choice (`arcface` &#x7C; `clip`) | Embedding model for similarity (default: arcface). | None |
 | `--top`, `-n` | integer | Maximum number of clusters to output; omit for all clusters. | None |
 | `--min-cluster-size` | integer | Minimum images to form a cluster (default: 5). | None |
@@ -234,8 +234,8 @@ dtst dedup [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
-| `--from` | text | Folder name to deduplicate within the working directory. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Folder to deduplicate. | None |
 | `--to` | text | Subfolder name for duplicate images. | None |
 | `--threshold`, `-t` | integer | Phash hamming distance threshold for near-duplicate detection. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
@@ -272,10 +272,10 @@ dtst detect [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
 | `--classes`, `-c` | text | Comma-separated object classes to detect (e.g. 'microphone,chair'). | None |
 | `--threshold` | float | Minimum detection confidence. | None |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--workers`, `-w` | integer | Number of threads for image preloading (default: 4). | None |
 | `--max-instances` | integer | Maximum detections per class per image. | None |
 | `--clear` | boolean | Remove all detection data from sidecar files. | `False` |
@@ -308,9 +308,9 @@ dtst extract-classes [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--classes`, `-c` | text | Comma-separated class names to extract (must match classes in sidecar data). | None |
 | `--margin` | float | Margin ratio added around the bounding box, based on the larger side (default: 0). | None |
 | `--square` | boolean | Extend the shorter side of the bounding box to match the larger side. | `False` |
@@ -355,9 +355,9 @@ dtst extract-faces [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--max-size`, `-M` | integer | Maximum side length in pixels; faces smaller than this are kept at natural size (default: no limit). | None |
 | `--engine`, `-e` | choice (`mediapipe` &#x7C; `dlib`) | Face detection engine (default: mediapipe). | None |
 | `--max-faces`, `-m` | integer | Max faces to extract per image (default: 1). | None |
@@ -407,9 +407,9 @@ dtst extract-frames [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--keyframes`, `-k` | float | Minimum interval in seconds between extracted keyframes. Only I-frames are considered; frames closer together than this value are skipped (default: 10). | None |
 | `--format`, `-F` | choice (`jpg` &#x7C; `png`) | Output image format (default: jpg). | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
@@ -458,9 +458,9 @@ dtst fetch [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory where input is read from and media is written to (default: .). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
-| `--input`, `-i` | text | Input file name relative to the working directory. Supports .jsonl and .txt formats. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--to` | text | Destination folder. | None |
+| `--input`, `-i` | text | Input file path (.jsonl or .txt). | None |
 | `--min-size`, `-s` | integer | Minimum image dimension in pixels; only applies to .jsonl input (default: 512). | None |
 | `--workers`, `-w` | integer | Number of parallel download threads (default: CPU count for images, 2 for video). | None |
 | `--timeout`, `-t` | integer | Per-request timeout in seconds. | `30` |
@@ -497,9 +497,9 @@ dtst format [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--format`, `-f` | choice (`jpg` &#x7C; `png` &#x7C; `webp`) | Output image format. When omitted the source format is preserved. | None |
 | `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG. | None |
 | `--compress-level` | integer | PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP. | None |
@@ -546,9 +546,9 @@ dtst frame [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--width`, `-W` | integer | Target width in pixels. If --height is omitted, aspect ratio is preserved. | None |
 | `--height`, `-H` | integer | Target height in pixels. If --width is omitted, aspect ratio is preserved. | None |
 | `--mode`, `-m` | choice (`stretch` &#x7C; `crop` &#x7C; `pad`) | Resize mode when both width and height are given (default: crop). | None |
@@ -586,10 +586,10 @@ dtst rename [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
 | `--prefix`, `-p` | text | Filename prefix for renamed files (default: ''). | None |
 | `--digits`, `-n` | integer | Number of zero-padded digits (default: auto based on total count). | None |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--dry-run` | boolean | Preview renames without executing. | `False` |
 | `--help` | boolean | Show this message and exit. | `False` |
 
@@ -624,7 +624,7 @@ dtst review [OPTIONS] [CONFIG]
 | `--to` | text | Subfolder name for filtered images. | `rejected` |
 | `--port`, `-p` | integer | Port for the web server. | `8888` |
 | `--no-open` | boolean | Do not open the browser automatically. | `False` |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--help` | boolean | Show this message and exit. | `False` |
 
 ### dtst run { #dtst-run data-toc-label='run' }
@@ -695,8 +695,8 @@ dtst search [OPTIONS] [CONFIG]
 | ---- | ---- | ----------- | ------- |
 | `--terms` | text | Comma-separated search terms (override config). | None |
 | `--suffixes` | text | Comma-separated query suffixes (override config). | None |
-| `--working-dir`, `-d` | path | Working directory where results are written (default: .). | None |
-| `--output`, `-o` | text | Output filename within the working directory (default: results.jsonl). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--output`, `-o` | text | Output file path (default: results.jsonl). | None |
 | `--max-pages`, `-m` | integer | Limit pages per engine per query. | None |
 | `--engines`, `-e` | text | Comma-separated engine list (override config). | None |
 | `--dry-run`, `-n` | boolean | Print query matrix and exit without searching. | `False` |
@@ -743,9 +743,9 @@ dtst select [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--move` | boolean | Move images instead of copying (removes originals). | `False` |
 | `--min-side`, `-s` | integer | Minimum largest side in pixels; images with max(w,h) below this are excluded. | None |
 | `--max-side` | integer | Maximum largest side in pixels; images with max(w,h) above this are excluded. | None |
@@ -800,9 +800,9 @@ dtst upscale [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--working-dir`, `-d` | path | Working directory containing source folders and where output is written (default: .). | None |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--to` | text | Destination folder under --working-dir. | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--to` | text | Destination folder. | None |
 | `--scale`, `-s` | choice (`2` &#x7C; `4`) | Upscale factor. Ignored when --model is provided (default: 4). | None |
 | `--model`, `-m` | text | Model preset name or path to a .pth file. Overrides --scale. | None |
 | `--tile-size`, `-t` | integer | Tile size in pixels for processing; 0 disables tiling (default: 512). | None |
@@ -837,8 +837,8 @@ dtst validate [OPTIONS] [CONFIG]
 
 | Name | Type | Description | Default |
 | ---- | ---- | ----------- | ------- |
-| `--from` | text | Comma-separated source folders under --working-dir (supports globs, e.g. 'images/*'). | None |
-| `--working-dir`, `-d` | path | Working directory (default: .). | None |
+| `--from` | text | Comma-separated source folders (supports globs like 'images/*'). | None |
+| `--working-dir`, `-d` | path | Change into this directory before running. | None |
 | `--square` | boolean | Check that all images are square (width == height). | `False` |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
 | `--help` | boolean | Show this message and exit. | `False` |

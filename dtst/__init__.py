@@ -10,14 +10,9 @@ Two entry points:
 
 Example::
 
-    from pathlib import Path
     from dtst import validate
 
-    result = validate(
-        working_dir=Path("./my-dataset"),
-        from_dirs="faces",
-        progress=False,
-    )
+    result = validate(from_dirs="./my-dataset/faces", progress=False)
     if not result.passed:
         ...
 """

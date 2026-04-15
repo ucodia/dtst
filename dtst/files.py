@@ -1,3 +1,4 @@
+import glob as _glob
 import logging
 import shutil
 from multiprocessing import cpu_count
@@ -17,22 +18,22 @@ VIDEO_EXTENSIONS = frozenset(
 )
 
 
-def resolve_dirs(working_dir: Path, names: list[str]) -> list[Path]:
-    """Expand folder names relative to *working_dir*, supporting globs.
+def resolve_dirs(names: list[str]) -> list[Path]:
+    """Expand folder names to absolute paths, supporting globs.
 
-    Literal names (e.g. ``"raw"``) resolve to a single path.  Patterns
-    containing ``*`` or ``?`` (e.g. ``"images/*"``) are expanded via
-    :meth:`Path.glob` and only existing directories are kept.  Results
-    are returned in sorted order with duplicates removed.
+    Patterns containing ``*`` or ``?`` (e.g. ``"images/*"``) are
+    expanded with :mod:`glob` and only existing directories are kept.
+    Results are returned in insertion order with duplicates removed.
     """
     dirs: dict[Path, None] = {}
     for name in names:
         if "*" in name or "?" in name:
-            for p in sorted(working_dir.glob(name)):
+            for match in sorted(_glob.glob(name)):
+                p = Path(match)
                 if p.is_dir():
-                    dirs[p] = None
+                    dirs[p.resolve()] = None
         else:
-            dirs[(working_dir / name).resolve()] = None
+            dirs[Path(name).expanduser().resolve()] = None
     return list(dirs)
 
 
@@ -123,16 +124,14 @@ def _split_csv(value: str) -> list[str]:
 
 
 def _gather_files(
-    working_dir: Path | None,
     from_dirs_csv: str,
     finder,
     *,
     kind: str,
     recursive: bool = False,
-) -> tuple[Path, list[Path], list[Path]]:
-    working = (working_dir or Path(".")).resolve()
+) -> tuple[list[Path], list[Path]]:
     dirs_list = _split_csv(from_dirs_csv)
-    input_dirs = resolve_dirs(working, dirs_list)
+    input_dirs = resolve_dirs(dirs_list)
 
     items: list[Path] = []
     for src in input_dirs:
@@ -143,36 +142,30 @@ def _gather_files(
 
     if not items:
         raise InputError(f"No {kind} found in source directories.")
-    return working, input_dirs, items
+    return input_dirs, items
 
 
 def gather_images(
-    working_dir: Path | None,
     from_dirs_csv: str,
     *,
     recursive: bool = False,
-) -> tuple[Path, list[Path], list[Path]]:
+) -> tuple[list[Path], list[Path]]:
     """Resolve a comma-separated ``--from`` value into images.
 
-    Returns ``(working_dir, input_dirs, images)``.  Non-existent source
-    directories are logged and skipped.  Raises :class:`InputError`
-    if no images are found across all inputs.
+    Returns ``(input_dirs, images)``.  Non-existent source directories
+    are logged and skipped.  Raises :class:`InputError` if no images
+    are found across all inputs.
     """
-    return _gather_files(
-        working_dir, from_dirs_csv, find_images, kind="images", recursive=recursive
-    )
+    return _gather_files(from_dirs_csv, find_images, kind="images", recursive=recursive)
 
 
 def gather_videos(
-    working_dir: Path | None,
     from_dirs_csv: str,
     *,
     recursive: bool = False,
-) -> tuple[Path, list[Path], list[Path]]:
+) -> tuple[list[Path], list[Path]]:
     """Resolve a comma-separated ``--from`` value into videos.
 
     See :func:`gather_images` for semantics.
     """
-    return _gather_files(
-        working_dir, from_dirs_csv, find_videos, kind="videos", recursive=recursive
-    )
+    return _gather_files(from_dirs_csv, find_videos, kind="videos", recursive=recursive)

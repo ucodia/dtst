@@ -5,7 +5,7 @@ corresponding sync core function.  Signatures, docstrings, and return
 types are preserved via :func:`functools.wraps`, so::
 
     from dtst.aio import fetch
-    result = await fetch(working_dir=wd, to="raw", input_file="urls.txt")
+    result = await fetch(to="raw", input_file="urls.txt")
 
 behaves exactly like the sync version but does not block the event
 loop.  There is no native async I/O underneath — dtst's workloads are

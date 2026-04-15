@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     from_dirs_option,
     to_dir_option,
@@ -20,9 +21,7 @@ from dtst.files import format_elapsed
 
 @click.command("extract-faces")
 @config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
+@working_dir_option()
 @from_dirs_option()
 @to_dir_option()
 @click.option(
@@ -109,9 +108,9 @@ def cmd(
             "--to is required (or set 'extract_faces.to' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_extract_faces(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             to=to,
             max_size=max_size,

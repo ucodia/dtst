@@ -61,7 +61,6 @@ def _check_image(
 
 def validate(
     *,
-    working_dir: Path | None,
     from_dirs: str,
     square: bool = False,
     workers: int | None = None,
@@ -78,7 +77,7 @@ def validate(
         raise InputError("from_dirs is required")
 
     num_workers = resolve_workers(workers)
-    _working, _input_dirs, all_images = gather_images(working_dir, from_dirs)
+    _input_dirs, all_images = gather_images(from_dirs)
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 
     logger.info("Validating %d images from %s", len(all_images), ", ".join(dirs_list))

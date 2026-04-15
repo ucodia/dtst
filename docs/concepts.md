@@ -2,7 +2,7 @@
 
 ## Buckets
 
-Every `dtst` command reads from and writes to **buckets** -- named folders within the working directory. A bucket is just a plain directory on disk. There is nothing to register or configure: drop files into a folder and it becomes a bucket. You can browse buckets in the file explorer, manually add or remove files, and the tools will pick up whatever is there.
+Every `dtst` command reads from and writes to **buckets** -- plain folders on disk. There is nothing to register or configure: drop files into a folder and it becomes a bucket. You can browse buckets in the file explorer, manually add or remove files, and the tools will pick up whatever is there.
 
 Commands reference buckets through `--from` and `--to` flags:
 

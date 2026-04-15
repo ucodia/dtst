@@ -8,6 +8,7 @@ import click
 
 from dtst.cli.config import (
     VALID_FRAME_FORMATS,
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -22,9 +23,7 @@ from dtst.files import format_elapsed
 
 @click.command("extract-frames")
 @config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
+@working_dir_option()
 @from_dirs_option()
 @to_dir_option()
 @click.option(
@@ -92,9 +91,9 @@ def cmd(
             "--to is required (or set 'extract_frames.to' in config)"
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_extract_frames(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             to=to,
             keyframes=keyframes if keyframes is not None else 10.0,

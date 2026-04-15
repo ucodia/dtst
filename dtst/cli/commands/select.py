@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -21,9 +22,7 @@ from dtst.files import format_elapsed
 
 @click.command("select")
 @config_argument
-@working_dir_option(
-    help="Working directory containing source folders and where output is written (default: .)."
-)
+@working_dir_option()
 @from_dirs_option()
 @to_dir_option()
 @click.option(
@@ -169,9 +168,9 @@ def cmd(
         else None
     )
 
+    apply_working_dir(working_dir)
     try:
         result = core_select(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             to=to,
             move=move,

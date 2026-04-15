@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from dtst.cli.config import (
+    apply_working_dir,
     config_argument,
     dry_run_option,
     from_dirs_option,
@@ -75,9 +76,9 @@ def cmd(
             "At least one metric is required via --metrics (e.g. --metrics phash,blur,musiq)."
         )
 
+    apply_working_dir(working_dir)
     try:
         result = core_analyze(
-            working_dir=working_dir,
             from_dirs=from_dirs,
             metrics=metrics,
             force=force,
