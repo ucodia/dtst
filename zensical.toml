@@ -23,11 +23,16 @@ nav = [
   ] },
 ]
 
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["."]
+
 [project.plugins.mkdocstrings.handlers.python.options]
 allow_inspection = false
+show_source = false
 show_root_heading = true
+show_root_full_path = false
 show_signature_annotations = true
-docstring_style = "google"
+separate_signature = true
 
 [project.theme]
 features = ["navigation.footer"]
