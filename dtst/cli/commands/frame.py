@@ -18,7 +18,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.frame import frame as core_frame
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -133,6 +132,8 @@ def cmd(
         raise click.ClickException("At least one of --width or --height is required")
 
     apply_working_dir(working_dir)
+    from dtst.core.frame import frame as core_frame
+
     try:
         result = core_frame(
             from_dirs=from_dirs,

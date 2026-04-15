@@ -17,25 +17,6 @@ Example::
         ...
 """
 
-from dtst.core import (
-    analyze,
-    annotate,
-    augment,
-    cluster,
-    dedup,
-    detect,
-    extract_classes,
-    extract_faces,
-    extract_frames,
-    fetch,
-    format,
-    frame,
-    rename,
-    search,
-    select,
-    upscale,
-    validate,
-)
 from dtst.errors import ConfigError, DtstError, InputError, PipelineError
 from dtst.results import (
     AnalyzeResult,
@@ -57,6 +38,38 @@ from dtst.results import (
     UpscaleResult,
     ValidateResult,
 )
+
+_COMMANDS = frozenset(
+    {
+        "analyze",
+        "annotate",
+        "augment",
+        "cluster",
+        "dedup",
+        "detect",
+        "extract_classes",
+        "extract_faces",
+        "extract_frames",
+        "fetch",
+        "format",
+        "frame",
+        "rename",
+        "search",
+        "select",
+        "upscale",
+        "validate",
+    }
+)
+
+
+def __getattr__(name: str):
+    if name in _COMMANDS:
+        import importlib
+
+        mod = importlib.import_module(f"dtst.core.{name}")
+        return getattr(mod, name)
+    raise AttributeError(f"module 'dtst' has no attribute {name!r}")
+
 
 __all__ = [
     # commands

@@ -282,10 +282,21 @@ def test_missing_section_only_sets_working_dir() -> None:
         assert "quality=None" in result.output
 
 
-def test_non_dict_section_silently_ignored() -> None:
+def test_non_dict_section_raises_click_exception() -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("cfg.yaml").write_text("search: 42\n")
+        result = runner.invoke(_build_search_cmd(), ["cfg.yaml"])
+        assert result.exit_code != 0
+        assert "search" in result.output
+        assert "mapping" in result.output
+        assert "int" in result.output
+
+
+def test_null_section_accepted_as_no_overrides() -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("cfg.yaml").write_text("search:\n")
         result = runner.invoke(_build_search_cmd(), ["cfg.yaml"])
         assert result.exit_code == 0, result.output
         assert "from=None" in result.output

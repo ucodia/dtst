@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.dedup import dedup as core_dedup
 from dtst.errors import DtstError
 
 
@@ -80,6 +79,8 @@ def cmd(
         raise click.ClickException("--from is required (or set 'dedup.from' in config)")
 
     apply_working_dir(working_dir)
+    from dtst.core.dedup import dedup as core_dedup
+
     try:
         result = core_dedup(
             from_dir=from_dir,

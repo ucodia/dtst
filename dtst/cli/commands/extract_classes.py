@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.extract_classes import extract_classes as core_extract_classes
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -97,6 +96,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.extract_classes import extract_classes as core_extract_classes
+
     try:
         result = core_extract_classes(
             from_dirs=from_dirs,

@@ -274,7 +274,11 @@ class TestFormatElapsed:
             (59, "0m 59s"),
             (60, "1m 0s"),
             (125.7, "2m 5s"),
-            (3600, "60m 0s"),
+            (3599, "59m 59s"),
+            (3600, "1h 0m 0s"),
+            (3601, "1h 0m 1s"),
+            (7325, "2h 2m 5s"),
+            (7325.9, "2h 2m 5s"),
         ],
     )
     def test_format(self, seconds: float, expected: str) -> None:

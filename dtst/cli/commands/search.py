@@ -12,7 +12,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.search import search as core_search
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -157,6 +156,8 @@ def cmd(
                     )
 
     apply_working_dir(working_dir)
+    from dtst.core.search import search as core_search
+
     try:
         result = core_search(
             terms=terms_list,

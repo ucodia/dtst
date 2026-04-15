@@ -13,7 +13,6 @@ from dtst.cli.config import (
     from_dirs_option,
     working_dir_option,
 )
-from dtst.core.rename import rename as core_rename
 from dtst.errors import DtstError
 
 
@@ -63,6 +62,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.rename import rename as core_rename
+
     try:
         result = core_rename(
             from_dirs=from_dirs,

@@ -17,8 +17,8 @@ def _cache_key(model: str, image_paths: list[Path]) -> str:
     """Compute a deterministic cache key from model name and sorted filenames."""
     h = hashlib.sha256()
     h.update(model.encode())
-    for name in sorted(p.name for p in image_paths):
-        h.update(name.encode())
+    for resolved in sorted(str(p.resolve()) for p in image_paths):
+        h.update(resolved.encode())
     return h.hexdigest()
 
 

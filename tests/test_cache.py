@@ -28,11 +28,22 @@ class TestCacheKey:
         k2 = _cache_key("m", [Path("a.jpg"), Path("b.jpg")])
         assert k1 != k2
 
-    def test_keys_by_filename_not_directory(self) -> None:
-        # Since key uses p.name only, same name in different dirs matches
-        k1 = _cache_key("m", [Path("x/a.jpg")])
-        k2 = _cache_key("m", [Path("y/a.jpg")])
-        assert k1 == k2
+    def test_keys_distinguish_directories(self, tmp_path: Path) -> None:
+        # Key hashes full resolved paths, so same filename in different dirs differs
+        d1 = tmp_path / "x"
+        d2 = tmp_path / "y"
+        d1.mkdir()
+        d2.mkdir()
+        k1 = _cache_key("m", [d1 / "a.jpg"])
+        k2 = _cache_key("m", [d2 / "a.jpg"])
+        assert k1 != k2
+
+    def test_keys_stable_across_invocations_same_dir(self, tmp_path: Path) -> None:
+        # Same resolved location should produce the same key even if constructed
+        # from different Path instances (e.g. relative vs absolute).
+        paths_a = [tmp_path / "img.jpg"]
+        paths_b = [tmp_path / "img.jpg"]
+        assert _cache_key("m", paths_a) == _cache_key("m", paths_b)
 
 
 class TestLoadEmbeddings:

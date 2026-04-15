@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.augment import augment as core_augment
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -86,6 +85,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.augment import augment as core_augment
+
     try:
         result = core_augment(
             from_dirs=from_dirs,

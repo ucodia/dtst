@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.select import select as core_select
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -169,6 +168,8 @@ def cmd(
     )
 
     apply_working_dir(working_dir)
+    from dtst.core.select import select as core_select
+
     try:
         result = core_select(
             from_dirs=from_dirs,

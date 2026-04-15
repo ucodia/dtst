@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.cluster import cluster as core_cluster
 from dtst.embeddings import VALID_MODELS
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
@@ -129,6 +128,8 @@ def cmd(
         raise click.ClickException("--to is required (or set 'cluster.to' in config)")
 
     apply_working_dir(working_dir)
+    from dtst.core.cluster import cluster as core_cluster
+
     try:
         result = core_cluster(
             from_dirs=from_dirs,

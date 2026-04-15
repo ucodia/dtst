@@ -16,7 +16,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.extract_frames import extract_frames as core_extract_frames
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -92,6 +91,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.extract_frames import extract_frames as core_extract_frames
+
     try:
         result = core_extract_frames(
             from_dirs=from_dirs,

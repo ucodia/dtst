@@ -15,7 +15,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.upscale import upscale as core_upscale
 from dtst.errors import DtstError
 from dtst.files import format_elapsed
 
@@ -124,6 +123,8 @@ def cmd(
         raise click.ClickException("--to is required (or set 'upscale.to' in config)")
 
     apply_working_dir(working_dir)
+    from dtst.core.upscale import upscale as core_upscale
+
     try:
         result = core_upscale(
             from_dirs=from_dirs,

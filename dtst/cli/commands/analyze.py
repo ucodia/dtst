@@ -14,7 +14,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.analyze import analyze as core_analyze
 from dtst.errors import DtstError
 
 
@@ -77,6 +76,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.analyze import analyze as core_analyze
+
     try:
         result = core_analyze(
             from_dirs=from_dirs,

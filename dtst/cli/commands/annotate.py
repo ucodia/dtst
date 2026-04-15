@@ -12,7 +12,6 @@ from dtst.cli.config import (
     from_dirs_option,
     working_dir_option,
 )
-from dtst.core.annotate import annotate as core_annotate
 from dtst.errors import DtstError
 
 
@@ -77,6 +76,8 @@ def cmd(from_dirs, source, license, origin, overwrite, working_dir, dry_run):
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.annotate import annotate as core_annotate
+
     try:
         result = core_annotate(
             from_dirs=from_dirs,

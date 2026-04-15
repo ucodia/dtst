@@ -54,7 +54,7 @@ _YAML_TO_CLICK = {
 }
 
 
-def _find_param(command: click.BaseCommand, name: str) -> click.Parameter | None:
+def _find_param(command: click.Command, name: str) -> click.Parameter | None:
     for p in command.params:
         if p.name == name:
             return p
@@ -97,8 +97,12 @@ def apply_config_defaults(
     data, config_dir = load_yaml(value)
     section_key = ctx.info_name.replace("-", "_")
     section = data.get(section_key, {})
-    if not isinstance(section, dict):
+    if section is None:
         section = {}
+    elif not isinstance(section, dict):
+        raise click.ClickException(
+            f"Config section '{section_key}' must be a mapping, got {type(section).__name__}"
+        )
 
     defaults: dict[str, Any] = {"working_dir": _resolve_working_dir(data, config_dir)}
     for yaml_key, yaml_val in section.items():

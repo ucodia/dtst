@@ -111,8 +111,18 @@ def test_fetch_config_defaults_and_cli_override(
 
         return _Result()
 
-    # Patch the core function as imported into the CLI module.
-    monkeypatch.setattr("dtst.cli.commands.fetch.core_fetch", spy)
+    # Patch the core function at its source module; the CLI wrapper lazy-imports
+    # `from dtst.core.fetch import fetch as core_fetch` inside the command body,
+    # so it will pick up the spy. We have to grab the module via sys.modules
+    # because `dtst/core/__init__.py` re-exports `fetch` as a function,
+    # shadowing the `fetch` submodule attribute on the `dtst.core` package
+    # for both attribute access and `import ... as ...` binding.
+    import sys
+
+    import dtst.core.fetch  # noqa: F401 -- ensure the submodule is loaded
+
+    _core_fetch_mod = sys.modules["dtst.core.fetch"]
+    monkeypatch.setattr(_core_fetch_mod, "fetch", spy)
 
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path) as td:
@@ -176,3 +186,27 @@ def test_unknown_subcommand() -> None:
     assert result.exit_code != 0
     # Click prints "No such command" for unknown subcommands on a group.
     assert "No such command" in result.output or "Usage" in result.output
+
+
+# ---------------------------------------------------------------------------
+# 6. Startup regression: heavy deps must not load with the CLI package
+# ---------------------------------------------------------------------------
+
+
+def test_cli_import_does_not_load_torch():
+    """Regression: importing dtst.cli must not transitively import heavy ML deps."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import dtst.cli; "
+        "heavy = sorted(m for m in sys.modules "
+        "if m.split('.')[0] in "
+        "('torch','transformers','PIL','insightface','mediapipe','dlib',"
+        "'onnxruntime','open_clip','pyiqa','spandrel')); "
+        "assert not heavy, f'leaked: {heavy}'"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

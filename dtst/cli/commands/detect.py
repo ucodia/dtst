@@ -14,7 +14,6 @@ from dtst.cli.config import (
     working_dir_option,
     workers_option,
 )
-from dtst.core.detect import detect as core_detect
 from dtst.errors import DtstError
 
 
@@ -85,6 +84,8 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+    from dtst.core.detect import detect as core_detect
+
     try:
         result = core_detect(
             from_dirs=from_dirs,

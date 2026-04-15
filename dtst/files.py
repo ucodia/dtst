@@ -114,8 +114,12 @@ def resolve_workers(workers: int | None, fallback: int = 4) -> int:
 
 
 def format_elapsed(seconds: float) -> str:
-    """Format an elapsed duration as ``"2m 34s"``."""
-    minutes, secs = divmod(int(seconds), 60)
+    """Format an elapsed duration as ``"2m 34s"`` or ``"1h 2m 34s"``."""
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
     return f"{minutes}m {secs}s"
 
 
