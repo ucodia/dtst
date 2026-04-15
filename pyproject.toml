@@ -44,4 +44,35 @@ dev = [
     "mkdocstrings[python]>=1.0.4",
     "ruff>=0.15.9",
     "zensical>=0.0.24",
+    "pytest>=8.3.0",
+    "pytest-cov>=5.0.0",
+    "responses>=0.25.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "slow: marks tests that are slow (deselect with '-m \"not slow\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pkg_resources",
+]
+
+[tool.coverage.run]
+source = ["dtst"]
+omit = [
+    "dtst/core/*",
+    "dtst/engines/*",
+    "dtst/embeddings/*",
+    "dtst/detections/*",
+    "dtst/metrics/*",
+    "dtst/review/*",
+    "dtst/aio.py",
+    "dtst/face_align.py",
 ]

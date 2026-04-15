@@ -1,6 +1,7 @@
 __pycache__/
 .claude/
 .env
+.coverage
 .DS_Store
 site/
 scratch/
