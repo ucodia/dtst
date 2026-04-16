@@ -42,7 +42,8 @@ jobs:
         run: |
           uv pip install \
             pytest pytest-cov responses \
-            click pyyaml python-dotenv numpy pillow tqdm
+            click pyyaml python-dotenv numpy pillow tqdm \
+            opencv-python-headless scipy
           uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Run tests
