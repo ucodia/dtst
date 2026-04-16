@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="dtst" width="280">
+  </picture>
+</p>
+
 # dtst
 
 `dtst` is a Python toolkit for researching, collecting, curating, and preparing image datasets for machine learning — StyleGAN training, LoRA fine-tuning, computer vision research, and more.

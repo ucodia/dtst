@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 80" role="img" aria-label="dtst">
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, &quot;Liberation Mono&quot;, &quot;Courier New&quot;, monospace" font-size="56" font-weight="700" fill="#111">
+    <text x="20" y="58">d</text>
+    <text x="96" y="58">t</text>
+    <text x="172" y="58">s</text>
+    <text x="248" y="58">t</text>
+  </g>
+  <g stroke="#111" stroke-width="3">
+    <line x1="62" y1="62" x2="86" y2="62"/>
+    <line x1="138" y1="62" x2="162" y2="62"/>
+    <line x1="214" y1="62" x2="238" y2="62"/>
+  </g>
+</svg>
