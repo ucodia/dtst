@@ -4,10 +4,29 @@
 
 `dtst` is a Python CLI toolbox for building and curating image datasets. It is structured as a main `dtst` command with subcommands for each pipeline stage. The package is managed with `uv` and installed via `pyproject.toml`.
 
+## Quick Start
+
+```bash
+uv sync                           # install dev environment
+cp .env.example .env              # fill in API keys (see Environment)
+uv run dtst --help                # verify install
+```
+
+The `dtst` console script is defined in `pyproject.toml`.
+
 ## Project Layout
 
+- **`/dtst`** — Main package. CLI wrappers in `/dtst/cli/commands/`, core logic in `/dtst/core/`.
 - **`/docs`** — User-facing documentation (Markdown); built with Zensical; `zensical.toml` at repo root.
-- **`/dtst`** — Main package; commands in `/dtst/commands/`.
+- **`/tests`** — Pytest suite (see **Testing**).
+- **`/scripts`** — Maintenance scripts, e.g. `gen_cli_docs.py`.
+
+## Environment
+
+Runtime reads `.env` via `python-dotenv`. Keys (see `.env.example`):
+
+- `BRAVE_API_KEY`, `FLICKR_API_KEY`, `SERPER_API_KEY` — search engine credentials
+- `DTST_USER_AGENT` — HTTP User-Agent string for outbound requests
 
 ## CLI Conventions
 
@@ -39,26 +58,14 @@ working_dir/
 
 ### Command Structure
 
-Every subcommand is a function decorated with `@click.command()` and registered to the main `dtst` CLI group. Commands live in `dtst/commands/` as individual modules.
+Every subcommand is a `@click.command()` registered on the main `dtst` group. The split is:
 
-CLI wrappers live in `dtst/cli/commands/` and call a core function in `dtst/core/`. Each wrapper handles Click parsing, calls `apply_working_dir(working_dir)` (a `chdir` shim), and then invokes the core function. Core functions do not accept `working_dir`.
+- **CLI wrapper** in `dtst/cli/commands/<name>.py` — Click decorators (`@config_argument`, `@working_dir_option()`, `@click.option(...)`), validation, then `apply_working_dir(working_dir)` and a lazy import of the core function. Core functions do not accept `working_dir`.
+- **Core function** in `dtst/core/<name>.py` — pure logic, no Click.
 
-```python
-import click
-from dtst.cli.config import apply_working_dir, config_argument, working_dir_option
+Copy any existing wrapper (e.g. `dtst/cli/commands/fetch.py`) as a template.
 
-@click.command()
-@config_argument
-@working_dir_option()
-@click.option("--workers", "-w", default=None, type=int, help="Number of parallel workers (default: CPU count).")
-@click.option("--dry-run", is_flag=True, help="Preview what would be done without executing.")
-def my_command(working_dir, workers, dry_run):
-    """One-line description of what this command does."""
-    apply_working_dir(working_dir)
-    # delegate to dtst.core.my_command(...)
-```
-
-After adding or changing any command's options, arguments, or docstring, regenerate the CLI reference docs:
+After changing any command's options, arguments, or docstring, regenerate the CLI reference:
 
 ```bash
 uv run scripts/gen_cli_docs.py
@@ -127,129 +134,27 @@ dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
 - Use `click.Choice([...])` for enum validation — this replaces manual checks and works with both CLI and config values
 - Use `click.IntRange(min, max)` or `click.FloatRange(min, max)` for range validation
 
-### Output Style
-
-- Print a brief header summarizing the operation before starting work
-- Use `click.echo()` for all output, never bare `print()`
-- Write errors to stderr with `click.echo(..., err=True)`
-- End with a summary line showing counts (processed, skipped, failed)
-
 ## Progress Reporting
 
-All commands that iterate over files or batches use **tqdm** for progress bars.
-
-```python
-from tqdm import tqdm
-
-with tqdm(total=len(items), desc="Processing images", unit="image") as pbar:
-    for result in pool.imap(worker_fn, items):
-        # handle result
-        pbar.update(1)
-```
-
-- Always set `desc` to a short human-readable label
-- Always set `unit` to what is being counted (image, url, page, file)
-- Use `pbar.set_postfix()` to show live counters like matches or errors
+All commands that iterate over files or batches use **tqdm**. Always set `desc` (short human-readable label) and `unit` (what's being counted: `image`, `url`, `page`, `file`). Use `pbar.set_postfix()` for live counters like matches or errors.
 
 ## Parallelism
 
-Use **`concurrent.futures`** as the unified parallelism API. The executor type depends on the workload. Every command that accepts `--workers` defaults to `cpu_count()` when not specified.
-
-### Network I/O (search, fetch, URL downloading)
-
-Use **`ThreadPoolExecutor`**. These tasks wait on HTTP responses, not CPU. Threads share memory, have near-zero startup cost, and the GIL does not matter because the bottleneck is network latency.
-
-```python
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from multiprocessing import cpu_count
-
-def download_url(args):
-    url, output_path = args
-    # do network work
-    return result
-
-work = [(url, path) for url, path in items]
-with ThreadPoolExecutor(max_workers=workers) as executor:
-    futures = {executor.submit(download_url, w): w for w in work}
-    with tqdm(total=len(work), desc="Downloading", unit="url") as pbar:
-        for future in as_completed(futures):
-            result = future.result()
-            # handle result
-            pbar.update(1)
-```
-
-### CPU-bound processing (face detection, alignment, blur scoring, image hashing)
-
-Use **`ProcessPoolExecutor`**. These tasks need true parallel CPU execution to escape the GIL. Each worker runs in its own process with its own Python interpreter.
-
-```python
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from multiprocessing import cpu_count
-
-def process_image(args):
-    """Must be a top-level module function, not a lambda or closure."""
-    image_path, config_value = args
-    # do CPU work
-    return result
-
-work = [(path, config) for path in image_paths]
-with ProcessPoolExecutor(max_workers=workers) as executor:
-    futures = {executor.submit(process_image, w): w for w in work}
-    with tqdm(total=len(work), desc="Processing", unit="image") as pbar:
-        for future in as_completed(futures):
-            result = future.result()
-            # handle result
-            pbar.update(1)
-```
-
-- Worker functions must be **top-level module functions** (not lambdas, not closures, not methods)
-- Pack all arguments into a single tuple and unpack inside the worker
-- Workers must catch all exceptions internally and return error status, never let exceptions propagate
-
-### GPU-bound inference (CLIP, IQA, face embeddings)
-
-Use **single-process batched inference**. Never spawn multiple processes that each load a GPU model — this duplicates the model in VRAM and will crash on consumer GPUs.
-
-Load the model once, then process images in batches:
-
-```python
-import torch
-
-device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-model = load_model(device)
-
-for batch_paths in batched(image_paths, batch_size=32):
-    images = torch.stack([preprocess(load(p)) for p in batch_paths]).to(device)
-    with torch.no_grad():
-        results = model(images)
-    # store results per image
-```
-
-To maximize throughput, use a **ThreadPoolExecutor to preload and preprocess images** while the GPU is busy with the current batch:
-
-```python
-from concurrent.futures import ThreadPoolExecutor
-
-def load_and_preprocess(path):
-    image = Image.open(path).convert("RGB")
-    return preprocess(image)
-
-with ThreadPoolExecutor(max_workers=4) as loader:
-    for batch_paths in batched(image_paths, batch_size=32):
-        tensors = list(loader.map(load_and_preprocess, batch_paths))
-        images = torch.stack(tensors).to(device)
-        with torch.no_grad():
-            results = model(images)
-        # store results
-```
-
-### Choosing the right executor
+Use **`concurrent.futures`** as the unified parallelism API. Pick the executor by workload bottleneck. Commands that accept `--workers` default to `cpu_count()` when unspecified.
 
 | Workload | Bottleneck | Executor | Examples |
 |----------|-----------|----------|----------|
 | Network requests | I/O latency | `ThreadPoolExecutor` | search, fetch, URL validation |
 | Image processing | CPU | `ProcessPoolExecutor` | face alignment, blur scoring, hashing, dedup |
 | Model inference | GPU | Single process, batched | CLIP scoring, IQA metrics, face embeddings |
+
+**ProcessPoolExecutor rules:**
+
+- Worker functions must be **top-level module functions** (not lambdas, closures, or methods) so they can pickle.
+- Pack all arguments into a single tuple and unpack inside the worker.
+- Workers must catch all exceptions internally and return an error status — never let exceptions propagate across process boundaries.
+
+**GPU inference — critical:** Never spawn multiple processes that each load a GPU model. This duplicates the model in VRAM and crashes consumer GPUs. Load the model **once** in the main process and iterate in batches. To maximize throughput, use a small `ThreadPoolExecutor` to preload/preprocess the next batch on CPU while the GPU works on the current one. Device selection: `cuda` → `mps` → `cpu`.
 
 ## File Conventions
 
@@ -263,72 +168,27 @@ def find_images(directory: Path, recursive: bool = False) -> list[Path]:
 
 - Metadata is stored as `metadata.json` in the dataset directory
 - Command configuration is a YAML file loaded via `@config_argument` (see **Configuration and CLI Override**). YAML sections are keyed by command name with underscores (`search:`, `fetch:`, `extract_faces:`, etc.)
-- Environment variables are loaded from `.env` with `python-dotenv`
 
-## Logging
+## Logging & Output
 
-Use Python's **`logging`** module for all output. Never use bare `print()` or `click.echo()` for operational messages. The only exception is the final result summary at the end of a command, which is command output (not a log) and uses `click.echo()`.
+Use Python's **`logging`** module for all operational output. Each module does `logger = logging.getLogger(__name__)`. The root logger is configured once in `dtst/cli/__init__.py` based on the top-level `--verbose` / `-v` flag — no command defines its own verbosity flag. Suppress noisy third-party loggers (`urllib3`, `PIL`, …) there as needed. Wrap any tqdm loop with `logging_redirect_tqdm()` so log lines don't collide with the progress bar.
 
-### Logger Setup
-
-Each module gets its own logger:
-
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-```
-
-The main CLI entry point configures the root logger based on verbosity:
-
-```python
-import logging
-from tqdm.contrib.logging import logging_redirect_tqdm
-
-@click.group()
-@click.option("--verbose", "-v", is_flag=True, help="Enable debug logging")
-def cli(verbose):
-    """dtst - dataset toolkit for datasets creation and curation."""
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-```
-
-Every command wraps its main loop with `logging_redirect_tqdm()` so log lines don't collide with progress bars:
-
-```python
-from tqdm.contrib.logging import logging_redirect_tqdm
-
-with logging_redirect_tqdm():
-    with tqdm(total=len(items), desc="Processing", unit="image") as pbar:
-        for result in process(items):
-            # handle result
-            pbar.update(1)
-```
+The **final summary line** at the end of a command is command output, not a log — use `click.echo()` for it (and `click.echo(..., err=True)` for fatal messages). Never use bare `print()`.
 
 ### Log Levels
 
 | Level | Use for | Examples |
 |-------|---------|----------|
-| `DEBUG` | Per-item detail, only visible with `-v` | File processed, API response body, similarity score for one image, cache hit/miss |
-| `INFO` | Operational milestones the user cares about | Step starting, item counts found, config loaded, model loaded |
-| `WARNING` | Recoverable issues that don't stop the pipeline | Rate limit hit and retrying, file skipped as unreadable, API returned empty page, threshold looks unusual |
-| `ERROR` | Individual item failures that don't halt the command | Single download failed, face detection crashed on one image, corrupt file |
+| `DEBUG` | Per-item detail, only visible with `-v` | File processed, API response body, per-image similarity score, cache hit/miss |
+| `INFO` | Operational milestones | Step starting, item counts found, config loaded, model loaded |
+| `WARNING` | Recoverable issues | Rate limit + retry, file skipped as unreadable, empty API page, unusual threshold |
+| `ERROR` | Individual item failures that don't halt the command | Single download failed, detection crashed on one image, corrupt file |
 
 ### Rules
 
-- Never log inside worker functions that run in `ProcessPoolExecutor` — logging across process boundaries is unreliable. Workers should return error information in their result and the main process logs it.
-- `ThreadPoolExecutor` workers can log normally since threads share the same logging configuration.
-- GPU inference loops should log batch progress at `DEBUG` level and only log errors at `ERROR` level.
-- Every command supports `--verbose` / `-v` inherited from the top-level `dtst` group. No command defines its own verbosity flag.
-- Suppress noisy third-party loggers in the CLI entry point as needed:
-
-```python
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING)
-```
+- Never log inside `ProcessPoolExecutor` workers — logging across process boundaries is unreliable. Return error info in the result and let the main process log it.
+- `ThreadPoolExecutor` workers can log normally (shared config).
+- GPU inference loops: batch progress at `DEBUG`, errors at `ERROR`.
 
 ## Code Quality
 
@@ -350,19 +210,7 @@ uv run pytest tests/ --cov           # with coverage
 
 ### Scope
 
-Tested today:
-
-- `cli/config.py`, `files.py`, `urls.py`, `sidecar.py`, `cache.py`, `throttle.py`, `results.py`, `errors.py`, `user_agent.py` — fully tested.
-- CLI wiring — `--help` for all commands, config/override integration, lazy-import regression.
-- `dtst/core/dedup.py` (UnionFind + winner sort key), `dtst/core/select.py` (filter chain via `select()` end-to-end with synthetic sidecars in `tmp_path`), `dtst/core/search.py` (`_dedup_results`, `_build_query_matrix`), `dtst/core/fetch.py` (URL classifiers, jsonl/txt loaders, content-type map), `dtst/core/extract_frames.py` (regex, ffmpeg argv builder, ffmpeg presence check).
-- `dtst/engines/*` — all five engines (Brave, Wikimedia, iNaturalist, Flickr, Serper), HTTP mocked with the `responses` library.
-- `dtst/face_align.py::align_face` — synthetic landmarks against a tiny in-memory PIL image.
-
-ML inference (`dtst/embeddings/`, `dtst/detections/`, `dtst/metrics/`) and the heavy pipeline orchestrators in `dtst/core/` are validated by manual pipeline runs, not pytest.
-
-### Characterization style
-
-Existing tests document current behavior. When changing behavior intentionally, flip the assertion rather than deleting the test.
+Unit-test pure-logic helpers, CLI wiring, and pure bits carved out of `core`/`engines` (HTTP engines are tested with `responses`-mocked requests). Do **not** unit-test heavy ML inference modules — `dtst/embeddings/`, `dtst/detections/`, `dtst/metrics/`, and the pipeline orchestrators in `dtst/core/` — they are validated by manual pipeline runs. Existing tests are characterization-style: when changing behavior intentionally, flip the assertion rather than deleting the test.
 
 ### CLI lazy-import rule (critical)
 
@@ -402,36 +250,7 @@ After changing any command's options, arguments, or docstring, regenerate the CL
 uv run scripts/gen_cli_docs.py
 ```
 
-### Writing Click commands for good documentation
-
-Since the CLI docs are generated from your Click code, every command must be written with documentation quality in mind:
-
-**Command docstrings** become the command description. Write a clear one-liner as the first sentence, followed by a blank line and a longer explanation if needed. Include a usage example after a `\b` escape (which prevents Click from rewrapping the text):
-
-```python
-@click.command()
-@config_argument
-@click.option("--terms", type=str, default=None, help="Comma-separated search terms (override config).")
-@working_dir_option(help="Change into this directory before running (default: current directory).")
-@click.option("--dry-run", is_flag=True, help="Show the query matrix without executing searches.")
-def search(terms, working_dir, dry_run):
-    """Search for images across multiple engines.
-
-    Reads an optional YAML config file and generates image URLs from
-    Flickr, Google, Brave and Wikimedia Commons using an expanded
-    query matrix of search terms and suffixes.
-
-    \b
-    Examples:
-        dtst search config.yaml
-        dtst search config.yaml --dry-run
-        dtst search --terms "chanterelle" --suffixes "mushroom,forest" --engines brave -d ./chanterelle
-    """
-```
-
-**Every option must have a `help=` parameter.** No exceptions. This is what appears in both `--help` output and the generated docs.
-
-**Use `show_default=True`** on options where the default value is meaningful to the user.
+Because Click decorators are the source of truth for the CLI reference, every command needs a clear one-line docstring, every option needs `help=`, and options with meaningful defaults use `show_default=True`. Usage examples go under a `\b` escape in the docstring so Click doesn't rewrap them.
 
 ### Hand-written documentation
 
