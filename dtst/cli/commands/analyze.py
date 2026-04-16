@@ -11,6 +11,7 @@ from dtst.cli.config import (
     config_argument,
     dry_run_option,
     from_dirs_option,
+    require_extra,
     working_dir_option,
     workers_option,
 )
@@ -76,6 +77,12 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+
+    if metrics:
+        requested = {m.strip().lower() for m in metrics.split(",") if m.strip()}
+        if requested - {"phash", "blur"}:
+            require_extra("pyiqa", extra="torch")
+
     from dtst.core.analyze import analyze as core_analyze
 
     try:

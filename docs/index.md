@@ -20,9 +20,23 @@ It provides a complete set of independent CLI tools for every stage of dataset p
 
 ## Install
 
+`dtst` ships a lean core with opt-in extras — install only what the commands you use require:
+
 ```bash
-uv tool install git+https://github.com/Ucodia/dtst.git
+uv tool install git+https://github.com/Ucodia/dtst.git                  # lean core
+uv tool install "git+https://github.com/Ucodia/dtst.git#egg=dtst[all]"  # everything
 ```
+
+Available extras:
+
+| Extra    | Enables                                          | Adds                                                              |
+|----------|--------------------------------------------------|-------------------------------------------------------------------|
+| `faces`  | `extract-faces`                                  | insightface, mediapipe, dlib, onnxruntime, scipy                  |
+| `torch`  | `analyze` (IQA), `cluster`, `detect`, `upscale`  | torch, transformers, open-clip, spandrel, pyiqa, hdbscan, sklearn |
+| `server` | `review`                                         | fastapi, uvicorn                                                  |
+| `all`    | all of the above                                 | everything                                                        |
+
+Commands that need a missing extra fail fast with a message pointing to the correct install.
 
 Copy `.env.example` to `.env` and fill in your API keys for whichever search engines you want to use:
 

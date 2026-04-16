@@ -6,29 +6,40 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.3.1",
-    "fastapi>=0.115.0",
-    "dlib>=20.0.0",
-    "hdbscan>=0.8.41",
     "imagehash>=4.3.2",
-    "insightface>=0.7.3",
-    "mediapipe>=0.10.32",
     "numpy>=2.4.2",
-    "onnxruntime>=1.24.3",
-    "open-clip-torch>=3.3.0",
     "opencv-python-headless>=4.13.0.92",
     "pillow>=12.1.1",
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
-    "scikit-learn>=1.8.0",
-    "scipy>=1.17.1",
-    "spandrel>=0.4.0",
-    "torch>=2.10.0",
     "tqdm>=4.67.3",
-    "uvicorn>=0.34.0",
-    "transformers>=4.50.0",
-    "pyiqa>=0.1.15.post2",
     "setuptools<82",
+]
+
+[project.optional-dependencies]
+faces = [
+    "insightface>=0.7.3",
+    "mediapipe>=0.10.32",
+    "dlib>=20.0.0",
+    "onnxruntime>=1.24.3",
+    "scipy>=1.17.1",
+]
+torch = [
+    "torch>=2.10.0",
+    "transformers>=4.50.0",
+    "open-clip-torch>=3.3.0",
+    "spandrel>=0.4.0",
+    "pyiqa>=0.1.15.post2",
+    "hdbscan>=0.8.41",
+    "scikit-learn>=1.8.0",
+]
+server = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+]
+all = [
+    "dtst[faces,torch,server]",
 ]
 
 [project.scripts]

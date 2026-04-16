@@ -5,42 +5,43 @@ Each module exposes a single function (``rename``, ``validate``,
 Click dependency.  Results are returned as dataclasses from
 :mod:`dtst.results`; errors are raised as subclasses of
 :class:`dtst.errors.DtstError`.
+
+Submodules are loaded lazily (PEP 562) so that accessing one command
+does not import the others or their dependencies.
 """
 
-from dtst.core.analyze import analyze
-from dtst.core.annotate import annotate
-from dtst.core.augment import augment
-from dtst.core.cluster import cluster
-from dtst.core.dedup import dedup
-from dtst.core.detect import detect
-from dtst.core.extract_classes import extract_classes
-from dtst.core.extract_faces import extract_faces
-from dtst.core.extract_frames import extract_frames
-from dtst.core.fetch import fetch
-from dtst.core.format import format
-from dtst.core.frame import frame
-from dtst.core.rename import rename
-from dtst.core.search import search
-from dtst.core.select import select
-from dtst.core.upscale import upscale
-from dtst.core.validate import validate
+from __future__ import annotations
 
-__all__ = [
-    "analyze",
-    "annotate",
-    "augment",
-    "cluster",
-    "dedup",
-    "detect",
-    "extract_classes",
-    "extract_faces",
-    "extract_frames",
-    "fetch",
-    "format",
-    "frame",
-    "rename",
-    "search",
-    "select",
-    "upscale",
-    "validate",
-]
+_COMMANDS = frozenset(
+    {
+        "analyze",
+        "annotate",
+        "augment",
+        "cluster",
+        "dedup",
+        "detect",
+        "extract_classes",
+        "extract_faces",
+        "extract_frames",
+        "fetch",
+        "format",
+        "frame",
+        "rename",
+        "search",
+        "select",
+        "upscale",
+        "validate",
+    }
+)
+
+
+def __getattr__(name: str):
+    if name in _COMMANDS:
+        import importlib
+
+        mod = importlib.import_module(f"dtst.core.{name}")
+        return getattr(mod, name)
+    raise AttributeError(f"module 'dtst.core' has no attribute {name!r}")
+
+
+__all__ = sorted(_COMMANDS)

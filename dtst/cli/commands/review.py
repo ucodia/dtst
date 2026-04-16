@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from dtst.config import config_argument, working_dir_option
+from dtst.config import config_argument, require_extra, working_dir_option
 
 
 @click.command("review")
@@ -67,6 +67,7 @@ def cmd(from_dir, to, port, no_open, working_dir):
         source = None
         filtered = None
 
+    require_extra("fastapi", extra="server")
     import uvicorn
 
     from dtst.review.server import create_app

@@ -11,6 +11,7 @@ from dtst.cli.config import (
     config_argument,
     dry_run_option,
     from_dirs_option,
+    require_extra,
     to_dir_option,
     working_dir_option,
     workers_option,
@@ -128,6 +129,10 @@ def cmd(
         raise click.ClickException("--to is required (or set 'cluster.to' in config)")
 
     apply_working_dir(working_dir)
+
+    require_extra("hdbscan", extra="torch")
+    if (model or "arcface").lower() == "arcface":
+        require_extra("insightface", extra="faces")
     from dtst.core.cluster import cluster as core_cluster
 
     try:

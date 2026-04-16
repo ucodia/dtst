@@ -1,3 +1,4 @@
+import importlib
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +44,21 @@ def apply_working_dir(working_dir: Path | None) -> None:
     target = Path(working_dir).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
     os.chdir(target)
+
+
+def require_extra(module: str, extra: str) -> None:
+    """Raise a friendly ``ClickException`` when an optional extra is missing.
+
+    Called at the top of CLI wrappers whose core modules depend on packages
+    that live in ``[project.optional-dependencies]`` (see ``pyproject.toml``).
+    """
+    try:
+        importlib.import_module(module)
+    except ImportError as e:
+        raise click.ClickException(
+            f"This command needs the '{extra}' extra. "
+            f"Install with: pip install 'dtst[{extra}]'"
+        ) from e
 
 
 # Mapping from YAML config keys to Click parameter names where they differ.

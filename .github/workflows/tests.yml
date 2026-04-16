@@ -35,15 +35,16 @@ jobs:
       - name: Create virtual environment
         run: uv venv --python ${{ matrix.python-version }}
 
-      - name: Install dtst (no deps)
-        run: uv pip install -e . --no-deps
+      - name: Install dtst (lean core)
+        run: uv pip install -e .
 
-      - name: Install lean test + runtime deps
+      - name: Install test deps
         run: |
-          uv pip install \
-            pytest pytest-cov responses \
-            click pyyaml python-dotenv numpy pillow tqdm \
-            opencv-python-headless scipy
+          uv pip install pytest pytest-cov responses
+          # scipy is required by dtst.face_align (tested in test_face_align.py);
+          # install it directly rather than pulling the full [faces] extra.
+          uv pip install scipy
+          # CPU-only torch for tests that verify torch is NOT imported at CLI time.
           uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Run tests

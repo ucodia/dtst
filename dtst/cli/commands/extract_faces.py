@@ -10,6 +10,7 @@ from dtst.cli.config import (
     apply_working_dir,
     config_argument,
     from_dirs_option,
+    require_extra,
     to_dir_option,
     working_dir_option,
     workers_option,
@@ -108,6 +109,9 @@ def cmd(
         )
 
     apply_working_dir(working_dir)
+
+    engine_module = "dlib" if (engine or "mediapipe").lower() == "dlib" else "mediapipe"
+    require_extra(engine_module, extra="faces")
     from dtst.core.extract_faces import extract_faces as core_extract_faces
 
     try:
