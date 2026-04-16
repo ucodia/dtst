@@ -34,6 +34,21 @@ def _read_image_info(args: tuple) -> tuple[str, int, int, int, str | None]:
         return (image_path_str, 0, 0, 0, str(exc))
 
 
+def _dedup_sort_key(
+    path: Path,
+    image_info: dict[Path, tuple[int, int, int]],
+    sidecars: dict[Path, dict],
+    prefer_upscaled: bool,
+) -> tuple[int, int, int, float]:
+    w, h, fsize = image_info[path]
+    resolution = w * h
+    sc = sidecars.get(path, {})
+    blur_score = sc.get("metrics", {}).get("blur", 0.0)
+    is_upscaled = 1 if sc.get("upscale") else 0
+    preference = is_upscaled if prefer_upscaled else (1 - is_upscaled)
+    return (preference, resolution, fsize, blur_score)
+
+
 class _UnionFind:
     def __init__(self, n: int) -> None:
         self._parent = list(range(n))
@@ -256,17 +271,10 @@ def dedup(
     losers: list[tuple[Path, str]] = []
     for members in dup_groups.values():
         group_paths = [valid_images[i] for i in members]
-
-        def sort_key(p: Path) -> tuple[int, int, int, float]:
-            w, h, fsize = image_info[p]
-            resolution = w * h
-            sc = sidecars.get(p, {})
-            blur_score = sc.get("metrics", {}).get("blur", 0.0)
-            is_upscaled = 1 if sc.get("upscale") else 0
-            preference = is_upscaled if prefer_upscaled else (1 - is_upscaled)
-            return (preference, resolution, fsize, blur_score)
-
-        group_paths.sort(key=sort_key, reverse=True)
+        group_paths.sort(
+            key=lambda p: _dedup_sort_key(p, image_info, sidecars, prefer_upscaled),
+            reverse=True,
+        )
         winner = group_paths[0]
         w_w, w_h, w_fsize = image_info[winner]
         logger.debug("Winner: %s (%dx%d, %d bytes)", winner.name, w_w, w_h, w_fsize)

@@ -66,13 +66,3 @@ filterwarnings = [
 
 [tool.coverage.run]
 source = ["dtst"]
-omit = [
-    "dtst/core/*",
-    "dtst/engines/*",
-    "dtst/embeddings/*",
-    "dtst/detections/*",
-    "dtst/metrics/*",
-    "dtst/review/*",
-    "dtst/aio.py",
-    "dtst/face_align.py",
-]

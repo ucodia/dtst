@@ -45,6 +45,18 @@ def _run_task(
         return engine_name, [], str(e)
 
 
+def _build_query_matrix(
+    terms: list[str], suffixes: list[str], suffix_only: bool = False
+) -> list[str]:
+    queries: list[str] = []
+    if not suffix_only:
+        queries.extend(terms)
+    queries.extend(
+        f"{term} {suffix}".strip() for term in terms for suffix in suffixes if suffix
+    )
+    return queries
+
+
 def _dedup_results(results: list[dict]) -> list[dict]:
     seen: dict[str, dict] = {}
     for r in results:
@@ -106,19 +118,11 @@ def search(
             f"Invalid engine(s): {set(invalid)}; valid: {sorted(ENGINE_REGISTRY)}"
         )
 
-    def query_matrix(suffix_only: bool = False) -> list[str]:
-        queries: list[str] = []
-        if not suffix_only:
-            queries.extend(terms_list)
-        queries.extend(
-            f"{term} {suffix}".strip()
-            for term in terms_list
-            for suffix in suffixes_list
-            if suffix
-        )
-        return queries
-
-    queries = query_matrix(suffix_only=suffix_only) if text_engines else []
+    queries = (
+        _build_query_matrix(terms_list, suffixes_list, suffix_only=suffix_only)
+        if text_engines
+        else []
+    )
     results_file = Path(output).expanduser().resolve()
 
     if dry_run:

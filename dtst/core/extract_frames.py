@@ -24,6 +24,35 @@ logger = logging.getLogger(__name__)
 _FFMPEG_TIME_RE = re.compile(r"out_time_us=(\d+)")
 
 
+def _build_ffmpeg_cmd(
+    video_path_s: str,
+    output_pattern: str,
+    keyframes_interval: float,
+    fmt: str,
+) -> list[str]:
+    select_expr = (
+        f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{keyframes_interval})"
+    )
+    return [
+        "ffmpeg",
+        "-skip_frame",
+        "nokey",
+        "-i",
+        video_path_s,
+        "-vf",
+        f"select='{select_expr}'",
+        "-vsync",
+        "vfr",
+        "-q:v",
+        "2" if fmt == "jpg" else "0",
+        "-y",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        output_pattern,
+    ]
+
+
 def _probe_duration(video_path: str) -> float | None:
     try:
         result = subprocess.run(
@@ -64,28 +93,7 @@ def _extract_frames_worker(
         if existing:
             return "skipped", name, 0, None
 
-        select_expr = (
-            f"isnan(prev_selected_t)+gte(t-prev_selected_t\\,{keyframes_interval})"
-        )
-
-        cmd = [
-            "ffmpeg",
-            "-skip_frame",
-            "nokey",
-            "-i",
-            video_path_s,
-            "-vf",
-            f"select='{select_expr}'",
-            "-vsync",
-            "vfr",
-            "-q:v",
-            "2" if fmt == "jpg" else "0",
-            "-y",
-            "-progress",
-            "pipe:1",
-            "-nostats",
-            output_pattern,
-        ]
+        cmd = _build_ffmpeg_cmd(video_path_s, output_pattern, keyframes_interval, fmt)
 
         proc = subprocess.Popen(
             cmd,

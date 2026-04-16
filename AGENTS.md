@@ -339,6 +339,49 @@ uv run ruff format dtst/
 uv run ruff check --fix dtst/
 ```
 
+## Testing
+
+Tests live in `/tests` and are run with **pytest** via uv:
+
+```bash
+uv run pytest tests/ -q              # run suite
+uv run pytest tests/ --cov           # with coverage
+```
+
+### Scope
+
+Tested today:
+
+- `cli/config.py`, `files.py`, `urls.py`, `sidecar.py`, `cache.py`, `throttle.py`, `results.py`, `errors.py`, `user_agent.py` — fully tested.
+- CLI wiring — `--help` for all commands, config/override integration, lazy-import regression.
+- `dtst/core/dedup.py` (UnionFind + winner sort key), `dtst/core/select.py` (filter chain via `select()` end-to-end with synthetic sidecars in `tmp_path`), `dtst/core/search.py` (`_dedup_results`, `_build_query_matrix`), `dtst/core/fetch.py` (URL classifiers, jsonl/txt loaders, content-type map), `dtst/core/extract_frames.py` (regex, ffmpeg argv builder, ffmpeg presence check).
+- `dtst/engines/*` — all five engines (Brave, Wikimedia, iNaturalist, Flickr, Serper), HTTP mocked with the `responses` library.
+- `dtst/face_align.py::align_face` — synthetic landmarks against a tiny in-memory PIL image.
+
+ML inference (`dtst/embeddings/`, `dtst/detections/`, `dtst/metrics/`) and the heavy pipeline orchestrators in `dtst/core/` are validated by manual pipeline runs, not pytest.
+
+### Characterization style
+
+Existing tests document current behavior. When changing behavior intentionally, flip the assertion rather than deleting the test.
+
+### CLI lazy-import rule (critical)
+
+Every `dtst/cli/commands/*.py` wrapper MUST import its core module **inside the `cmd()` function body**, not at module top-level. Pattern:
+
+```python
+def cmd(working_dir, ...):
+    apply_working_dir(working_dir)
+    # validation here
+    from dtst.core.fetch import fetch as core_fetch   # lazy
+    return core_fetch(...)
+```
+
+This keeps `dtst --help` under 200ms and CI deps lean. The regression test `tests/test_cli.py::test_cli_import_does_not_load_torch` enforces this by asserting that `import dtst.cli` does not transitively load torch, transformers, PIL, insightface, mediapipe, dlib, onnxruntime, open_clip, pyiqa, or spandrel. `dtst/__init__.py` uses PEP 562 `__getattr__` for the same reason — do not re-add eager `dtst.core.*` imports there.
+
+### CI
+
+`.github/workflows/tests.yml` installs a lean runtime set plus CPU-only torch — NOT the full ML stack. If a new test requires a runtime dep not currently installed in CI, either keep the import lazy or add the dep to the `Install lean test + runtime deps` step.
+
 ## Error Handling
 
 - Commands should not abort on individual item failures — log the error and continue
