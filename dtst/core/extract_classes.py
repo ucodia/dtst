@@ -35,6 +35,49 @@ def _shift_classes(
     return shifted
 
 
+def _expand_box(
+    box: tuple[float, float, float, float], margin: float, square: bool
+) -> tuple[float, float, float, float]:
+    x_min, y_min, x_max, y_max = box
+    w = x_max - x_min
+    h = y_max - y_min
+
+    if square:
+        max_side = max(w, h)
+        cx = (x_min + x_max) / 2
+        cy = (y_min + y_max) / 2
+        x_min = cx - max_side / 2
+        y_min = cy - max_side / 2
+        x_max = cx + max_side / 2
+        y_max = cy + max_side / 2
+        w = h = max_side
+
+    margin_px = margin * max(w, h)
+    return (x_min - margin_px, y_min - margin_px, x_max + margin_px, y_max + margin_px)
+
+
+def _clamp_crop(
+    box: tuple[float, float, float, float], square: bool, img_w: int, img_h: int
+) -> tuple[int, int, int, int]:
+    x_min, y_min, x_max, y_max = box
+
+    if square:
+        # Derive a single integer side and clamp the position (not the size)
+        # so the crop stays exactly square even when the box spills past the
+        # image edges. The side can be no larger than the smaller image dim.
+        side = min(round(x_max - x_min), img_w, img_h)
+        x1 = max(0, min(round(x_min), img_w - side))
+        y1 = max(0, min(round(y_min), img_h - side))
+        return x1, y1, x1 + side, y1 + side
+
+    return (
+        max(0, int(x_min)),
+        max(0, int(y_min)),
+        min(img_w, int(x_max)),
+        min(img_h, int(y_max)),
+    )
+
+
 def _process_image(
     args: tuple,
 ) -> tuple[str, str, int, list[tuple[str, str, dict]], str | None]:
@@ -77,26 +120,7 @@ def _process_image(
         skipped = 0
 
         for cls, det in detections:
-            x_min, y_min, x_max, y_max = det["box"]
-            w = x_max - x_min
-            h = y_max - y_min
-
-            if square:
-                max_side = max(w, h)
-                cx = (x_min + x_max) / 2
-                cy = (y_min + y_max) / 2
-                x_min = cx - max_side / 2
-                y_min = cy - max_side / 2
-                x_max = cx + max_side / 2
-                y_max = cy + max_side / 2
-                w = h = max_side
-
-            large_side = max(w, h)
-            margin_px = margin * large_side
-            x_min -= margin_px
-            y_min -= margin_px
-            x_max += margin_px
-            y_max += margin_px
+            x_min, y_min, x_max, y_max = _expand_box(det["box"], margin, square)
 
             if skip_partial and (
                 x_min < 0 or y_min < 0 or x_max > img_w or y_max > img_h
@@ -104,10 +128,9 @@ def _process_image(
                 skipped += 1
                 continue
 
-            crop_x1 = max(0, int(x_min))
-            crop_y1 = max(0, int(y_min))
-            crop_x2 = min(img_w, int(x_max))
-            crop_y2 = min(img_h, int(y_max))
+            crop_x1, crop_y1, crop_x2, crop_y2 = _clamp_crop(
+                (x_min, y_min, x_max, y_max), square, img_w, img_h
+            )
 
             cropped = img.crop((crop_x1, crop_y1, crop_x2, crop_y2))
 
