@@ -204,7 +204,7 @@ def cluster(
             for rank, (label, count) in enumerate(cluster_info)
         ],
     }
-    with open(output_dir / "clusters.json", "w") as f:
+    with open(output_dir / "clusters.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
 
     return ClusterResult(

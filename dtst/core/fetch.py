@@ -321,7 +321,7 @@ def _load_urls_from_jsonl(
     urls: list[str] = []
     sidecar_data: dict[str, dict] = {}
     skipped_unsupported = 0
-    with open(results_file) as f:
+    with open(results_file, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -362,7 +362,7 @@ def _load_urls_from_jsonl(
 def _load_urls_from_txt(txt_file: Path) -> tuple[list[str], dict[str, dict]]:
     urls: list[str] = []
     sidecar_data: dict[str, dict] = {}
-    with open(txt_file) as f:
+    with open(txt_file, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):

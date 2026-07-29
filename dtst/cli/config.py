@@ -16,7 +16,7 @@ FRAME_FILLS = ("color", "edge", "reflect", "blur")
 
 def load_yaml(path: str | Path) -> tuple[dict, Path]:
     config_path = Path(path).resolve()
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not data or not isinstance(data, dict):
         raise click.ClickException("Config must be a non-empty YAML object")

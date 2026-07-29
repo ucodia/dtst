@@ -53,7 +53,7 @@ def detect(
                 continue
             del sidecar["classes"]
             if sidecar:
-                with open(sc, "w") as f:
+                with open(sc, "w", encoding="utf-8") as f:
                     json.dump(sidecar, f, indent=2)
                     f.write("\n")
             else:

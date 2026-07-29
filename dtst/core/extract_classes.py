@@ -281,7 +281,7 @@ def extract_classes(
             for out_name, cls_name, shifted_classes in outputs:
                 out_data = {**base_data, "classes": shifted_classes}
                 out_path = sidecar_path(output_dir / out_name)
-                with open(out_path, "w") as f:
+                with open(out_path, "w", encoding="utf-8") as f:
                     json.dump(out_data, f, indent=2)
                     f.write("\n")
             return "ok"

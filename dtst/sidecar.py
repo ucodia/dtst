@@ -15,7 +15,7 @@ def read_sidecar(image_path: Path) -> dict:
     path = sidecar_path(image_path)
     if not path.exists():
         return {}
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -23,7 +23,7 @@ def write_sidecar(image_path: Path, data: dict) -> None:
     path = sidecar_path(image_path)
     existing = read_sidecar(image_path)
     existing.update(data)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(existing, f, indent=2)
         f.write("\n")
 
@@ -45,7 +45,7 @@ def copy_sidecar(
     if not data:
         return
     path = sidecar_path(dest)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
 
