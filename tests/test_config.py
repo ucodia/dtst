@@ -128,6 +128,7 @@ def test_apply_working_dir_expands_tilde(
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     apply_working_dir(Path("~/dtst-test-subdir"))
     expected = (tmp_path / "dtst-test-subdir").resolve()
     assert expected.is_dir()

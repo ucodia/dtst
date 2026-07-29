@@ -74,6 +74,7 @@ class TestResolveDirs:
         home.mkdir()
         (home / "foo").mkdir()
         monkeypatch.setenv("HOME", str(home))
+        monkeypatch.setenv("USERPROFILE", str(home))
         result = resolve_dirs(["~/foo"])
         assert result == [(home / "foo").resolve()]
 
