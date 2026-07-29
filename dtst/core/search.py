@@ -216,7 +216,7 @@ def search(
 
     existing_results: list[dict] = []
     if results_file.exists():
-        with open(results_file) as f:
+        with open(results_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -228,7 +228,7 @@ def search(
     combined = existing_results + all_results
     deduped = _dedup_results(combined)
 
-    with open(results_file, "w") as f:
+    with open(results_file, "w", encoding="utf-8") as f:
         for r in deduped:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
