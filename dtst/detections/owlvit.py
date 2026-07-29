@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -60,6 +60,12 @@ class OwlViT2Backend:
             except Exception:
                 return path, None
 
+        is_cuda = self._device.startswith("cuda")
+        # Keep at most a small buffer of decoded images in memory ahead of the
+        # GPU consumer. Submitting every job upfront (and holding all Futures)
+        # would retain every decoded PIL image until the run finishes, which
+        # OOMs on modest-RAM machines.
+        max_inflight = num_workers + 2
         detected = 0
         skipped = 0
 
@@ -67,40 +73,56 @@ class OwlViT2Backend:
             with tqdm(
                 total=len(image_paths), desc="Detecting (owlv2)", unit="image"
             ) as pbar:
-                futures = {loader.submit(_load_image, p): p for p in image_paths}
-                for future in futures:
-                    path, image = future.result()
-                    if image is None:
-                        logger.warning("Could not read image: %s", path.name)
-                        skipped += 1
+                img_iter = iter(image_paths)
+                pending: set = set()
+
+                def _refill() -> None:
+                    while len(pending) < max_inflight:
+                        try:
+                            p = next(img_iter)
+                        except StopIteration:
+                            return
+                        pending.add(loader.submit(_load_image, p))
+
+                _refill()
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        path, image = future.result()
+                        if image is None:
+                            logger.warning("Could not read image: %s", path.name)
+                            skipped += 1
+                            pbar.update(1)
+                            pbar.set_postfix(detected=detected, skipped=skipped)
+                            yield path, None
+                            continue
+
+                        inputs = self._processor(
+                            text=text_queries, images=image, return_tensors="pt"
+                        ).to(self._device)
+                        with torch.no_grad():
+                            outputs = self._model(**inputs)
+                        target_sizes = torch.tensor([image.size[::-1]])
+                        proc_results = (
+                            self._processor.post_process_grounded_object_detection(
+                                outputs,
+                                threshold=threshold,
+                                target_sizes=target_sizes,
+                            )
+                        )
+                        detections = self._parse_detections(
+                            proc_results[0], class_names, max_instances
+                        )
+                        detected += 1
                         pbar.update(1)
                         pbar.set_postfix(detected=detected, skipped=skipped)
-                        yield path, None
-                        continue
+                        yield path, detections
 
-                    inputs = self._processor(
-                        text=text_queries, images=image, return_tensors="pt"
-                    ).to(self._device)
-
-                    with torch.no_grad():
-                        outputs = self._model(**inputs)
-
-                    target_sizes = torch.tensor([image.size[::-1]])
-                    proc_results = (
-                        self._processor.post_process_grounded_object_detection(
-                            outputs,
-                            threshold=threshold,
-                            target_sizes=target_sizes,
-                        )
-                    )
-
-                    detections = self._parse_detections(
-                        proc_results[0], class_names, max_instances
-                    )
-                    detected += 1
-                    pbar.update(1)
-                    pbar.set_postfix(detected=detected, skipped=skipped)
-                    yield path, detections
+                        # Free per-image intermediates before they pile up.
+                        del image, inputs, outputs, target_sizes, proc_results
+                        if is_cuda:
+                            torch.cuda.empty_cache()
+                    _refill()
 
     def _parse_detections(
         self,
