@@ -23,6 +23,22 @@ from dtst.sidecar import EXCLUDE_METRICS, copy_sidecar
 logger = logging.getLogger(__name__)
 
 
+def _has_alpha(img: Image.Image) -> bool:
+    # P/RGB/L images carry transparency out-of-band via a tRNS chunk rather
+    # than an alpha band; convert() would bake the key colour in as-is.
+    return img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
+
+
+def _flatten_to_background(
+    img: Image.Image, background: str, target_mode: str
+) -> Image.Image:
+    if img.mode not in ("RGBA", "LA", "PA"):
+        img = img.convert("RGBA")
+    bg = Image.new("RGBA", img.size, background)
+    bg.paste(img, mask=img.split()[-1])
+    return bg.convert(target_mode)
+
+
 def _format_image(args: tuple) -> tuple[str, str, str | None]:
     (
         input_path_s,
@@ -40,6 +56,11 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
     try:
         img = Image.open(input_path)
 
+        # Read before any conversion: compositing builds a fresh image and
+        # would otherwise silently drop these.
+        source_exif = None if strip_metadata else img.info.get("exif")
+        source_icc = None if strip_metadata else img.info.get("icc_profile")
+
         if fmt is not None:
             out_name = input_path.stem + "." + fmt
         else:
@@ -47,36 +68,27 @@ def _format_image(args: tuple) -> tuple[str, str, str | None]:
         out_suffix = Path(out_name).suffix.lower()
 
         if channels == "rgb":
-            if img.mode in ("RGBA", "LA", "PA"):
-                bg = Image.new("RGBA", img.size, background)
-                bg.paste(img, mask=img.split()[-1])
-                img = bg.convert("RGB")
+            if _has_alpha(img):
+                img = _flatten_to_background(img, background, "RGB")
             elif img.mode != "RGB":
                 img = img.convert("RGB")
         elif channels == "grayscale":
-            if img.mode in ("RGBA", "LA", "PA"):
-                bg = Image.new("RGBA", img.size, background)
-                bg.paste(img, mask=img.split()[-1])
-                img = bg.convert("L")
+            if _has_alpha(img):
+                img = _flatten_to_background(img, background, "L")
             else:
                 img = img.convert("L")
 
-        if out_suffix in (".jpg", ".jpeg") and img.mode in ("RGBA", "LA", "PA"):
-            bg = Image.new("RGBA", img.size, background)
-            bg.paste(img, mask=img.split()[-1])
-            img = bg.convert("RGB")
+        if out_suffix in (".jpg", ".jpeg") and _has_alpha(img):
+            img = _flatten_to_background(img, background, "RGB")
         elif out_suffix in (".jpg", ".jpeg") and img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
 
         save_kwargs: dict = {}
 
-        if not strip_metadata:
-            exif = img.info.get("exif")
-            if exif:
-                save_kwargs["exif"] = exif
-            icc = img.info.get("icc_profile")
-            if icc:
-                save_kwargs["icc_profile"] = icc
+        if source_exif:
+            save_kwargs["exif"] = source_exif
+        if source_icc:
+            save_kwargs["icc_profile"] = source_icc
 
         save_kwargs.update(
             build_save_kwargs(
