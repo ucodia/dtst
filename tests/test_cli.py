@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
+from PIL import Image
 
 from dtst.cli import cli
 
@@ -210,3 +211,72 @@ def test_cli_import_does_not_load_torch():
         [sys.executable, "-c", code], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+# ---------------------------------------------------------------------------
+# 7. frame --margin validation
+# ---------------------------------------------------------------------------
+
+
+def test_frame_margin_requires_both_dimensions():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["frame", "--from", "a", "--to", "b", "-W", "512", "--margin", "5%"]
+    )
+    assert result.exit_code != 0
+    assert "--margin requires both --width and --height" in result.output
+
+
+def test_frame_margin_requires_pad_mode():
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "frame",
+            "--from",
+            "a",
+            "--to",
+            "b",
+            "-W",
+            "512",
+            "-H",
+            "512",
+            "--mode",
+            "crop",
+            "--margin",
+            "5%",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--margin requires --mode pad" in result.output
+
+
+def test_frame_reports_a_margin_that_resolves_to_zero(tmp_path: Path):
+    # 5% of an 8x8 target rounds to 0px; asking for a margin and getting
+    # silence about it is worse than being told it came out empty.
+    src = tmp_path / "src"
+    src.mkdir()
+    Image.new("RGB", (16, 16), (255, 0, 0)).save(src / "a.png")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "frame",
+            "--from",
+            str(src),
+            "--to",
+            str(tmp_path / "out"),
+            "-W",
+            "8",
+            "-H",
+            "8",
+            "--mode",
+            "pad",
+            "--margin",
+            "5%",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Margin: 0px" in result.output

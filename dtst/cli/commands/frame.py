@@ -69,6 +69,36 @@ from dtst.files import format_elapsed
     help="Hex color for pad fill when --fill=color (default: #000000).",
 )
 @click.option(
+    "--trim",
+    is_flag=True,
+    default=False,
+    help=(
+        "Crop each image to its content bounding box before framing. Assumes a "
+        "uniform background reachable from the image corners."
+    ),
+)
+@click.option(
+    "--trim-tolerance",
+    type=click.IntRange(0, 255),
+    default=None,
+    help=(
+        "How far a pixel may stray from the detected background and still count "
+        "as background; on images with alpha it is the opacity threshold above "
+        "which a pixel counts as content (default: 8)."
+    ),
+)
+@click.option(
+    "--margin",
+    type=str,
+    default=None,
+    help=(
+        "Margin around content inside the target canvas: pixels ('48') or a "
+        "percentage of the shorter target side ('5%'). Requires --mode pad and "
+        "both --width and --height. The margin band is filled according to "
+        "--fill, so only --fill color leaves it empty."
+    ),
+)
+@click.option(
     "--quality",
     "-q",
     type=int,
@@ -93,6 +123,9 @@ def cmd(
     gravity: str | None,
     fill: str | None,
     fill_color: str | None,
+    trim: bool,
+    trim_tolerance: int | None,
+    margin: str | None,
     quality: int | None,
     compress_level: int | None,
     workers: int | None,
@@ -115,6 +148,12 @@ def cmd(
     When only one dimension is given, the other is computed proportionally
     and --mode is ignored.
 
+    `--trim` crops each image to its content bounding box first, using the
+    alpha channel when there is one and otherwise a background colour taken
+    from the corner pixels. Combined with `--margin`, this gives every image
+    in a dataset the same margin around its subject regardless of how the
+    source was framed — which is what StyleGAN-style training wants.
+
     \b
     Examples:
 
@@ -122,6 +161,7 @@ def cmd(
         dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode pad --fill blur
         dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode crop --gravity top
         dtst frame -d ./project --from faces --to resized --width 512
+        dtst frame -d ./project --from raw --to out -W 1024 -H 1024 --mode pad --trim --margin 5%
         dtst frame config.yaml --dry-run
     """
     if not from_dirs:
@@ -130,6 +170,11 @@ def cmd(
         raise click.ClickException("--to is required (or set 'frame.to' in config)")
     if width is None and height is None:
         raise click.ClickException("At least one of --width or --height is required")
+    if margin is not None:
+        if width is None or height is None:
+            raise click.ClickException("--margin requires both --width and --height")
+        if (mode or "crop") != "pad":
+            raise click.ClickException("--margin requires --mode pad")
 
     apply_working_dir(working_dir)
     from dtst.core.frame import frame as core_frame
@@ -144,6 +189,9 @@ def cmd(
             gravity=gravity or "center",
             fill=fill or "color",
             fill_color=fill_color or "#000000",
+            trim=trim,
+            trim_tolerance=trim_tolerance if trim_tolerance is not None else 8,
+            margin=margin,
             quality=quality if quality is not None else 95,
             compress_level=compress_level if compress_level is not None else 0,
             workers=workers,
@@ -168,6 +216,10 @@ def cmd(
                 if result.fill == "color":
                     fill_label += f" ({result.fill_color})"
                 click.echo(f"  Fill: {fill_label}")
+        if result.trim:
+            click.echo("  Trim: content bbox")
+        if margin is not None:
+            click.echo(f"  Margin: {result.margin}px")
         click.echo(f"  Output: {result.output_dir}")
         return
 
@@ -177,5 +229,9 @@ def cmd(
     click.echo(f"  Target: {width_label} x {height_label}")
     if both_dims:
         click.echo(f"  Mode: {result.mode}")
+    if result.trim:
+        click.echo("  Trim: content bbox")
+    if margin is not None:
+        click.echo(f"  Margin: {result.margin}px")
     click.echo(f"  Time: {format_elapsed(result.elapsed)}")
     click.echo(f"  Output: {result.output_dir}")

@@ -528,12 +528,19 @@ how aspect ratio differences are handled:
 When only one dimension is given, the other is computed proportionally
 and --mode is ignored.
 
+`--trim` crops each image to its content bounding box first, using the
+alpha channel when there is one and otherwise a background colour taken
+from the corner pixels. Combined with `--margin`, this gives every image
+in a dataset the same margin around its subject regardless of how the
+source was framed — which is what StyleGAN-style training wants.
+
 Examples:
 
     dtst frame -d ./project --from faces --to resized -W 512 -H 512
     dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode pad --fill blur
     dtst frame -d ./project --from faces --to resized -W 512 -H 512 --mode crop --gravity top
     dtst frame -d ./project --from faces --to resized --width 512
+    dtst frame -d ./project --from raw --to out -W 1024 -H 1024 --mode pad --trim --margin 5%
     dtst frame config.yaml --dry-run
 
 **Usage:**
@@ -555,6 +562,9 @@ dtst frame [OPTIONS] [CONFIG]
 | `--gravity`, `-g` | choice (`center` &#x7C; `top` &#x7C; `bottom` &#x7C; `left` &#x7C; `right`) | Anchor position for crop (part to keep) or pad (where to place image). Default: center. | None |
 | `--fill`, `-f` | choice (`color` &#x7C; `edge` &#x7C; `reflect` &#x7C; `blur`) | Fill strategy for pad mode: color, edge, reflect, or blur (default: color). | None |
 | `--fill-color` | text | Hex color for pad fill when --fill=color (default: #000000). | None |
+| `--trim` | boolean | Crop each image to its content bounding box before framing. Assumes a uniform background reachable from the image corners. | `False` |
+| `--trim-tolerance` | integer range (between `0` and `255`) | How far a pixel may stray from the detected background and still count as background; on images with alpha it is the opacity threshold above which a pixel counts as content (default: 8). | None |
+| `--margin` | text | Margin around content inside the target canvas: pixels ('48') or a percentage of the shorter target side ('5%'). Requires --mode pad and both --width and --height. The margin band is filled according to --fill, so only --fill color leaves it empty. | None |
 | `--quality`, `-q` | integer | JPEG/WebP output quality, 1-100 (default: 95). Ignored for PNG. | None |
 | `--compress-level` | integer | PNG compression level, 0 (none) to 9 (max). Default: 0. Ignored for JPEG/WebP. | None |
 | `--workers`, `-w` | integer | Number of parallel workers (default: CPU count). | None |
