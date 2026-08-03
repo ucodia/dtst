@@ -30,6 +30,70 @@ def _parse_hex_color(hex_str: str) -> tuple[int, int, int]:
     return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
+def _content_bbox(img: Image.Image, tolerance: int) -> tuple[int, int, int, int] | None:
+    """Bounding box of non-background content, in PIL crop-box convention.
+
+    Alpha defines the content directly when the image carries it.  Otherwise
+    the background colour is taken to be the median of the four corner pixels,
+    and any pixel further than *tolerance* from it on any channel is content.
+    Returns ``None`` when nothing exceeds the tolerance.
+    """
+    import numpy as np
+
+    if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+        mask = np.asarray(img.convert("RGBA").getchannel("A")) > tolerance
+    else:
+        arr = np.asarray(img.convert("RGB"), dtype=np.int16)
+        corners = arr[[0, 0, -1, -1], [0, -1, 0, -1]]
+        bg = np.median(corners, axis=0).astype(np.int16)
+        mask = np.abs(arr - bg).max(axis=2) > tolerance
+
+    rows = mask.any(axis=1).nonzero()[0]
+    cols = mask.any(axis=0).nonzero()[0]
+    if not rows.size:
+        return None
+    return int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1
+
+
+def _resolve_margin(value: str | int | None, width: int, height: int) -> int:
+    """Resolve a margin spec to pixels inside a *width* x *height* canvas.
+
+    Accepts pixels (``"48"``) or a percentage of the shorter side (``"5%"``).
+    """
+    if value is None:
+        return 0
+
+    text = str(value).strip()
+    invalid = InputError(
+        f"Invalid margin: {value!r} (expected pixels like '48' "
+        f"or a percentage like '5%')"
+    )
+
+    # int()/float() tolerate surrounding whitespace, so "5 %" would parse as 5.0
+    if any(c.isspace() for c in text):
+        raise invalid
+
+    if text.endswith("%"):
+        try:
+            percent = float(text[:-1])
+        except ValueError:
+            raise invalid from None
+        margin = round(percent / 100 * min(width, height))
+    else:
+        try:
+            margin = int(text)
+        except ValueError:
+            raise invalid from None
+
+    if margin < 0:
+        raise InputError(f"Margin cannot be negative: {value!r}")
+    if 2 * margin >= min(width, height):
+        raise InputError(
+            f"Margin of {margin}px leaves no room in a {width}x{height} canvas"
+        )
+    return margin
+
+
 def _gravity_offset(
     gravity: str, canvas_w: int, canvas_h: int, img_w: int, img_h: int
 ) -> tuple[int, int]:
@@ -74,6 +138,9 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
         fill_color,
         quality,
         compress_level,
+        trim,
+        trim_tolerance,
+        margin,
     ) = args
     input_path = Path(input_path_s)
     output_dir = Path(output_dir_s)
@@ -81,6 +148,14 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
 
     try:
         img = Image.open(input_path)
+
+        if trim:
+            bbox = _content_bbox(img, trim_tolerance)
+            if bbox is None:
+                return "failed", name, "no content found (image is entirely background)"
+            if bbox != (0, 0, *img.size):
+                img = img.crop(bbox)
+
         orig_w, orig_h = img.size
         save_kw = build_save_kwargs(
             input_path, quality=quality, compress_level=compress_level
@@ -105,7 +180,7 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
 
         tw, th = target_width, target_height
 
-        if orig_w == tw and orig_h == th:
+        if orig_w == tw and orig_h == th and margin == 0:
             img.save(output_dir / name, **save_kw)
             img.close()
             return "ok", name, None
@@ -124,12 +199,18 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
             scaled.close()
 
         elif mode == "pad":
-            scale = min(tw / orig_w, th / orig_h)
-            scaled_w = round(orig_w * scale)
-            scaled_h = round(orig_h * scale)
+            inner_w = tw - 2 * margin
+            inner_h = th - 2 * margin
+            scale = min(inner_w / orig_w, inner_h / orig_h)
+            scaled_w = max(1, round(orig_w * scale))
+            scaled_h = max(1, round(orig_h * scale))
             resized = img.resize((scaled_w, scaled_h), Image.LANCZOS)
 
-            paste_x, paste_y = _gravity_offset(gravity, tw, th, scaled_w, scaled_h)
+            paste_x, paste_y = _gravity_offset(
+                gravity, inner_w, inner_h, scaled_w, scaled_h
+            )
+            paste_x += margin
+            paste_y += margin
 
             if fill == "blur":
                 from PIL import ImageFilter
@@ -143,7 +224,10 @@ def _resize_image(args: tuple) -> tuple[str, str, str | None]:
             else:
                 parsed_color = _parse_hex_color(fill_color)
                 canvas = Image.new("RGB", (tw, th), parsed_color)
-                canvas.paste(resized, (paste_x, paste_y))
+                if resized.mode in ("RGBA", "LA", "PA"):
+                    canvas.paste(resized, (paste_x, paste_y), resized.split()[-1])
+                else:
+                    canvas.paste(resized, (paste_x, paste_y))
                 result = canvas
             resized.close()
 
@@ -166,6 +250,9 @@ def frame(
     gravity: str = "center",
     fill: str = "color",
     fill_color: str = "#000000",
+    trim: bool = False,
+    trim_tolerance: int = 8,
+    margin: str | int | None = None,
     quality: int = 95,
     compress_level: int = 0,
     workers: int | None = None,
@@ -179,6 +266,13 @@ def frame(
         raise InputError("to is required")
     if width is None and height is None:
         raise InputError("At least one of width or height is required")
+    margin_px = 0
+    if margin is not None:
+        if width is None or height is None:
+            raise InputError("margin requires both width and height")
+        if mode != "pad":
+            raise InputError("margin requires mode='pad'")
+        margin_px = _resolve_margin(margin, width, height)
 
     dirs_list = [d.strip() for d in from_dirs.split(",") if d.strip()]
     input_dirs = resolve_dirs(dirs_list)
@@ -206,12 +300,14 @@ def frame(
     num_workers = resolve_workers(workers)
 
     logger.info(
-        "Resizing %d images from [%s] to %sx%s mode=%s (workers=%d)",
+        "Resizing %d images from [%s] to %sx%s mode=%s trim=%s margin=%dpx (workers=%d)",
         len(images),
         from_label,
         width_label,
         height_label,
         mode if both_dims else "proportional",
+        trim,
+        margin_px,
         num_workers,
     )
 
@@ -227,6 +323,8 @@ def frame(
             gravity=gravity,
             fill=fill,
             fill_color=fill_color,
+            trim=trim,
+            margin=margin_px,
             total_images=len(images),
             elapsed=0.0,
         )
@@ -245,6 +343,9 @@ def frame(
             fill_color,
             quality,
             compress_level,
+            trim,
+            trim_tolerance,
+            margin_px,
         )
         for img_path in images
     ]
@@ -286,6 +387,8 @@ def frame(
         gravity=gravity,
         fill=fill,
         fill_color=fill_color,
+        trim=trim,
+        margin=margin_px,
         total_images=len(images),
         elapsed=time.monotonic() - start_time,
     )

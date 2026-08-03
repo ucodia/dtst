@@ -191,6 +191,8 @@ class FrameResult:
     gravity: str
     fill: str
     fill_color: str
+    trim: bool
+    margin: int
     total_images: int
     elapsed: float
 
