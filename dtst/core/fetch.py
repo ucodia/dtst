@@ -352,7 +352,7 @@ def _load_urls_from_jsonl(
                     continue
                 urls.append(url)
                 sidecar_data[url] = {
-                    "source": r.get("engine", "unknown"),
+                    "source": r.get("engine", r.get("source", "unknown")),
                     "origin": url,
                     "license": r.get("license") or "none",
                 }
